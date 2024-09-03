@@ -233,7 +233,7 @@ jobs:
 
     steps:
     - name: Get version-info
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: version-info
 
@@ -246,7 +246,7 @@ jobs:
         DO_UPLOAD=$(( [ "master" = "$BRANCH" ] || [ "develop" = "$BRANCH" ] ) && echo true || echo false)
         echo "DO_UPLOAD=${DO_UPLOAD}" >> $GITHUB_ENV
 
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4.1.7
       if: env.DO_UPLOAD == 'true'
       with:
         path: artifacts
