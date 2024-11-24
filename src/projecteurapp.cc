@@ -148,7 +148,7 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
   connect(this, &ProjecteurApplication::screenRemoved, this, [this](){ setupScreenOverlays(); });
 
   // Setup the tray icon and menu
-  setupTrayIcon();
+  setupTrayIcon(options);
 
   connect(this, &ProjecteurApplication::aboutToQuit, this, [this](){
     for (const auto window : m_overlayWindows) { window->close(); }
@@ -275,7 +275,7 @@ void ProjecteurApplication::setupSpotlight()
 }
 
 // -------------------------------------------------------------------------------------------------
-void ProjecteurApplication::setupTrayIcon()
+void ProjecteurApplication::setupTrayIcon(Options const& options)
 {
   // add and connect 'Preferences' tray menu action
   const auto actionPref = m_trayMenu->addAction(tr("&Preferences..."));
@@ -341,6 +341,8 @@ void ProjecteurApplication::setupTrayIcon()
     logDebug(mainapp) << tr("Exit request from preferences dialog.");
     actionQuit->trigger();
   });
+
+  m_trayIcon->setVisible(!options.hideSysTrayIcon);
 }
 
 // -------------------------------------------------------------------------------------------------

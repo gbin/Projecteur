@@ -201,6 +201,7 @@ namespace {
     const QCommandLineOption logLvlOption_ = {QStringList{ "l", "log-level" }, Main::tr("Set log level (dbg,inf,wrn,err)."), "lvl"};
     const QCommandLineOption disableUInputOption_ = {QStringList{ "disable-uinput" }, Main::tr("Disable uinput support.")};
     const QCommandLineOption showDlgOnStartOption_ = {QStringList{ "show-dialog" }, Main::tr("Show preferences dialog on start.")};
+    const QCommandLineOption hideSysTrayOption_ = {QStringList{ "hide-systray-icon"}, Main::tr("Hide the system tray icon.")};
     const QCommandLineOption dialogMinOnlyOption_ = {QStringList{ "m", "minimize-only" }, Main::tr("Only allow minimizing the dialog.")};
     const QCommandLineOption disableOverlayOption_ = {QStringList{ "disable-overlay" }, Main::tr("Disable spotlight overlay completely.")};
     const QCommandLineOption additionalDeviceOption_ = {QStringList{ "D", "additional-device"},
@@ -215,7 +216,7 @@ namespace {
       parser.addOptions({versionOption_, helpOption_, fullHelpOption_, commandOption_,
                         cfgFileOption_, fullVersionOption_, deviceInfoOption_, logLvlOption_,
                         disableUInputOption_, showDlgOnStartOption_, dialogMinOnlyOption_,
-                        disableOverlayOption_, additionalDeviceOption_});
+                        disableOverlayOption_, additionalDeviceOption_, hideSysTrayOption_});
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -236,6 +237,7 @@ namespace {
     auto cfgFileOptionValue() const { return parser.value(cfgFileOption_); }
     bool logLvlOptionSet() const { return parser.isSet(logLvlOption_); }
     auto logLvlOptionValue() const { return parser.value(logLvlOption_); }
+    bool hideSysTrayOptionSet() const { return parser.isSet(hideSysTrayOption_); }
 
     // ---------------------------------------------------------------------------------------------
     void processArgs(int argc, char** argv)
@@ -282,6 +284,7 @@ namespace {
       if (fullHelp) {
         print() << "  --disable-uinput       " << disableUInputOption_.description();
         print() << "  --show-dialog          " << showDlgOnStartOption_.description();
+        print() << "  --hide-systray-icon    " << hideSysTrayOption_.description();
         print() << "  -m, --minimize-only    " << dialogMinOnlyOption_.description();
       }
       print() << "  -c COMMAND|PROPERTY    " << commandOption_.description() << std::endl;
@@ -388,6 +391,7 @@ int main(int argc, char *argv[])
     options.showPreferencesOnStart = parser.showDlgOnStartOptionSet();
     options.dialogMinimizeOnly = parser.dialogMinOnlyOptionSet();
     options.disableOverlay = parser.disableOverlayOptionSet();
+    options.hideSysTrayIcon = parser.hideSysTrayOptionSet();
 
     if (parser.logLvlOptionSet()) {
       const auto lvl = logging::levelFromName(parser.logLvlOptionValue());

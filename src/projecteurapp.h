@@ -37,6 +37,7 @@ public:
     bool showPreferencesOnStart = false;
     bool dialogMinimizeOnly = false;
     bool disableOverlay = false;
+    bool hideSysTrayIcon = false;
     std::vector<SupportedDevice> additionalDevices;
   };
 
@@ -71,7 +72,7 @@ private:
   QPoint currentCursorPos() const;
   void setCurrentCursorPos(const QPoint& pos);
 
-  void setupTrayIcon();
+  void setupTrayIcon(Options const& options);
   void setupSpotlight();
 
 private:
