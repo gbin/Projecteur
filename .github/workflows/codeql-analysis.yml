@@ -1,11 +1,11 @@
 name: "CodeQL"
 
 on:
-  push:
-    branches:
-      - "**"
   pull_request:
     branches: [develop, master]
+  push:
+    branches: [develop, master]
+  workflow_dispatch:
 
 jobs:
   analyse:
