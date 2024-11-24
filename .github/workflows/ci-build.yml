@@ -62,7 +62,7 @@ jobs:
 
     # ===================================================================================
     # ---------- Checkout and build inside docker container ----------
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         # unfortunately, currently we need all the history for a valid auto generated version
         fetch-depth: 0
