@@ -122,14 +122,14 @@ jobs:
     # ---------- Upload artifacts to github ----------
     - name: Upload source-pkg artifact to github
       if:  startsWith(matrix.docker_tag, 'archlinux')
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: source-package
         path: ${{ env.src_pkg_artifact }}
 
     - name: Upload version-info to github
       if:  startsWith(matrix.docker_tag, 'archlinux')
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: version-info
         path: |
@@ -137,7 +137,7 @@ jobs:
           ./version-branch
 
     - name: Upload binary package artifact to github
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.docker_tag }}-package
         path: ${{ env.dist_pkg_artifact }}
