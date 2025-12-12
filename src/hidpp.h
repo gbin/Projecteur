@@ -13,6 +13,7 @@
 #include <tuple>
 
 #include <QString>
+#include <QtCore/QObject>
 
 // Hidpp specific functionality
 // - code is heavily inspired by this library: https://github.com/cvuchener/hidpp
