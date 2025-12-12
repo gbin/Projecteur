@@ -43,14 +43,32 @@ auto capture_call(Lambda&& lambda, Args&& ... args){
     capture_args = std::make_tuple(std::forward<Args>(args) ...)
   ](auto&& ... original_args)mutable{
     return async::apply([&lambda](auto&& ... args){
-      lambda(std::forward<decltype(args)>(args) ...);
-      },
-      std::tuple_cat(
-        std::forward_as_tuple(original_args ...),
-        async::apply([](auto&& ... args){
-          return std::forward_as_tuple<Args ...>(
-            std::move(args) ...);
-        }, std::move(capture_args))
+
+      // Handle the Qt6 return argument placeholder conditionally inside the body.
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+      // Check if the tuple size is greater than the expected arguments (i.e., Qt6 inserted the return placeholder).
+      if constexpr (std::tuple_size<decltype(std::make_tuple(std::forward<decltype(args)>(args)...))>::value > sizeof...(Args))
+      {
+        // Unpack the arguments, skip the first one (the return value placeholder), and call the user-provided lambda.
+        auto tuple = std::make_tuple(std::forward<decltype(args)>(args)...);
+
+        // std::apply applies a tuple to a function. We use a nested lambda here to skip the first element.
+        std::apply([&lambda](auto&& /* retArg */, auto&& ... actual_args){
+          lambda(std::forward<decltype(actual_args)>(actual_args)...);
+        }, std::move(tuple));
+      } else
+#endif
+      {
+        // Qt5 or Qt6 without the return placeholder: pass arguments directly to the user-provided lambda.
+        lambda(std::forward<decltype(args)>(args) ...);
+      }
+    },
+    std::tuple_cat(
+      std::forward_as_tuple(original_args ...),
+      async::apply([](auto&& ... args){
+        return std::forward_as_tuple<Args ...>(
+          std::move(args) ...);
+      }, std::move(capture_args))
     ));
   };
 }
