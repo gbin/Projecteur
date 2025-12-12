@@ -77,8 +77,8 @@ struct TimerWidget::Impl
     btnStartStop->setCheckable(true);
     QObject::connect(btnStartStop, &IconButton::toggled, parent, [this](bool checked) {
       stack->setCurrentWidget(checked ? overlay : editor);
-      btnStartStop->setText(checked ? QChar(Font::Icon::media_control_50)
-                                    : QChar(Font::Icon::media_control_48));
+      btnStartStop->setText(checked ? QChar(static_cast<quint32>(Font::Icon::media_control_50))
+                                    : QChar(static_cast<quint32>(Font::Icon::media_control_48)));
       if (checked) {
         secondsLeft = valueSeconds();
         updateOverlayLabel(secondsLeft);

@@ -22,7 +22,7 @@ IconButton::IconButton(Font::Icon symbol, QWidget* parent)
   iconFont.setPointSizeF(font().pointSizeF());
 
   setFont(iconFont);
-  setText(QChar(symbol));
+  setText(QChar(static_cast<quint32>(symbol)));
 
   auto p = palette();
   p.setColor(QPalette::ColorGroup::Normal, QPalette::ButtonText,
@@ -33,7 +33,7 @@ IconButton::IconButton(Font::Icon symbol, QWidget* parent)
 
 // -------------------------------------------------------------------------------------------------
 IconLabel::IconLabel(Font::Icon symbol, QWidget* parent)
-  : QLabel(QChar(symbol), parent)
+  : QLabel(QChar(static_cast<quint32>(symbol)), parent)
 {
   QFont iconFont("projecteur-icons");
   iconFont.setPixelSize(defaultIconLabelSize);
