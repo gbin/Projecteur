@@ -49,7 +49,7 @@
 #define logError2(...) qCCritical(__VA_ARGS__)
 
 #define LOGGING_CATEGORY(cat, name) Q_LOGGING_CATEGORY(cat, "projecteur." name)
-#define DECLARE_LOGGING_CATEGORY(name) extern const QLoggingCategory &name();
+#define DECLARE_LOGGING_CATEGORY(name) Q_DECLARE_LOGGING_CATEGORY(name)
 
 class QPlainTextEdit;
 

@@ -19,7 +19,7 @@ namespace {
 
   // Install our custom message handler, store previous message handler
   const QtMessageHandler defaultMessageHandler = qInstallMessageHandler(projecteurLogHandler);
-  const QLoggingCategory::CategoryFilter defaultCategoryFilter = QLoggingCategory::installFilter(categoryFilterInfo);
+  QLoggingCategory::CategoryFilter defaultCategoryFilter = nullptr;
   QLoggingCategory::CategoryFilter currentCategoryFilter = categoryFilterInfo;
 
   constexpr char categoryPrefix[] = "projecteur.";
@@ -27,8 +27,17 @@ namespace {
     return (qstrncmp(categoryPrefix, category->categoryName(), sizeof(categoryPrefix)-1) == 0);
   }
 
+  void initLogging()
+  {
+    if (defaultCategoryFilter == nullptr)
+    {
+      defaultCategoryFilter = QLoggingCategory::installFilter(categoryFilterInfo);
+    }
+  }
+
   void categoryFilterDebug(QLoggingCategory *category)
   {
+    initLogging();
     if (isAppCategory(category))
     {
       category->setEnabled(QtDebugMsg, true);
@@ -42,6 +51,7 @@ namespace {
 
   void categoryFilterInfo(QLoggingCategory *category)
   {
+    initLogging();
     if (isAppCategory(category)) {
       category->setEnabled(QtDebugMsg, false);
       category->setEnabled(QtInfoMsg, true);
@@ -54,6 +64,7 @@ namespace {
 
   void categoryFilterWarning(QLoggingCategory *category)
   {
+    initLogging();
     if (isAppCategory(category)) {
       category->setEnabled(QtDebugMsg, false);
       category->setEnabled(QtInfoMsg, false);
@@ -66,6 +77,7 @@ namespace {
 
   void categoryFilterError(QLoggingCategory *category)
   {
+    initLogging();
     if (isAppCategory(category))
     {
       category->setEnabled(QtDebugMsg, false);
@@ -172,6 +184,7 @@ namespace logging {
 
   level currentLevel()
   {
+    initLogging();
     if (currentCategoryFilter == defaultCategoryFilter) { return level::custom; }
     if (currentCategoryFilter == categoryFilterDebug) { return level::debug; }
     if (currentCategoryFilter == categoryFilterInfo) { return level::info; }
@@ -182,6 +195,8 @@ namespace logging {
 
   void setCurrentLevel(level lvl)
   {
+    initLogging();
+
     QLoggingCategory::CategoryFilter newFilter = currentCategoryFilter;
 
     if (lvl == level::debug) {
