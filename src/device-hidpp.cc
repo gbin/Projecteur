@@ -35,6 +35,10 @@ SubHidppConnection::SubHidppConnection(SubHidrawConnection::Token token,
   , m_featureSet(this)
   , m_requestCleanupTimer(new QTimer(this))
 {
+  // A Bolt receiver can have the presenter paired in any of its six slots.
+  // Other supported connections have historically used slot 1.
+  m_deviceIndexKnown = id.busType != BusType::Usb || id.productId != 0xc548;
+
   constexpr int cleanUpTimerInterval = 500;
   m_requestCleanupTimer->setInterval(cleanUpTimerInterval);
   m_requestCleanupTimer->setSingleShot(false);
@@ -152,16 +156,14 @@ void SubHidppConnection::sendRequest(HIDPP::Message msg, RequestResultCallback r
     }
 
     // Device index sanity check
-    static const std::array<uint8_t, 3> validDeviceIndexes {
-      HIDPP::DeviceIndex::CordedDevice,
-      HIDPP::DeviceIndex::DefaultDevice,
-      HIDPP::DeviceIndex::WirelessDevice1,
-    };
+    const auto index = msg.deviceIndex();
+    const bool validDeviceIndex =
+      index == HIDPP::DeviceIndex::CordedDevice
+      || index == HIDPP::DeviceIndex::DefaultDevice
+      || (index >= HIDPP::DeviceIndex::WirelessDevice1
+          && index <= HIDPP::DeviceIndex::WirelessDevice6);
 
-    const auto deviceIndexIt
-      = std::find(validDeviceIndexes.cbegin(), validDeviceIndexes.cend(), msg.deviceIndex());
-
-    if (deviceIndexIt == validDeviceIndexes.cend())
+    if (!validDeviceIndex)
     {
       logWarn(hid) << tr("Invalid device index (%1) in message for '%2'")
                       .arg(msg.deviceIndex()).arg(path());
@@ -387,7 +389,7 @@ void SubHidppConnection::sendVibrateCommand(uint8_t intensity, uint8_t length,
     length = length > 10 ? 10 : length; // length should be between 0 to 10.
 
     using namespace HIDPP;
-    Message vibrateMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, pcIndex, 1, {
+    Message vibrateMsg(Message::Type::Long, m_deviceIndex, pcIndex, 1, {
       length, 0xe8, intensity
     });
 
@@ -415,7 +417,7 @@ void SubHidppConnection::sendVibrateCommand(uint8_t intensity, uint8_t length,
   const uint8_t level = enabled ? hapticLevelFromIntensity(intensity)
                                 : defaultDisabledLevel;
 
-  Message setLevelMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, hapticIndex, 2, {
+  Message setLevelMsg(Message::Type::Long, m_deviceIndex, hapticIndex, 2, {
     static_cast<uint8_t>(enabled), level
   });
 
@@ -427,7 +429,7 @@ void SubHidppConnection::sendVibrateCommand(uint8_t intensity, uint8_t length,
       return;
     }
 
-    Message playMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, hapticIndex, 4,
+    Message playMsg(Message::Type::Long, m_deviceIndex, hapticIndex, 4,
                     Message::Data{completedWaveform});
     sendRequest(std::move(playMsg), std::move(cb));
   }));
@@ -452,7 +454,7 @@ void SubHidppConnection::getBatteryLevelStatus(
   // UNIFIED_BATTERY uses getStatus (function 1).
   const uint8_t function = batteryStatusIndex != 0 ? 0 : 1;
   Message batteryReqMsg(
-    Message::Type::Short, DeviceIndex::WirelessDevice1, batteryIndex, function);
+    Message::Type::Short, m_deviceIndex, batteryIndex, function);
   sendRequest(std::move(batteryReqMsg),
   [cb=std::move(cb), unified=unifiedBatteryIndex != 0 && batteryStatusIndex == 0]
   (MsgResult res, Message&& msg) mutable
@@ -485,7 +487,7 @@ void SubHidppConnection::setPointerSpeed(uint8_t speed,
   const uint8_t pointerSpeed = 0x10 & speed;
 
   sendRequest(
-    HIDPP::Message(HIDPP::Message::Type::Long, HIDPP::DeviceIndex::WirelessDevice1,
+    HIDPP::Message(HIDPP::Message::Type::Long, m_deviceIndex,
                    psIndex, 1, HIDPP::Message::Data{pointerSpeed}),
     std::move(cb)
   );
@@ -682,7 +684,7 @@ void SubHidppConnection::initFeatures(
   if (const auto resetFeatureIndex = m_featureSet.featureIndex(FeatureCode::Reset))
   {
     batch.emplace(RequestBatchItem {
-      Message(Message::Type::Long, DeviceIndex::WirelessDevice1, resetFeatureIndex, 1),
+      Message(Message::Type::Long, m_deviceIndex, resetFeatureIndex, 1),
       [resultMap](MsgResult res, Message&& /* msg */) {
         resultMap->emplace(FeatureCode::Reset, res);
       }
@@ -695,7 +697,7 @@ void SubHidppConnection::initFeatures(
     if (hasFlags(DeviceFlags::NextHold))
     {
       batch.emplace(RequestBatchItem {
-        Message(Message::Type::Long, DeviceIndex::WirelessDevice1, contrFeatureIndex, 3,
+        Message(Message::Type::Long, m_deviceIndex, contrFeatureIndex, 3,
                 Message::Data{0x00, 0xda, 0x33}),
         [resultMap](MsgResult res, Message&& /* msg */) {
           resultMap->emplace(FeatureCode::ReprogramControlsV4, res);
@@ -706,7 +708,7 @@ void SubHidppConnection::initFeatures(
     if (hasFlags(DeviceFlags::BackHold))
     {
       batch.emplace(RequestBatchItem {
-        Message(Message::Type::Long, DeviceIndex::WirelessDevice1, contrFeatureIndex, 3,
+        Message(Message::Type::Long, m_deviceIndex, contrFeatureIndex, 3,
                 Message::Data{0x00, 0xdc, 0x33}),
         [resultMap](MsgResult res, Message&& /* msg */) {
           resultMap->emplace(FeatureCode::ReprogramControlsV4, res);
@@ -719,7 +721,7 @@ void SubHidppConnection::initFeatures(
   {
     // Reset pointer speed to 0x14 - the device accepts values from 0x10 to 0x19
     batch.emplace(RequestBatchItem {
-      HIDPP::Message(HIDPP::Message::Type::Long, HIDPP::DeviceIndex::WirelessDevice1,
+      HIDPP::Message(HIDPP::Message::Type::Long, m_deviceIndex,
                      psFeatureIndex, 1, HIDPP::Message::Data{0x14}),
       [resultMap](MsgResult res, Message&& /* msg */) {
         resultMap->emplace(FeatureCode::PointerSpeed, res);
@@ -853,9 +855,25 @@ void SubHidppConnection::registerForUsbNotifications()
   registerNotificationCallback(this, HIDPP::Notification::DeviceConnection, makeSafeCallback(
   [this](HIDPP::Message&& msg)
   {
+    const auto notificationDeviceIndex = msg.deviceIndex();
+    const auto deviceKind = msg[4] & 0x0f;
     const bool linkEstablished = !static_cast<bool>(msg[4] & (1<<6));
-    logDebug(hid) << tr("%1, link established = %2")
-      .arg(toString(HIDPP::Notification::DeviceConnection)).arg(linkEstablished);
+    logDebug(hid) << tr("%1, device index = %2, device kind = %3, link established = %4")
+      .arg(toString(HIDPP::Notification::DeviceConnection))
+      .arg(notificationDeviceIndex).arg(deviceKind).arg(linkEstablished);
+
+    if (!m_deviceIndexKnown && deviceKind == 0x04)
+    {
+      m_deviceIndex = notificationDeviceIndex;
+      m_deviceIndexKnown = true;
+      logInfo(hid) << tr("Found presenter in Bolt receiver slot %1.").arg(m_deviceIndex);
+    }
+
+    // A Bolt receiver can carry several devices. Ignore notifications that do
+    // not belong to the presenter selected above.
+    if (!m_deviceIndexKnown || notificationDeviceIndex != m_deviceIndex) {
+      return;
+    }
 
     if (!linkEstablished) {
       if (m_presenterState == PresenterState::Initialized_Online) {
@@ -889,10 +907,13 @@ void SubHidppConnection::subDeviceInit()
   initReceiver(makeSafeCallback([this](ReceiverState rs)
   {
     Q_UNUSED(rs);
-    // Independent of the receiver init result, try to initialize the
-    // presenter device HID++ features and more
-    checkAndUpdatePresenterState(makeSafeCallback([](PresenterState /* ps */) {
-      //...
+    // Independent of the receiver init result, find the presenter slot and
+    // initialize the device HID++ features.
+    findPresenterDeviceIndex(HIDPP::DeviceIndex::WirelessDevice1,
+    makeSafeCallback([this](bool /* found */) {
+      checkAndUpdatePresenterState(makeSafeCallback([](PresenterState /* ps */) {
+        //...
+      }));
     }));
   }));
 }
@@ -934,10 +955,48 @@ const HIDPP::BatteryInfo& SubHidppConnection::batteryInfo() const {
 // -------------------------------------------------------------------------------------------------
 void SubHidppConnection::sendPing(RequestResultCallback cb)
 {
+  sendPing(m_deviceIndex, std::move(cb));
+}
+
+// -------------------------------------------------------------------------------------------------
+void SubHidppConnection::sendPing(uint8_t deviceIndex, RequestResultCallback cb)
+{
   using namespace HIDPP;
-  // Ping wireless device 1 - same as requesting protocol version
-  Message pingMsg(Message::Type::Short, DeviceIndex::WirelessDevice1, 0, 1, getRandomPingPayload());
+  // A HID++ root ping also returns the device protocol version.
+  Message pingMsg(Message::Type::Short, deviceIndex, 0, 1, getRandomPingPayload());
   sendRequest(std::move(pingMsg), std::move(cb));
+}
+
+// -------------------------------------------------------------------------------------------------
+void SubHidppConnection::findPresenterDeviceIndex(uint8_t candidate,
+                                                  std::function<void(bool)> cb)
+{
+  if (m_deviceIndexKnown)
+  {
+    if (cb) { cb(true); }
+    return;
+  }
+
+  if (candidate > HIDPP::DeviceIndex::WirelessDevice6)
+  {
+    if (cb) { cb(false); }
+    return;
+  }
+
+  sendPing(candidate, makeSafeCallback(
+  [this, candidate, cb=std::move(cb)](MsgResult result, HIDPP::Message&& /* msg */) mutable
+  {
+    if (result == MsgResult::Ok)
+    {
+      m_deviceIndex = candidate;
+      m_deviceIndexKnown = true;
+      logInfo(hid) << tr("Found HID++ device in Bolt receiver slot %1.").arg(m_deviceIndex);
+      if (cb) { cb(true); }
+      return;
+    }
+
+    findPresenterDeviceIndex(candidate + 1, std::move(cb));
+  }));
 }
 
 // -------------------------------------------------------------------------------------------------

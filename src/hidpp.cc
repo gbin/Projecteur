@@ -367,7 +367,7 @@ void FeatureSet::getFeatureIndex(FeatureCode fc, std::function<void(MsgResult, u
     const auto fcLSB = static_cast<uint8_t>(to_integral(fc) >> 8);
     const auto fcMSB = static_cast<uint8_t>(to_integral(fc) & 0x00ff);
 
-    Message featureIndexReqMsg(Message::Type::Long, DeviceIndex::WirelessDevice1,
+    Message featureIndexReqMsg(Message::Type::Long, m_connection->deviceIndex(),
                                Message::Data{fcLSB, fcMSB});
 
     m_connection->sendRequest(std::move(featureIndexReqMsg),
@@ -392,7 +392,7 @@ void FeatureSet::getFeatureCount(std::function<void(MsgResult, uint8_t, uint8_t)
       return;
     }
 
-    Message featureCountReqMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, featureIndex);
+    Message featureCountReqMsg(Message::Type::Long, m_connection->deviceIndex(), featureIndex);
 
     m_connection->sendRequest(std::move(featureCountReqMsg),
     [featureIndex, cb=std::move(cb)](MsgResult result, Message&& msg) {
@@ -413,7 +413,7 @@ void FeatureSet::getFirmwareCount(std::function<void(MsgResult, uint8_t, uint8_t
       return;
     }
 
-    Message fwCountReqMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, featureIndex);
+    Message fwCountReqMsg(Message::Type::Long, m_connection->deviceIndex(), featureIndex);
 
     m_connection->sendRequest(std::move(fwCountReqMsg),
     [featureIndex, cb=std::move(cb)](MsgResult result, Message&& msg)
@@ -435,7 +435,7 @@ void FeatureSet::getFirmwareInfo(uint8_t fwIndex, uint8_t entity,
     return;
   }
 
-  Message fwVerReqMessage(Message::Type::Long, DeviceIndex::WirelessDevice1, fwIndex, 1,
+  Message fwVerReqMessage(Message::Type::Long, m_connection->deviceIndex(), fwIndex, 1,
                           Message::Data{entity});
 
   m_connection->sendRequest(std::move(fwVerReqMessage),
@@ -601,7 +601,7 @@ void FeatureSet::getFeatureIds(uint8_t featureSetIndex, uint8_t count,
   for (uint8_t featureIndex = 1; featureIndex <= count; ++featureIndex)
   {
     batch.emplace(HidppConnectionInterface::RequestBatchItem {
-      Message(Message::Type::Long, DeviceIndex::WirelessDevice1, featureSetIndex, 1,
+      Message(Message::Type::Long, m_connection->deviceIndex(), featureSetIndex, 1,
               Message::Data{featureIndex}),
       [featureTable, featureIndex](MsgResult res, Message&& msg)
       {

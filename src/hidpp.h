@@ -249,6 +249,7 @@ public:
   using RequestResultCallback = std::function<void(MsgResult, HIDPP::Message&&)>;
 
   virtual BusType busType() const = 0;
+  virtual uint8_t deviceIndex() const = 0;
 
   // --- synchronous versions
   virtual ssize_t sendData(std::vector<uint8_t> msg) = 0;
