@@ -33,7 +33,7 @@ PresentationTimer::PresentationTimer(Settings* settings, Spotlight* spotlight,
   m_updateTimer->setTimerType(Qt::PreciseTimer);
   m_updateTimer->setInterval(TimerUpdateIntervalMs);
   connect(m_updateTimer, &QTimer::timeout, this, &PresentationTimer::updateRemaining);
-  connect(spotlight, &Spotlight::presenterButtonPressed, this, &PresentationTimer::start);
+  connect(spotlight, &Spotlight::slideNavigationPressed, this, &PresentationTimer::start);
 }
 
 QString PresentationTimer::stateName() const

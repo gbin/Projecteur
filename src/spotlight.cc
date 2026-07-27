@@ -397,9 +397,9 @@ void Spotlight::onEventDataAvailable(int fd, SubEventConnection& connection)
     ++buf;
 
     if (ev.type == EV_KEY && ev.value == 1
-        && (ev.code == BTN_LEFT || ev.code == KEY_RIGHT || ev.code == KEY_LEFT
+        && (ev.code == KEY_RIGHT || ev.code == KEY_LEFT
             || ev.code == KEY_PAGEDOWN || ev.code == KEY_PAGEUP)) {
-      emit presenterButtonPressed();
+      emit slideNavigationPressed();
     }
 
     if (ev.type == EV_SYN)
@@ -411,8 +411,6 @@ void Spotlight::onEventDataAvailable(int fd, SubEventConnection& connection)
 
       if (isMouseMoveEvent)
       { // Skip input mapping for mouse move events completely
-        if (!spotActive()) { emit presenterButtonPressed(); }
-
         // Note: During a Next or Back button press the Logitech Spotlight device can send
         // move events via hid++ notifications. It seems that just when releasing the
         // next or back button sometimes a mouse move event 'leaks' through here as
