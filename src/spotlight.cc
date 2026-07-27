@@ -412,7 +412,9 @@ void Spotlight::onEventDataAvailable(int fd, SubEventConnection& connection)
         // relative input event causing the spotlight to be activated.
         // The workaround skips a first input move event from the logitech spotlight device.
         const bool isLogitechSpotlight = connection.deviceId().vendorId == 0x46d
-          && (connection.deviceId().productId == 0xc53e || connection.deviceId().productId == 0xb503);
+          && (connection.deviceId().productId == 0xc53e
+              || connection.deviceId().productId == 0xb503
+              || connection.deviceId().productId == 0xb506);
         const bool logitechIsFirst = isLogitechSpotlight && workaroundLogitechFirstMoveEvent;
 
         if (isLogitechSpotlight)

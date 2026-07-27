@@ -57,6 +57,7 @@ const QString& lookup(const DeviceId& dId, const DeviceInputEvent& die)
   {
     {dHash({0x046d, 0xc53e}), logitechSpotlightMapping}, // Spotlight USB
     {dHash({0x046d, 0xb503}), logitechSpotlightMapping}, // Spotlight Bluetooth
+    {dHash({0x046d, 0xb506}), logitechSpotlightMapping}, // Spotlight 2 Bluetooth
     {dHash({0x0c45, 0x8101}), avattoH100Mapping},        // Avatto H100, August WP200
   };
 
