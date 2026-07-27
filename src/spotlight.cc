@@ -419,6 +419,7 @@ void Spotlight::onEventDataAvailable(int fd, SubEventConnection& connection)
         const bool isLogitechSpotlight = connection.deviceId().vendorId == 0x46d
           && (connection.deviceId().productId == 0xc53e
               || connection.deviceId().productId == 0xb503
+              || connection.deviceId().productId == 0xc548
               || connection.deviceId().productId == 0xb506);
         const bool logitechIsFirst = isLogitechSpotlight && workaroundLogitechFirstMoveEvent;
 

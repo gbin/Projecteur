@@ -20,9 +20,10 @@ namespace {
 
   // -----------------------------------------------------------------------------------------------
   // List of supported devices
-  const std::array<SupportedDevice, 3> supportedDefaultDevices {{
+  const std::array<SupportedDevice, 4> supportedDefaultDevices {{
     {0x46d, 0xc53e, false, "Logitech Spotlight (USB)"},
     {0x46d, 0xb503, true, "Logitech Spotlight (Bluetooth)"},
+    {0x46d, 0xc548, false, "Logitech Spotlight 2 (USB-C receiver)"},
     {0x46d, 0xb506, true, "Logitech Spotlight 2 (Bluetooth)"},
   }};
 

@@ -13,7 +13,8 @@ with Qt 6.11 and LayerShellQt 6.7. Wayland is the only supported windowing
 platform; Qt 5 and X11 are outside the scope of this fork.
 
 In addition to the hardware supported by the upstream project, this fork adds
-support for the **Logitech Spotlight 2 over Bluetooth** (`046d:b506`).
+support for the **Logitech Spotlight 2** through its Logi Bolt USB-C receiver
+(`046d:c548`) and over Bluetooth (`046d:b506`).
 
 This is an independent, unofficial fork. Please report problems specific to
 this version in the [fork's issue tracker](https://github.com/gbin/Projecteur-kde/issues).
@@ -296,7 +297,7 @@ your screen in an online presentation or call.
 
 Besides the _Logitech Spotlight_, the following devices are currently supported out of the box:
 
-* Logitech Spotlight 2 via Bluetooth _(046d:b506)_
+* Logitech Spotlight 2 via Logi Bolt USB-C receiver _(046d:c548)_ or Bluetooth _(046d:b506)_
 * AVATTO H100 / August WP200 _(0c45:8101)_
 * August LP315 _(2312:863d)_
 * AVATTO i10 Pro _(2571:4109)_

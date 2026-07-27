@@ -7,6 +7,9 @@
 # Rule for the Logitech Spotlight USB Receiver
 SUBSYSTEMS=="usb", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c53e", MODE="0660", TAG+="uaccess"
 
+# Rule for the Logitech Spotlight 2 Logi Bolt USB-C Receiver
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c548", MODE="0660", TAG+="uaccess"
+
 # Additional supported USB devices @EXTRA_USB_UDEV_RULES@
 
 # Rule fot the Logitech Spotlight when connected via Bluetooth
