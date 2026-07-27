@@ -15,6 +15,10 @@ SUBSYSTEMS=="input", ENV{LIBINPUT_DEVICE_GROUP}="5/46d/b503*", ATTRS{name}=="SPO
 # Additional rule for Bluetooth sub-devices (hidraw)
 SUBSYSTEMS=="hid", KERNELS=="0005:046D:B503.*", MODE="0660", TAG+="uaccess"
 
+# Rules for the Logitech Spotlight 2 when connected via Bluetooth
+SUBSYSTEM=="input", ATTRS{id/vendor}=="046d", ATTRS{id/product}=="b506", MODE="0660", TAG+="uaccess"
+SUBSYSTEMS=="hid", KERNELS=="0005:046D:B506.*", MODE="0660", TAG+="uaccess"
+
 # Additional supported Bluetooth devices @EXTRA_BLUETOOTH_UDEV_RULES@
 
 # Rules for uinput: Essential for creating a virtual input device that
