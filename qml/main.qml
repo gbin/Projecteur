@@ -126,11 +126,9 @@ Window {
             visible: false; enabled: false
             layer.enabled: true
             sourceComponent: spotShapeLoader.sourceComponent
-            onStatusChanged: {
-                if (status == Loader.Ready) {
-                    borderShapeLoader.item.visible = true
-                    borderShapeLoader.item.color = Qt.binding(function(){ return Settings.borderColor; })
-                }
+            onLoaded: {
+                item.visible = true
+                item.color = Qt.binding(function(){ return Settings.borderColor; })
             }
         }
 
