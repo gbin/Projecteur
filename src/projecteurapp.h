@@ -14,12 +14,11 @@ class AboutDialog;
 class DeviceCommandHelper;
 class LinuxDesktop;
 class PreferencesDialog;
+class ProjecteurControl;
 class QLocalServer;
 class QLocalSocket;
-class QMenu;
 class QQmlApplicationEngine;
 class QQmlComponent;
-class QSystemTrayIcon;
 class Settings;
 class Spotlight;
 
@@ -61,7 +60,10 @@ private slots:
   void readCommand(QLocalSocket* client);
 
 private:
+  friend class ProjecteurControl;
+
   void showPreferences(bool show = true);
+  void showAbout();
   void setScreenForCursorPos();
   QScreen* screenAtCursorPos() const;
   QWindow* createOverlayWindow();
@@ -72,14 +74,13 @@ private:
   QPoint currentCursorPos() const;
   void setCurrentCursorPos(const QPoint& pos);
 
-  void setupTrayIcon(Options const& options);
+  void setupControlService(Options const& options);
   void setupSpotlight();
 
 private:
-  std::unique_ptr<QSystemTrayIcon> m_trayIcon;
-  std::unique_ptr<QMenu> m_trayMenu;
   std::unique_ptr<PreferencesDialog> m_dialog;
   QPointer<AboutDialog> m_aboutDialog;
+  ProjecteurControl* m_control = nullptr;
   QLocalServer* const m_localServer = nullptr;
   Settings* m_settings = nullptr;
   Spotlight* m_spotlight = nullptr;

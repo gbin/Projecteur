@@ -161,8 +161,9 @@ and Hold Move actions for the same button.
 * C++17 compiler
 * CMake 3.20 or later
 * Qt 6.11 with Core, DBus, Gui, LinguistTools, Quick, and Widgets
-* KDE Plasma 6.7 Wayland
+* KDE Plasma 6.7 Wayland, including Libplasma and KCoreAddons
 * LayerShellQt 6.7
+* Extra CMake Modules 6.7 or later
 
 ### Build Example
 
@@ -213,11 +214,16 @@ file in this repository: `55-projecteur.rules.in`
   in /dev/input should be readable/writable by you.
   (See also about [device detection](#device-shows-as-not-connected))
 
-### Application Menu
+### System Tray
 
-The application menu is accessible via the system tray icon. There you will find
-the preferences and the menu entry to exit the application. If the system tray icon is missing,
-see the [Troubleshooting](#missing-system-tray) section.
+Projecteur provides a native Plasma system tray popup while the application is
+running. It shows connected presenters and offers quick access to the overlay,
+presets, spotlight test, preferences, about dialog, and quit action. Plasma owns
+the popup placement and closes it when the icon is clicked again or focus moves
+elsewhere.
+
+If the system tray icon is missing, see the
+[Troubleshooting](#missing-system-tray) section.
 
 ### Command Line Interface
 
@@ -326,7 +332,7 @@ The overlay requires the Plasma Wayland compositor. Verify that the session repo
 
 #### Missing System Tray
 
-If the Plasma system tray does not show the _Application Menu_, commands can be sent
+If the Plasma system tray does not show the _Projecteur_ applet, commands can be sent
 to the application to bring up the preferences
 dialog, test the spotlight, quit the application or set spotlight properties.
 See [Command Line Interface](#command-line-interface). There is also a command

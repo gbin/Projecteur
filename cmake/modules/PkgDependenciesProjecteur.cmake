@@ -2,11 +2,14 @@ list(APPEND _PkgDeps_Projecteur_archlinux
   "qt6-base>=6.11"
   "qt6-declarative>=6.11"
   "layer-shell-qt>=6.7"
+  "kcoreaddons>=6.7"
+  "libplasma>=6.7"
   "udev"
 )
 
 list(APPEND _PkgDepsMake_Projecteur_archlinux
-  "fakeroot" "awk" "cmake>=3.20" "make" "lsb-release" "tar" "pkg-config" "qt6-tools>=6.11"
+  "fakeroot" "awk" "cmake>=3.20" "extra-cmake-modules>=6.7" "make" "lsb-release" "tar"
+  "pkg-config" "qt6-tools>=6.11"
 )
 
 list(APPEND PkgDependencies_MAP_Projecteur

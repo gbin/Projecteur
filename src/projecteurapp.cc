@@ -9,6 +9,7 @@
 #include "linuxdesktop.h"
 #include "logging.h"
 #include "preferencesdlg.h"
+#include "projecteurcontrol.h"
 #include "settings.h"
 #include "spotlight.h"
 
@@ -17,7 +18,6 @@
 #include <QFontDatabase>
 #include <QLocalServer>
 #include <QLocalSocket>
-#include <QMenu>
 #include <QMessageBox>
 #include <QPointer>
 #include <QQmlApplicationEngine>
@@ -25,7 +25,6 @@
 #include <QQmlProperty>
 #include <QQuickWindow>
 #include <QScreen>
-#include <QSystemTrayIcon>
 #include <QTimer>
 #include <QWindow>
 
@@ -42,8 +41,6 @@ namespace {
 // -------------------------------------------------------------------------------------------------
 ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Options& options)
   : QApplication(argc, argv)
-  , m_trayIcon(new QSystemTrayIcon())
-  , m_trayMenu(new QMenu())
   , m_localServer(new QLocalServer(this))
   , m_linuxDesktop(new LinuxDesktop(this))
 {
@@ -76,6 +73,10 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
 
   connect(&*m_dialog, &PreferencesDialog::testButtonClicked, this, [this](){
     m_spotlight->setSpotActive(true);
+  });
+  connect(&*m_dialog, &PreferencesDialog::exitApplicationRequested, this, [this]() {
+    logDebug(mainapp) << tr("Exit request from preferences dialog.");
+    quit();
   });
 
   const QString desktopEnv = m_linuxDesktop->type() == LinuxDesktop::Type::KDE
@@ -125,23 +126,14 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
       if (m_spotlight->spotActive()) { m_spotlight->setSpotActive(false); }
       else { emit m_spotlight->spotActiveChanged(false); }
     }
-    else {
-      QTimer::singleShot(0, this, [this](){
-        if (m_spotlight->spotActive()) {
-          emit m_spotlight->spotActiveChanged(true);
-        } else {
-          m_spotlight->setSpotActive(true);
-        }
-      });
-    }
   });
 
   // Re-setup screen overlay(s) when a screen is added or removed
   connect(this, &ProjecteurApplication::screenAdded, this, [this](){ setupScreenOverlays(); });
   connect(this, &ProjecteurApplication::screenRemoved, this, [this](){ setupScreenOverlays(); });
 
-  // Setup the tray icon and menu
-  setupTrayIcon(options);
+  // Expose application state and actions to the native Plasma system tray applet.
+  setupControlService(options);
 
   connect(this, &ProjecteurApplication::aboutToQuit, this, [this](){
     for (const auto window : m_overlayWindows) { delete window; }
@@ -199,6 +191,7 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
 // -------------------------------------------------------------------------------------------------
 ProjecteurApplication::~ProjecteurApplication()
 {
+  if (m_control) { m_control->unregisterService(); }
   if (m_localServer) { m_localServer->close(); }
   for (const auto window : m_overlayWindows) { delete window; }
   m_overlayWindows.clear();
@@ -259,73 +252,31 @@ void ProjecteurApplication::setupSpotlight()
 }
 
 // -------------------------------------------------------------------------------------------------
-void ProjecteurApplication::setupTrayIcon(Options const& options)
+void ProjecteurApplication::setupControlService(Options const& options)
 {
-  // add and connect 'Preferences' tray menu action
-  const auto actionPref = m_trayMenu->addAction(tr("&Preferences..."));
-  connect(actionPref, &QAction::triggered, this, [this](){
-    this->showPreferences(true);
-  });
+  m_control = new ProjecteurControl(this, m_settings, m_spotlight, !options.hideSysTrayIcon);
+  if (!m_control->registerService()) {
+    logError(mainapp) << tr("Could not register the Projecteur session D-Bus service.");
+  }
+}
 
-  // add and and connect 'About' tray menu action
-  const auto actionAbout = m_trayMenu->addAction(tr("&About"));
-  connect(actionAbout, &QAction::triggered, this, [this]()
-  {
-    if (!m_aboutDialog) {
-      m_aboutDialog = new AboutDialog();
-      connect(m_aboutDialog, &QDialog::finished, this, [this](int /* result */) {
-        m_aboutDialog->deleteLater(); // No need to keep about dialog in memory, not that important
-      });
-    }
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::showAbout()
+{
+  if (!m_aboutDialog) {
+    m_aboutDialog = new AboutDialog();
+    connect(m_aboutDialog, &QDialog::finished, this, [this](int /* result */) {
+      m_aboutDialog->deleteLater();
+    });
+  }
 
-    if (m_aboutDialog->isVisible()) {
-      m_aboutDialog->show();
-      m_aboutDialog->raise();
-      m_aboutDialog->activateWindow();
-    } else {
-      m_aboutDialog->open();
-    }
-  });
-
-  m_trayMenu->addSeparator();
-  const auto actionQuit = m_trayMenu->addAction(tr("&Quit"));
-  connect(actionQuit, &QAction::triggered, this, [this](){
-    this->quit();
-  });
-  m_trayIcon->setContextMenu(&*m_trayMenu);
-
-  m_trayIcon->setIcon(QIcon(":/icons/projecteur-tray-64.png"));
-  m_trayIcon->show();
-
-  connect(&*m_trayIcon, &QSystemTrayIcon::activated, this,
-  [this](QSystemTrayIcon::ActivationReason reason) {
-    if (reason == QSystemTrayIcon::Trigger)
-    {
-      const auto trayGeometry = m_trayIcon->geometry();
-      // This usually won't give us a valid geometry, since Qt isn't drawing the tray icon itself
-      if (trayGeometry.isValid()) {
-        m_trayIcon->contextMenu()->popup(m_trayIcon->geometry().center());
-      } else {
-        // It's tricky to get the same behavior on all desktop environments. While on GNOME3
-        // it behaves as one (or most) would expect, it behaves differently on other Desktop
-        // environments.
-        // QSystemTrayIcon is a wrapper around the StatusNotfierItem on modern (Linux) Desktops
-        // see: https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/
-        // Via the Qt API there is not much control over how e.g. KDE or GNOME show the icon
-        // and how it behaves.. e.g. setting something like
-        // org.freedesktop.StatusNotifierItem.ItemIsMenu to True would be good for KDE Plasma
-        // see: https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/StatusNotifierItem/
-        this->showPreferences(true);
-      }
-    }
-  });
-
-  connect(&*m_dialog, &PreferencesDialog::exitApplicationRequested, actionQuit, [actionQuit]() {
-    logDebug(mainapp) << tr("Exit request from preferences dialog.");
-    actionQuit->trigger();
-  });
-
-  m_trayIcon->setVisible(!options.hideSysTrayIcon);
+  if (m_aboutDialog->isVisible()) {
+    m_aboutDialog->show();
+    m_aboutDialog->raise();
+    m_aboutDialog->activateWindow();
+  } else {
+    m_aboutDialog->open();
+  }
 }
 
 // -------------------------------------------------------------------------------------------------

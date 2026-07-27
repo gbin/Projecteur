@@ -95,8 +95,11 @@ deps: _require-arch
     dependencies=(
         base-devel
         cmake
+        extra-cmake-modules
         git
+        kcoreaddons
         layer-shell-qt
+        libplasma
         libglvnd
         pacman-contrib
         qt6-base
