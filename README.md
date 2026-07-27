@@ -1,15 +1,22 @@
 # Projecteur
 
-develop: [![Build Status develop][gh-badge-dev]][gh-link-dev]
-master: [![Build Status master][gh-badge-rel]][gh-link-rel]
+[![Build Status][gh-badge]][gh-link]
 
-Qt 6 / KDE Plasma Wayland application for the Logitech Spotlight device (and similar devices). \
-This branch is the Qt 6 / Plasma Wayland port.
+Qt 6 / KDE Plasma Wayland application for the Logitech Spotlight device and
+similar presenters.
 
-[gh-badge-dev]: https://github.com/jahnf/Projecteur/workflows/ci-build/badge.svg?branch=develop
-[gh-badge-rel]: https://github.com/jahnf/Projecteur/workflows/ci-build/badge.svg?branch=master
-[gh-link-dev]: https://github.com/jahnf/Projecteur/actions?query=workflow%3Aci-build+branch%3Adevelop
-[gh-link-rel]: https://github.com/jahnf/Projecteur/actions?query=workflow%3Aci-build+branch%3Amaster
+## About This Fork
+
+This repository is a fork of [jahnf/Projecteur](https://github.com/jahnf/Projecteur)
+focused on supporting modern KDE Plasma on Wayland. It targets KDE Plasma 6.7
+with Qt 6.11 and LayerShellQt 6.7. Wayland is the only supported windowing
+platform; Qt 5 and X11 are outside the scope of this fork.
+
+In addition to the hardware supported by the upstream project, this fork adds
+support for the **Logitech Spotlight 2 over Bluetooth** (`046d:b506`).
+
+[gh-badge]: https://github.com/gbin/Projecteur/actions/workflows/ci-build.yml/badge.svg?branch=develop
+[gh-link]: https://github.com/gbin/Projecteur/actions/workflows/ci-build.yml?query=branch%3Adevelop
 
 ## Motivation
 
@@ -23,6 +30,7 @@ So here it is: a Linux application for the Logitech Spotlight.
 ## Table of Contents
 
 - [Projecteur](#projecteur)
+  - [About This Fork](#about-this-fork)
   - [Motivation](#motivation)
   - [Table of Contents](#table-of-contents)
   - [Features](#features)
@@ -159,7 +167,7 @@ and Hold Move actions for the same button.
 ### Build Example
 
 ```sh
-git clone https://github.com/jahnf/Projecteur
+git clone https://github.com/gbin/Projecteur
 cd Projecteur
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
 cmake --build build
