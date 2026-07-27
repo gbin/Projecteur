@@ -39,7 +39,6 @@ So here it is: a Linux application for the Logitech Spotlight.
   - [Table of Contents](#table-of-contents)
   - [Features](#features)
     - [Screenshots](#screenshots)
-    - [Planned features](#planned-features)
   - [Supported Environments](#supported-environments)
   - [How it works](#how-it-works)
     - [Button mapping](#button-mapping)
@@ -86,11 +85,6 @@ So here it is: a Linux application for the Logitech Spotlight.
 [<img src="doc/screenshot-settings.png" alt="Projecteur preferences" height="300" />](./doc/screenshot-settings.png)
 [<img src="doc/screenshot-spot.png" alt="Projecteur spotlight overlay" height="300" />](./doc/screenshot-spot.png)
 [<img src="doc/screenshot-traymenu.png" alt="Projecteur Plasma tray popup" height="300" />](./doc/screenshot-traymenu.png)
-
-### Planned features
-
-* Support for more customizable button mapping actions.
-* Support of more proprietary features of the Logitech Spotlight and other devices.
 
 ## Supported Environments
 
