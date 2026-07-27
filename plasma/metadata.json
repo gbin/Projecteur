@@ -12,7 +12,7 @@
         "License": "MIT",
         "Name": "Projecteur",
         "Version": "1.0",
-        "Website": "https://github.com/jahnf/Projecteur"
+        "Website": "https://github.com/gbin/Projecteur-kde"
     },
     "KPackageStructure": "Plasma/Applet",
     "X-Plasma-API-Minimum-Version": "6.0",

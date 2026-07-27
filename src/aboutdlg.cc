@@ -145,10 +145,17 @@ QWidget* AboutDialog::createVersionInfoWidget()
   }
 
   vbox->addSpacing(4);
-  const auto weblinkLabel = new QLabel(QString("<a href=\"https://github.com/jahnf/Projecteur\">"
-                                               "https://github.com/jahnf/Projecteur</a>"), this);
-  weblinkLabel->setOpenExternalLinks(true);
-  vbox->addWidget(weblinkLabel);
+  const auto projectLinksLabel = new QLabel(
+    tr("Independent, unofficial KDE/Wayland fork maintained by "
+       "<a href=\"https://github.com/gbin\">Guillaume Binet</a>.<br>"
+       "Fork source and support: "
+       "<a href=\"https://github.com/gbin/Projecteur-kde\">gbin/Projecteur-kde</a><br>"
+       "Based on <a href=\"https://github.com/jahnf/Projecteur\">Projecteur</a> "
+       "by Jahn Fuchs."), this);
+  projectLinksLabel->setWordWrap(true);
+  projectLinksLabel->setTextFormat(Qt::TextFormat::RichText);
+  projectLinksLabel->setOpenExternalLinks(true);
+  vbox->addWidget(projectLinksLabel);
   vbox->addSpacing(8);
 
   auto qtVerText = tr("Qt Version: %1", "%1=qt version number").arg(QT_VERSION_STR);
@@ -158,8 +165,9 @@ QWidget* AboutDialog::createVersionInfoWidget()
   vbox->addWidget(new QLabel(qtVerText, this));
   vbox->addSpacing(15);
   vbox->addWidget(new QLabel("Copyright 2018-2021 Jahn Fuchs", this));
+  vbox->addWidget(new QLabel("Fork modifications Copyright 2026 Guillaume Binet", this));
   auto licenseText = new QLabel(tr("This project is distributed under the <br>"
-                                   "<a href=\"https://github.com/jahnf/Projecteur/blob/develop/LICENSE.md\">"
+                                   "<a href=\"https://github.com/gbin/Projecteur-kde/blob/develop/LICENSE.md\">"
                                    "MIT License</a>"), this);
   licenseText->setWordWrap(true);
   licenseText->setTextFormat(Qt::TextFormat::RichText);
@@ -262,4 +270,3 @@ QWidget* AboutDialog::createThirdPartyLicensesWidget()
   textBrowser->setHtml(html);
   return tpLicenceWidget;
 }
-

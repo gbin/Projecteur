@@ -199,7 +199,7 @@ install(FILES icons/projecteur-tray.svg DESTINATION share/icons/hicolor/256x256/
 # Set variables for file configurations
 get_target_property(VERSION_STRING projecteur VERSION_STRING)
 get_target_property(VERSION_DATE_MONTH_YEAR projecteur VERSION_DATE_MONTH_YEAR)
-set(HOMEPAGE "https://github.com/jahnf/Projecteur")
+set(HOMEPAGE "https://github.com/gbin/Projecteur-kde")
 
 configure_file("${TMPLDIR}/projecteur.desktop.in" "projecteur.desktop" @ONLY)
 install(FILES "${OUTDIR}/projecteur.desktop" DESTINATION share/applications/)

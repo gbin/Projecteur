@@ -15,8 +15,12 @@ platform; Qt 5 and X11 are outside the scope of this fork.
 In addition to the hardware supported by the upstream project, this fork adds
 support for the **Logitech Spotlight 2 over Bluetooth** (`046d:b506`).
 
-[gh-badge]: https://github.com/gbin/Projecteur/actions/workflows/ci-build.yml/badge.svg?branch=develop
-[gh-link]: https://github.com/gbin/Projecteur/actions/workflows/ci-build.yml?query=branch%3Adevelop
+This is an independent, unofficial fork. Please report problems specific to
+this version in the [fork's issue tracker](https://github.com/gbin/Projecteur-kde/issues).
+Only report a problem upstream when it also reproduces in the original project.
+
+[gh-badge]: https://github.com/gbin/Projecteur-kde/actions/workflows/ci-build.yml/badge.svg?branch=develop
+[gh-link]: https://github.com/gbin/Projecteur-kde/actions/workflows/ci-build.yml?query=branch%3Adevelop
 
 ## Motivation
 
@@ -168,8 +172,8 @@ and Hold Move actions for the same button.
 ### Build Example
 
 ```sh
-git clone https://github.com/gbin/Projecteur
-cd Projecteur
+git clone https://github.com/gbin/Projecteur-kde
+cd Projecteur-kde
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
 cmake --build build
 sudo cmake --install build
