@@ -136,6 +136,7 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
   setupControlService(options);
 
   connect(this, &ProjecteurApplication::aboutToQuit, this, [this](){
+    m_linuxDesktop->setShakeCursorEffectSuppressed(false);
     for (const auto window : m_overlayWindows) { delete window; }
     m_overlayWindows.clear();
     m_screenWindowMap.clear();
@@ -207,6 +208,8 @@ void ProjecteurApplication::setupSpotlight()
   {
     if (active && !m_settings->overlayDisabled())
     {
+      m_linuxDesktop->setShakeCursorEffectSuppressed(true);
+
       if (!m_settings->multiScreenOverlayEnabled()) { setScreenForCursorPos(); }
 
       for (const auto window : m_overlayWindows)
@@ -230,6 +233,8 @@ void ProjecteurApplication::setupSpotlight()
     }
     else
     {
+      m_linuxDesktop->setShakeCursorEffectSuppressed(false);
+
       m_overlayVisible = false;
       emit overlayVisibleChanged(false);
       for (const auto window : m_overlayWindows)

@@ -24,6 +24,10 @@ namespace {
   constexpr auto kwinScreenshotService = "org.kde.KWin.ScreenShot2";
   constexpr auto kwinScreenshotPath = "/org/kde/KWin/ScreenShot2";
   constexpr auto kwinScreenshotInterface = "org.kde.KWin.ScreenShot2";
+  constexpr auto kwinService = "org.kde.KWin";
+  constexpr auto kwinEffectsPath = "/Effects";
+  constexpr auto kwinEffectsInterface = "org.kde.kwin.Effects";
+  constexpr auto shakeCursorEffect = "shakecursor";
 
   // -----------------------------------------------------------------------------------------------
   QPixmap grabScreenKWin(QScreen* screen)
@@ -120,6 +124,11 @@ LinuxDesktop::LinuxDesktop(QObject* parent)
                                                          Qt::CaseInsensitive);
 }
 
+LinuxDesktop::~LinuxDesktop()
+{
+  setShakeCursorEffectSuppressed(false);
+}
+
 QPixmap LinuxDesktop::grabScreen(QScreen* screen) const
 {
   if (!screen) {
@@ -134,4 +143,55 @@ QPixmap LinuxDesktop::grabScreen(QScreen* screen) const
     return {};
   }
   return grabScreenKWin(screen);
+}
+
+void LinuxDesktop::setShakeCursorEffectSuppressed(bool suppressed)
+{
+  if (!isWayland() || type() != LinuxDesktop::Type::KDE
+      || suppressed == m_shakeCursorEffectSuppressed) {
+    return;
+  }
+
+  QDBusInterface interface(kwinService, kwinEffectsPath, kwinEffectsInterface);
+  if (!interface.isValid()) {
+    logWarning(desktop) << tr("Could not access KWin's desktop effects interface.");
+    return;
+  }
+
+  if (suppressed)
+  {
+    const QDBusReply<bool> loadedReply =
+      interface.call(QStringLiteral("isEffectLoaded"), QString::fromLatin1(shakeCursorEffect));
+    if (!loadedReply.isValid()) {
+      logWarning(desktop) << tr("Could not query KWin's Shake Cursor effect: %1")
+                             .arg(loadedReply.error().message());
+      return;
+    }
+    if (!loadedReply.value()) {
+      return;
+    }
+
+    const QDBusReply<void> unloadReply =
+      interface.call(QStringLiteral("unloadEffect"), QString::fromLatin1(shakeCursorEffect));
+    if (!unloadReply.isValid()) {
+      logWarning(desktop) << tr("Could not suppress KWin's Shake Cursor effect: %1")
+                             .arg(unloadReply.error().message());
+      return;
+    }
+
+    m_shakeCursorEffectSuppressed = true;
+    return;
+  }
+
+  const QDBusReply<bool> loadReply =
+    interface.call(QStringLiteral("loadEffect"), QString::fromLatin1(shakeCursorEffect));
+  if (!loadReply.isValid() || !loadReply.value()) {
+    const auto error = loadReply.isValid()
+                         ? tr("KWin refused to load the effect.")
+                         : loadReply.error().message();
+    logWarning(desktop) << tr("Could not restore KWin's Shake Cursor effect: %1").arg(error);
+    return;
+  }
+
+  m_shakeCursorEffectSuppressed = false;
 }

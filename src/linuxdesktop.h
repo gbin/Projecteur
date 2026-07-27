@@ -15,13 +15,16 @@ public:
   enum class Type : uint8_t { KDE, Other };
 
   explicit LinuxDesktop(QObject* parent = nullptr);
+  ~LinuxDesktop() override;
 
   bool isWayland() const { return m_wayland; };
   Type type() const { return m_type; };
 
   QPixmap grabScreen(QScreen* screen) const;
+  void setShakeCursorEffectSuppressed(bool suppressed);
 
 private:
   bool m_wayland = false;
   Type m_type = Type::Other;
+  bool m_shakeCursorEffectSuppressed = false;
 };
