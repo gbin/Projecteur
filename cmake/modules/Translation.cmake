@@ -1,30 +1,21 @@
-find_package(Qt5 REQUIRED COMPONENTS Core)
+find_package(${QT_PACKAGE_NAME} REQUIRED COMPONENTS Core LinguistTools)
 
 # Extract the qmake executable location
-get_target_property(Qt5_QMAKE_EXECUTABLE Qt5::qmake IMPORTED_LOCATION)
+get_target_property(QT_QMAKE_EXECUTABLE ${QT_PACKAGE_NAME}::qmake IMPORTED_LOCATION)
 
 # Find Qts own translations dir (containing qt_*.qm, qtbase_*.qm ...)
 if(NOT QT_TRANSLATIONS_DIR)
-  # Ask Qt5 where to put the translations
-  execute_process(COMMAND ${Qt5_QMAKE_EXECUTABLE} -query QT_INSTALL_TRANSLATIONS
+  # Ask the selected Qt version where to put the translations
+  execute_process(COMMAND ${QT_QMAKE_EXECUTABLE} -query QT_INSTALL_TRANSLATIONS
                   OUTPUT_VARIABLE qt_translations_dir OUTPUT_STRIP_TRAILING_WHITESPACE)
   # For windows systems: replace \ with / in directory path
   file(TO_CMAKE_PATH "${qt_translations_dir}" qt_translations_dir)
   set(QT_TRANSLATIONS_DIR ${qt_translations_dir} CACHE PATH "The location of the Qt translations" FORCE)
 endif()
 
-find_package(Qt5LinguistTools QUIET)
-if(NOT Qt5_LRELEASE_EXECUTABLE)
-  execute_process(COMMAND ${Qt5_QMAKE_EXECUTABLE} -query QT_INSTALL_BINS
-                  OUTPUT_VARIABLE _qt_bin_dir OUTPUT_STRIP_TRAILING_WHITESPACE)
-  # For windows systems: replace \ with / in directory path
-  file(TO_CMAKE_PATH "${_qt_bin_dir}" _qt_bin_dir)
-  set(Qt5_LRELEASE_EXECUTABLE ${_qt_bin_dir}/lrelease)
-  set(Qt5_LCONVERT_EXECUTABLE ${_qt_bin_dir}/lconvert)
-  set(Qt5_LUPDATE_EXECUTABLE ${_qt_bin_dir}/lupdate)
-else()
-  get_target_property(Qt5_LCONVERT_EXECUTABLE Qt5::lconvert IMPORTED_LOCATION)
-endif()
+get_target_property(QT_LRELEASE_EXECUTABLE ${QT_PACKAGE_NAME}::lrelease IMPORTED_LOCATION)
+get_target_property(QT_LCONVERT_EXECUTABLE ${QT_PACKAGE_NAME}::lconvert IMPORTED_LOCATION)
+get_target_property(QT_LUPDATE_EXECUTABLE ${QT_PACKAGE_NAME}::lupdate IMPORTED_LOCATION)
 
 # Helper function, takes the .qm file to be generated and a variable list of .ts files
 # to create a custom command that then can be used for a custom target.
@@ -37,7 +28,7 @@ function(add_qm_translation_file _qm_file)
     SET(tsfiles_blank_sep "${tsfiles_blank_sep} ${tsfile}")
   endforeach()
   add_custom_command(OUTPUT ${_qm_file}
-    COMMAND ${Qt5_LRELEASE_EXECUTABLE}
+    COMMAND ${QT_LRELEASE_EXECUTABLE}
     ARGS ${_ts_files} -qm ${_qm_file}
     DEPENDS ${_ts_files} VERBATIM
     COMMENT "Executing: lrelease -silent ${tsfiles_blank_sep} -qm ${_qm_file}"
@@ -67,10 +58,10 @@ function(add_combined_qm_translation_file _combined_qm_file)
   endforeach()
   list(REMOVE_DUPLICATES _single_qm_files)
   add_custom_command(OUTPUT ${_combined_qm_file}
-    COMMAND ${Qt5_LCONVERT_EXECUTABLE}
+    COMMAND ${QT_LCONVERT_EXECUTABLE}
     ARGS -o ${_combined_qm_file} ${_single_qm_files}
     DEPENDS ${_single_qm_files} VERBATIM
-    COMMENT "Executing: ${Qt5_LCONVERT_EXECUTABLE} -o ${_combined_qm_file} ${_single_qm_files}"
+    COMMENT "Executing: ${QT_LCONVERT_EXECUTABLE} -o ${_combined_qm_file} ${_single_qm_files}"
   )
 endfunction()
 
@@ -94,7 +85,7 @@ function(add_translation_update_task _prefix _input_dirs _output_dir _languages)
   set_target_properties(${_ts_files_tgt} PROPERTIES FOLDER "translation")
   set_target_properties(${_ts_files_tgt} PROPERTIES EXCLUDE_FROM_DEFAULT_BUILD 1)
   add_custom_command(TARGET ${_ts_files_tgt} PRE_BUILD
-    COMMAND ${Qt5_LUPDATE_EXECUTABLE}
+    COMMAND ${QT_LUPDATE_EXECUTABLE}
     ARGS ${_input_dirs}
     ARGS -locations relative
     ARGS -ts

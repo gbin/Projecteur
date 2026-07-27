@@ -92,20 +92,9 @@ QSize NativeKeySeqEdit::sizeHint() const
   constexpr int horizontalMargin = 3;
   const int h = opt.fontMetrics.height() + 2 * verticalMargin;
 
-  #if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
-    const int w = std::max(opt.fontMetrics.horizontalAdvance(QLatin1Char('x')) * 17 + 2 * horizontalMargin,
-                           opt.fontMetrics.horizontalAdvance(m_nativeSequence.toString()));
-  #else
-    const int w = std::max(opt.fontMetrics.width(QLatin1Char('x')) * 17 + 2 * horizontalMargin,
-                           opt.fontMetrics.width(m_nativeSequence.toString()));
-  #endif
-
-  #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-  return (style()->sizeFromContents(QStyle::CT_LineEdit, &opt, QSize(w, h).
-                                    expandedTo(QApplication::globalStrut()), this));
-  #else
+  const int w = std::max(opt.fontMetrics.horizontalAdvance(QLatin1Char('x')) * 17 + 2 * horizontalMargin,
+                         opt.fontMetrics.horizontalAdvance(m_nativeSequence.toString()));
   return style()->sizeFromContents(QStyle::CT_LineEdit, &opt, QSize(w, h), this);
-  #endif
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -398,4 +387,3 @@ int NativeKeySeqEdit::drawSequence(int startX, QPainter& p, const QStyleOption& 
 
   return drawText(startX, p, option, ks.toString());
 }
-

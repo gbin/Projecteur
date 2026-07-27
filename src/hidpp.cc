@@ -19,11 +19,8 @@
 DECLARE_LOGGING_CATEGORY(hid)
 
 namespace {
-  // -----------------------------------------------------------------------------------------------
-  #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-  const auto registered_ = qRegisterMetaTypeStreamOperators<HIDPP::FirmwareInfo>()
-                             && qRegisterMetaTypeStreamOperators<HIDPP::FeatureSet::FeatureTable>();
-  #endif
+  const auto registeredMetaTypes_ = qRegisterMetaType<HIDPP::FirmwareInfo>()
+                                    && qRegisterMetaType<HIDPP::FeatureSet::FeatureTable>();
 
   // -----------------------------------------------------------------------------------------------
   constexpr char featureSetFilename[] = "DeviceFeatureSet.conf";

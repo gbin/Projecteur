@@ -12,7 +12,7 @@ class LinuxDesktop : public QObject
   Q_OBJECT
 
 public:
-  enum class Type : uint8_t { KDE, Gnome, Other };
+  enum class Type : uint8_t { KDE, Other };
 
   explicit LinuxDesktop(QObject* parent = nullptr);
 
@@ -24,6 +24,4 @@ public:
 private:
   bool m_wayland = false;
   Type m_type = Type::Other;
-
-  QPixmap grabScreenWayland(QScreen* screen) const;
 };

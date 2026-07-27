@@ -1,13 +1,4 @@
-cmake_minimum_required(VERSION 3.6)
-
-# Use QTDIR environment variable with find_package,
-#  e.g. set QTDIR=/home/user/Qt/5.9.6/gcc_64/
-if(NOT "$ENV{QTDIR}" STREQUAL "")
-  set(QTDIR $ENV{QTDIR})
-  list(APPEND CMAKE_PREFIX_PATH $ENV{QTDIR})
-elseif(QTDIR)
-  list(APPEND CMAKE_PREFIX_PATH ${QTDIR})
-endif()
+cmake_minimum_required(VERSION 3.20)
 
 # Set the default build type to release
 if( NOT CMAKE_BUILD_TYPE )
@@ -24,88 +15,18 @@ add_compile_options(-Wall -Wextra -Werror)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 include(GitVersion)
-include(Translation)
 
-set(QtVersionOptions "Auto" "5" "6")
-set(PROJECTEUR_QT_VERSION "Auto" CACHE STRING "Choose the Qt version")
-set_property(CACHE PROJECTEUR_QT_VERSION PROPERTY STRINGS ${QtVersionOptions})
-
-list(FIND QtVersionOptions ${PROJECTEUR_QT_VERSION} index)
-if(index EQUAL -1)
-    message(FATAL_ERROR "PROJECTEUR_QT_VERSION must be one of ${QtVersionOptions}")
-endif()
-
-if ("${PROJECTEUR_QT_VERSION}" STREQUAL "Auto")
-  find_package(QT NAMES Qt6 Qt5 RCOMPONENTS Core REQUIRED)
-else()
-  set(QT_VERSION_MAJOR ${PROJECTEUR_QT_VERSION})
-endif()
-
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core REQUIRED)
-set(QT_PACKAGE_NAME Qt${QT_VERSION_MAJOR})
-
-message(STATUS "Using Qt version: ${Qt${QT_VERSION_MAJOR}_VERSION}")
-
-if(${QT_PACKAGE_NAME}_VERSION VERSION_LESS "6.0")
-  set(CMAKE_CXX_STANDARD 14)
-else()
-  set(CMAKE_CXX_STANDARD 17)
-endif()
-
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 set(CMAKE_AUTOMOC ON)
 
-find_package(${QT_PACKAGE_NAME} 5.7 REQUIRED COMPONENTS Core Gui Quick Widgets)
+find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui LinguistTools Quick Widgets)
+find_package(LayerShellQt 6.7 REQUIRED)
+set(QT_PACKAGE_NAME Qt6)
+message(STATUS "Using Qt version: ${Qt6_VERSION}")
+include(Translation)
 
-if(${QT_PACKAGE_NAME}_VERSION VERSION_LESS "6.0")
-  find_package(${QT_PACKAGE_NAME} QUIET COMPONENTS X11Extras)
-  set(HAS_Qt_X11Extras ${${QT_PACKAGE_NAME}_FOUND})
-else()
-  set(HAS_Qt_X11Extras 0)
-endif()
-
-find_package(${QT_PACKAGE_NAME} QUIET COMPONENTS DBus)
-set(HAS_Qt_DBus ${${QT_PACKAGE_NAME}_FOUND})
-find_package(${QT_PACKAGE_NAME} QUIET COMPONENTS QuickCompiler)
-set(HAS_Qt_QuickCompiler ${${QT_PACKAGE_NAME}_FOUND})
-
-# Qt 5.8 seems to have issues with the way Projecteur shows the full screen overlay window,
-# let's warn the user about it.
-if(Qt5_VERSION VERSION_EQUAL "5.8"
-    OR (Qt5_VERSION VERSION_GREATER "5.8" AND Qt5_VERSION VERSION_LESS "5.9"))
-  message(WARNING "There are known issues when using Projecteur with Qt Version 5.8, "
-                  "please use a different Qt Version.")
-endif()
-
-if (HAS_Qt_QuickCompiler)
-  # Off by default, since this ties the application strictly to the Qt version
-  # it is built with, see https://doc.qt.io/qt-5.12/qtquick-deployment.html#compiling-qml-ahead-of-time
-  option(USE_QTQUICK_COMPILER "Use the QtQuickCompiler" OFF)
-else()
-  set(USE_QTQUICK_COMPILER OFF)
-endif()
-
-if (USE_QTQUICK_COMPILER)
-  message(STATUS "Using QtQuick Compiler.")
-  qtquick_compiler_add_resources(RESOURCES qml/qml.qrc)
-  # Avoid CMake policy CMP0071 warning
-  foreach(resfile IN LISTS RESOURCES)
-    set_property(SOURCE "${resfile}" PROPERTY SKIP_AUTOMOC ON)
-  endforeach()
-else()
-  if(${QT_PACKAGE_NAME}_VERSION VERSION_LESS "6.0")
-    qt5_add_resources(RESOURCES qml/qml.qrc)
-  else()
-    qt6_add_resources(RESOURCES qml/qml-qt6.qrc)
-  endif()
-endif()
-
-if(${QT_PACKAGE_NAME}_VERSION VERSION_LESS "6.0")
-  qt5_add_resources(RESOURCES resources.qrc)
-else()
-  qt6_add_resources(RESOURCES resources.qrc)
-endif()
+qt6_add_resources(RESOURCES qml/qml.qrc resources.qrc)
 
 add_executable(projecteur
   src/main.cc                  src/enum-helper.h
@@ -140,24 +61,8 @@ add_executable(projecteur
 target_include_directories(projecteur PRIVATE src)
 
 target_link_libraries(projecteur
-  PRIVATE ${QT_PACKAGE_NAME}::Core ${QT_PACKAGE_NAME}::Quick ${QT_PACKAGE_NAME}::Widgets
+  PRIVATE Qt6::Core Qt6::DBus Qt6::Quick Qt6::Widgets LayerShellQt::Interface
 )
-
-if(HAS_Qt_X11Extras)
-  if(${QT_PACKAGE_NAME}_VERSION VERSION_LESS "6.0")
-    target_link_libraries(projecteur PRIVATE ${QT_PACKAGE_NAME}::X11Extras)
-  endif()
-  target_compile_definitions(projecteur PRIVATE HAS_Qt_X11Extras=1)
-else()
-  message(STATUS "Compiling without Qt5::X11Extras.")
-endif()
-
-if(HAS_Qt_DBus)
-  target_link_libraries(projecteur PRIVATE ${QT_PACKAGE_NAME}::DBus)
-  target_compile_definitions(projecteur PRIVATE HAS_Qt_DBus=1)
-else()
-  message(STATUS "Compiling without Qt5::DBus.")
-endif()
 
 target_compile_options(projecteur
   PRIVATE
@@ -331,7 +236,7 @@ if(PACKAGE_TARGETS)
   add_dist_package_target(
     PROJECT "${CMAKE_PROJECT_NAME}"
     TARGET projecteur
-    DESCRIPTION_BRIEF "Linux/X11 application for the Logitech Spotlight device."
+    DESCRIPTION_BRIEF "Wayland application for the Logitech Spotlight device."
     DESCRIPTION_FULL
 "Projecteur is a virtual laser pointer for use with inertial pointers such as
  the Logitech Spotlight. Projecteur can show a colored dot, a highlighted
@@ -373,4 +278,3 @@ find_program(iwyu_path NAMES include-what-you-use iwyu)
 if(ENABLE_IWYU AND iwyu_path)
   set_property(TARGET projecteur PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
 endif()
-

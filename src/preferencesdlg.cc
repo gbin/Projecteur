@@ -29,18 +29,10 @@
 #include <QSpinBox>
 #include <QStyle>
 #include <QTabWidget>
-#include <QTimer>
-
-#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-  #if HAS_Qt_X11Extras
-  #include <QX11Info>
-  #endif
-#endif
 
 #include <map>
 
 LOGGING_CATEGORY(preferences, "preferences")
-LOGGING_CATEGORY(x11display, "x11display")
 
 // -------------------------------------------------------------------------------------------------
 namespace {
@@ -149,9 +141,6 @@ QWidget* PreferencesDialog::createSettingsTabWidget(Settings* settings)
   const auto mainVBox = new QVBoxLayout(widget);
   mainVBox->addLayout(mainHBox);
   mainVBox->addWidget(presetSelector);
-#if HAS_Qt_X11Extras
-  mainVBox->addWidget(createCompositorWarningWidget());
-#endif
   mainVBox->addLayout(hbox);
 
   return widget;
@@ -257,64 +246,6 @@ QWidget* PreferencesDialog::createPresetSelector(Settings* settings)
 }
 
 // -------------------------------------------------------------------------------------------------
-#if HAS_Qt_X11Extras
-QWidget* PreferencesDialog::createCompositorWarningWidget()
-{
-  if (!QX11Info::isPlatformX11())
-  { // Platform ist not X11, possibly wayland or others...
-    const auto widget = new QWidget(this);
-    widget->setVisible(false);
-    return widget;
-  }
-
-  const auto widget = new QFrame(this);
-  widget->setFrameStyle(QFrame::StyledPanel | QFrame::Plain);
-  const auto hbox = new QHBoxLayout(widget);
-
-  const auto iconLabel = new QLabel(this);
-  iconLabel->setPixmap(style()->standardPixmap(QStyle::SP_MessageBoxCritical));
-  hbox->addWidget(iconLabel);
-  const auto textLabel = new QLabel(tr("<b>Warning: No running compositing manager detected!</b>"), this);
-  textLabel->setTextFormat(Qt::RichText);
-  textLabel->setToolTip(tr("Please make sure a compositing manager is running. "
-                           "On some systems one way is to run <tt>xcompmgr</tt> manually."));
-  hbox->addWidget(textLabel);
-  hbox->setStretch(1, 1);
-
-  const auto timer = new QTimer(this);
-  timer->setInterval(1000);
-  timer->setSingleShot(false);
-
-  auto checkForCompositorAndUpdate = [widget](){
-    static bool compositorWasRunning = true;
-    const bool compositorIsRunning = QX11Info::isCompositingManagerRunning();
-    if (compositorWasRunning != compositorIsRunning)
-    {
-      if (compositorIsRunning) {
-        logInfo(x11display) << tr("Detected running compositing compositing manager.");
-      } else {
-        logWarning(x11display) << tr("No running compositing manager detected.");
-      }
-    }
-    widget->setVisible(!compositorIsRunning); // Warning widget visible if no compositor is running.
-    compositorWasRunning = compositorIsRunning;
-  };
-
-  checkForCompositorAndUpdate();
-
-  connect(this, &PreferencesDialog::dialogActiveChanged, this, [timer, checkForCompositorAndUpdate](bool active) {
-    if (active) { checkForCompositorAndUpdate(); timer->start(); } else { timer->stop(); }
-  });
-
-  connect(timer, &QTimer::timeout, this, [checkForCompositorAndUpdate=std::move(checkForCompositorAndUpdate)]() {
-    checkForCompositorAndUpdate();
-  });
-
-  return widget;
-}
-#endif
-
-// -------------------------------------------------------------------------------------------------
 QGroupBox* PreferencesDialog::createShapeGroupBox(Settings* settings)
 {
   const auto shapeGroup = new QGroupBox(tr("Shape Settings"), this);
@@ -405,11 +336,7 @@ QGroupBox* PreferencesDialog::createShapeGroupBox(Settings* settings)
       {
         if (row >= startRow + maxRows) { break; }
         spotGrid->addWidget(new QLabel(s.displayName(), this),row, 0);
-        #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-        if (s.defaultValue().type() == QVariant::Int)
-        #else
         if (s.defaultValue().metaType().id() == QMetaType::Int)
-        #endif
         {
           const auto spinbox = new QSpinBox(this);
           spinbox->setMaximum(s.maxValue().toInt());
@@ -871,4 +798,3 @@ void PresetComboCustomStyle::drawControl(QStyle::ControlElement element, const Q
   }
   QProxyStyle::drawControl(element, option, painter, widget);
 }
-

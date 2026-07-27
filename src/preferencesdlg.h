@@ -65,9 +65,6 @@ private:
   QWidget* createMultiScreenWidget(Settings* settings);
   QGroupBox* createZoomGroupBox(Settings* settings);
   QWidget* createPresetSelector(Settings* settings);
-#if HAS_Qt_X11Extras
-  QWidget* createCompositorWarningWidget();
-#endif
   QWidget* createLogTabWidget();
 
 private:

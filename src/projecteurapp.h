@@ -89,7 +89,6 @@ private:
   QQmlComponent* m_windowQmlComponent = nullptr;
   std::map<QLocalSocket*, quint32> m_commandConnections;
   bool m_overlayVisible = false;
-  const bool m_xcbOnWayland = false;
 
   QList<QWindow*> m_overlayWindows;
   std::map<QScreen*, QWindow*> m_screenWindowMap;

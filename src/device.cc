@@ -20,11 +20,6 @@ LOGGING_CATEGORY(device, "device")
 LOGGING_CATEGORY(hid, "HID")
 
 namespace  {
-  // -----------------------------------------------------------------------------------------------
-  #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-  const auto registeredComparator_ = QMetaType::registerComparators<DeviceId>();
-  #endif
-
   const auto hexId = logging::hexId;
   // class i18n : public QObject {}; // for i18n and logging
 } // end anonymous namespace

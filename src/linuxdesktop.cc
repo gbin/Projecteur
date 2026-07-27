@@ -5,82 +5,100 @@
 
 #include "logging.h"
 
-#include <QApplication>
-#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-  #include <QDesktopWidget>
-#endif
-#include <QDir>
+#include <QDBusInterface>
+#include <QDBusReply>
+#include <QDBusUnixFileDescriptor>
 #include <QFile>
+#include <QGuiApplication>
+#include <QImage>
 #include <QProcessEnvironment>
 #include <QScreen>
 
-#if HAS_Qt_DBus
-#include <QDBusInterface>
-#include <QDBusReply>
-#endif
+#include <fcntl.h>
+#include <limits>
+#include <unistd.h>
 
 LOGGING_CATEGORY(desktop, "desktop")
 
 namespace {
-#if HAS_Qt_DBus
-  // -----------------------------------------------------------------------------------------------
-  QPixmap grabScreenDBusGnome()
-  {
-    const auto filepath = QDir::temp().absoluteFilePath("000_projecteur_zoom_screenshot.png");
-    QDBusInterface interface(QStringLiteral("org.gnome.Shell"),
-                             QStringLiteral("/org/gnome/Shell/Screenshot"),
-                             QStringLiteral("org.gnome.Shell.Screenshot"));
-    QDBusReply<bool> reply = interface.call(QStringLiteral("Screenshot"), false, false, filepath);
+  constexpr auto kwinScreenshotService = "org.kde.KWin.ScreenShot2";
+  constexpr auto kwinScreenshotPath = "/org/kde/KWin/ScreenShot2";
+  constexpr auto kwinScreenshotInterface = "org.kde.KWin.ScreenShot2";
 
-    if (reply.value())
+  // -----------------------------------------------------------------------------------------------
+  QPixmap grabScreenKWin(QScreen* screen)
+  {
+    int pipeDescriptors[2] = {-1, -1};
+    if (::pipe2(pipeDescriptors, O_CLOEXEC) != 0) {
+      logError(desktop) << LinuxDesktop::tr("Could not create a pipe for the KWin screenshot.");
+      return {};
+    }
+
+    QFile readPipe;
+    if (!readPipe.open(pipeDescriptors[0], QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
+      ::close(pipeDescriptors[0]);
+      ::close(pipeDescriptors[1]);
+      logError(desktop) << LinuxDesktop::tr("Could not open the KWin screenshot pipe.");
+      return {};
+    }
+
+    QDBusReply<QVariantMap> reply;
     {
-      QPixmap pm(filepath);
-      QFile::remove(filepath);
-      return pm;
-    }
-    logError(desktop) << LinuxDesktop::tr("Screenshot via GNOME DBus interface failed.");
-    return QPixmap();
-  }
+      QDBusUnixFileDescriptor writePipe;
+      writePipe.giveFileDescriptor(pipeDescriptors[1]);
+      QDBusInterface interface(kwinScreenshotService, kwinScreenshotPath,
+                               kwinScreenshotInterface);
 
-  // -----------------------------------------------------------------------------------------------
-  QPixmap grabScreenDBusKde()
-  {
-    QDBusInterface interface(QStringLiteral("org.kde.KWin"),
-                             QStringLiteral("/Screenshot"),
-                             QStringLiteral("org.kde.kwin.Screenshot"));
-    QDBusReply<QString> reply = interface.call(QStringLiteral("screenshotFullscreen"));
-    QPixmap pm(reply.value());
-    if (!pm.isNull()) {
-      QFile::remove(reply.value());
-    } else {
-      logError(desktop) << LinuxDesktop::tr("Screenshot via KDE DBus interface failed.");
-    }
-    return pm;
-  }
-#endif // HAS_Qt_DBus
+      QVariantMap options;
+      options.insert(QStringLiteral("hide-caller-windows"), true);
+      options.insert(QStringLiteral("native-resolution"), true);
 
-  // -----------------------------------------------------------------------------------------------
-  QPixmap grabScreenVirtualDesktop(QScreen* screen)
-  {
-    QRect g;
-    for (const auto s : QGuiApplication::screens()) {
-      g = g.united(s->geometry());
+      reply = interface.call(QStringLiteral("CaptureScreen"), screen->name(), options,
+                             QVariant::fromValue(writePipe));
     }
 
-    #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-    QPixmap pm(QApplication::primaryScreen()->grabWindow(
-                 QApplication::desktop()->winId(), g.x(), g.y(), g.width(), g.height()));
-    #else
-    QPixmap pm(QApplication::primaryScreen()->grabWindow(0, g.x(), g.y(), g.width(), g.height()));
-    #endif
-
-    if (!pm.isNull())
-    {
-      pm.setDevicePixelRatio(screen->devicePixelRatio());
-      return pm.copy(screen->geometry());
+    if (!reply.isValid()) {
+      auto message = LinuxDesktop::tr("Screenshot via KWin ScreenShot2 failed: %1")
+                       .arg(reply.error().message());
+      if (reply.error().name() == QStringLiteral("org.kde.KWin.ScreenShot2.Error.NoAuthorized")) {
+        message += LinuxDesktop::tr(
+          " Install Projecteur so KWin can associate the executable with its desktop metadata.");
+      }
+      logError(desktop) << message;
+      return {};
     }
 
-    return pm;
+    const QVariantMap attributes = reply.value();
+    const quint32 width = attributes.value(QStringLiteral("width")).toUInt();
+    const quint32 height = attributes.value(QStringLiteral("height")).toUInt();
+    const quint32 stride = attributes.value(QStringLiteral("stride")).toUInt();
+    const quint32 formatValue = attributes.value(QStringLiteral("format")).toUInt();
+    const qreal scale = attributes.value(QStringLiteral("scale"), 1.0).toDouble();
+
+    const quint64 expectedBytes = quint64(stride) * height;
+    if (width == 0 || height == 0 || stride == 0
+        || expectedBytes > quint64(std::numeric_limits<qsizetype>::max())) {
+      logError(desktop) << LinuxDesktop::tr("KWin returned invalid screenshot dimensions.");
+      return {};
+    }
+
+    const QByteArray pixels = readPipe.readAll();
+    if (quint64(pixels.size()) < expectedBytes) {
+      logError(desktop) << LinuxDesktop::tr("KWin returned an incomplete screenshot.");
+      return {};
+    }
+
+    const auto format = static_cast<QImage::Format>(formatValue);
+    const QImage image(reinterpret_cast<const uchar*>(pixels.constData()),
+                       int(width), int(height), int(stride), format);
+    if (image.isNull()) {
+      logError(desktop) << LinuxDesktop::tr("KWin returned an unsupported screenshot format.");
+      return {};
+    }
+
+    QPixmap pixmap = QPixmap::fromImage(image.copy());
+    pixmap.setDevicePixelRatio(scale > 0 ? scale : 1.0);
+    return pixmap;
   }
 } // end anonymous namespace
 
@@ -88,71 +106,32 @@ LinuxDesktop::LinuxDesktop(QObject* parent)
   : QObject(parent)
 {
   const auto env = QProcessEnvironment::systemEnvironment();
-  { // check for Kde and Gnome
-    const auto kdeFullSession = env.value(QStringLiteral("KDE_FULL_SESSION"));
-    const auto gnomeSessionId = env.value(QStringLiteral("GNOME_DESKTOP_SESSION_ID"));
-    const auto desktopSession = env.value(QStringLiteral("DESKTOP_SESSION"));
-    const auto xdgCurrentDesktop = env.value(QStringLiteral("XDG_CURRENT_DESKTOP"));
-    if (gnomeSessionId.size() || xdgCurrentDesktop.contains("Gnome", Qt::CaseInsensitive)) {
-      m_type = LinuxDesktop::Type::Gnome;
-    }
-    else if (kdeFullSession.size() || desktopSession == "kde-plasma") {
-      m_type = LinuxDesktop::Type::KDE;
-    }
+  const auto kdeFullSession = env.value(QStringLiteral("KDE_FULL_SESSION"));
+  const auto desktopSession = env.value(QStringLiteral("DESKTOP_SESSION"));
+  const auto xdgCurrentDesktop = env.value(QStringLiteral("XDG_CURRENT_DESKTOP"));
+
+  if (!kdeFullSession.isEmpty()
+      || desktopSession.contains(QStringLiteral("plasma"), Qt::CaseInsensitive)
+      || xdgCurrentDesktop.contains(QStringLiteral("KDE"), Qt::CaseInsensitive)) {
+    m_type = LinuxDesktop::Type::KDE;
   }
 
-  { // check for wayland session
-    const auto waylandDisplay = env.value(QStringLiteral("WAYLAND_DISPLAY"));
-    const auto xdgSessionType = env.value(QStringLiteral("XDG_SESSION_TYPE"));
-    m_wayland = (xdgSessionType == "wayland")
-                || waylandDisplay.contains("wayland", Qt::CaseInsensitive);
-  }
+  m_wayland = QGuiApplication::platformName().startsWith(QStringLiteral("wayland"),
+                                                         Qt::CaseInsensitive);
 }
 
 QPixmap LinuxDesktop::grabScreen(QScreen* screen) const
 {
-  if (screen == nullptr) {
-    return QPixmap();
+  if (!screen) {
+    return {};
   }
-
-  if (isWayland()) {
-    return grabScreenWayland(screen);
+  if (!isWayland()) {
+    logWarning(desktop) << tr("Screen capture is only supported on Wayland.");
+    return {};
   }
-
-  #if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
-    const bool isVirtualDesktop = QApplication::primaryScreen()->virtualSiblings().size() > 1;
-  #else
-    const bool isVirtualDesktop = QApplication::desktop()->isVirtualDesktop();
-  #endif
-
-  if (isVirtualDesktop) {
-    return grabScreenVirtualDesktop(screen);
+  if (type() != LinuxDesktop::Type::KDE) {
+    logWarning(desktop) << tr("Screen capture is only supported on KDE Plasma.");
+    return {};
   }
-
-  // everything else.. usually X11
-  return screen->grabWindow(0);
-}
-
-QPixmap LinuxDesktop::grabScreenWayland(QScreen* screen) const
-{
-#if HAS_Qt_DBus
-  QPixmap pm;
-  switch (type())
-  {
-  case LinuxDesktop::Type::Gnome:
-    pm = grabScreenDBusGnome();
-    break;
-  case LinuxDesktop::Type::KDE:
-    pm = grabScreenDBusKde();
-    break;
-  default:
-    logWarning(desktop) << tr("Currently zoom on Wayland is only supported via DBus on KDE and GNOME.");
-  }
-  return pm.isNull() ? pm : pm.copy(screen->geometry());
-#else
-  Q_UNUSED(screen);
-  logWarning(desktop) << tr("Projecteur was compiled without Qt DBus. Currently zoom on Wayland is "
-                            "only supported via DBus on KDE and GNOME.");
-  return QPixmap();
-#endif
+  return grabScreenKWin(screen);
 }

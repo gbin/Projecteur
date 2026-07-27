@@ -12,6 +12,7 @@
 #include <vector>
 #include <tuple>
 
+#include <QObject>
 #include <QString>
 
 // Hidpp specific functionality
@@ -384,11 +385,11 @@ const char* toString(HIDPP::BatteryStatus bs);
 const char* toString(HIDPP::Notification n);
 
 // -------------------------------------------------------------------------------------------------
-Q_DECLARE_METATYPE(HIDPP::FeatureSet::FeatureTable);
 QDataStream& operator<<(QDataStream& s, const HIDPP::FeatureSet::FeatureTable& ft);
 QDataStream& operator>>(QDataStream& s, HIDPP::FeatureSet::FeatureTable& ft);
+Q_DECLARE_METATYPE(HIDPP::FeatureSet::FeatureTable);
 
 // -------------------------------------------------------------------------------------------------
-Q_DECLARE_METATYPE(HIDPP::FirmwareInfo);
 QDataStream& operator<<(QDataStream& s, const HIDPP::FirmwareInfo& fi);
 QDataStream& operator>>(QDataStream& s, HIDPP::FirmwareInfo& fi);
+Q_DECLARE_METATYPE(HIDPP::FirmwareInfo);

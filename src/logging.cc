@@ -27,6 +27,14 @@ namespace {
     return (qstrncmp(categoryPrefix, category->categoryName(), sizeof(categoryPrefix)-1) == 0);
   }
 
+  inline void applyDefaultCategoryFilter(QLoggingCategory* category) {
+    // Qt 6.11 applies a newly installed filter to existing categories before installFilter()
+    // returns the previous filter. During that pass this pointer is still null.
+    if (defaultCategoryFilter) {
+      defaultCategoryFilter(category);
+    }
+  }
+
   void categoryFilterDebug(QLoggingCategory *category)
   {
     if (isAppCategory(category))
@@ -36,7 +44,7 @@ namespace {
       category->setEnabled(QtWarningMsg, true);
       category->setEnabled(QtCriticalMsg, true);
     } else {
-      defaultCategoryFilter(category);
+      applyDefaultCategoryFilter(category);
     }
   }
 
@@ -48,7 +56,7 @@ namespace {
       category->setEnabled(QtWarningMsg, true);
       category->setEnabled(QtCriticalMsg, true);
     } else {
-      defaultCategoryFilter(category);
+      applyDefaultCategoryFilter(category);
     }
   }
 
@@ -60,7 +68,7 @@ namespace {
       category->setEnabled(QtWarningMsg, true);
       category->setEnabled(QtCriticalMsg, true);
     } else {
-      defaultCategoryFilter(category);
+      applyDefaultCategoryFilter(category);
     }
   }
 
@@ -73,7 +81,7 @@ namespace {
       category->setEnabled(QtWarningMsg, false);
       category->setEnabled(QtCriticalMsg, true);
     } else {
-      defaultCategoryFilter(category);
+      applyDefaultCategoryFilter(category);
     }
   }
 
@@ -112,11 +120,7 @@ namespace {
   {
     const char *category = context.category ? context.category : "";
 
-    #if (QT_VERSION >= QT_VERSION_CHECK(5, 8, 0))
-      constexpr auto dateFormat = Qt::ISODateWithMs;
-    #else
-      constexpr auto dateFormat = Qt::ISODate;
-    #endif
+    constexpr auto dateFormat = Qt::ISODateWithMs;
 
     const auto logMsg = QString("[%1][%2][%3] %4").arg(QDateTime::currentDateTime().toString(dateFormat),
                                                        typeToShortString(type), category, msgQString);

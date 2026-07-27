@@ -183,20 +183,11 @@ QSize InputSeqEdit::sizeHint() const
   constexpr int verticalMargin = 3;
   constexpr int horizontalMargin = 3;
   const int h = fm.height() + 2 * verticalMargin;
-  #if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
-    const int w = fm.horizontalAdvance(QLatin1Char('x')) * 17 + 2 * horizontalMargin;
-  #else
-    const int w = fm.width(QLatin1Char('x')) * 17 + 2 * horizontalMargin;
-  #endif
+  const int w = fm.horizontalAdvance(QLatin1Char('x')) * 17 + 2 * horizontalMargin;
 
   const QStyleOptionFrame option = styleOption();
 
-  #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-  return (style()->sizeFromContents(QStyle::CT_LineEdit, &option, QSize(w, h).
-                                    expandedTo(QApplication::globalStrut()), this));
-  #else
   return style()->sizeFromContents(QStyle::CT_LineEdit, &option, QSize(w, h), this);
-  #endif
 }
 
 // -------------------------------------------------------------------------------------------------
