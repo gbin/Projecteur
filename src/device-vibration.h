@@ -7,6 +7,7 @@
 #include <memory>
 
 class QSpinBox;
+class QLabel;
 class SubDeviceConnection;
 class SubHidppConnection;
 
@@ -96,6 +97,7 @@ signals:
 
 private:
   QPointer<SubHidppConnection> m_subDeviceConnection;
+  QLabel* m_lengthLabel = nullptr;
   QSpinBox* m_sbLength = nullptr;
   QSpinBox* m_sbIntensity = nullptr;
 };

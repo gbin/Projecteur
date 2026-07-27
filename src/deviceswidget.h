@@ -15,6 +15,7 @@ class DeviceConnection;
 class InputMapper;
 class MultiTimerWidget;
 class QComboBox;
+class QShowEvent;
 class QTabWidget;
 class QTextEdit;
 class Settings;
@@ -36,6 +37,9 @@ public:
 signals:
   void currentDeviceChanged(const DeviceId&);
 
+protected:
+  void showEvent(QShowEvent* event) override;
+
 private:
   QWidget* createDisconnectedStateWidget();
   void createDeviceComboBox(Spotlight* spotlight);
@@ -52,6 +56,7 @@ private:
   QWidget* m_deviceDetailsTabWidget = nullptr;
 
   QPointer<InputMapper> m_inputMapper;
+  QPointer<Spotlight> m_spotlight;
 };
 
 // -------------------------------------------------------------------------------------------------

@@ -16,6 +16,7 @@
 #include <QLabel>
 #include <QLayout>
 #include <QShortcut>
+#include <QShowEvent>
 #include <QSpinBox>
 #include <QStackedLayout>
 #include <QStyle>
@@ -50,6 +51,7 @@ namespace {
 // -------------------------------------------------------------------------------------------------
 DevicesWidget::DevicesWidget(Settings* settings, Spotlight* spotlight, QWidget* parent)
   : QWidget(parent)
+  , m_spotlight(spotlight)
 {
   createDeviceComboBox(spotlight);
 
@@ -66,6 +68,17 @@ DevicesWidget::DevicesWidget(Settings* settings, Spotlight* spotlight, QWidget* 
   [stackLayout, deviceWidget, disconnectedWidget](bool anyConnected){
     stackLayout->setCurrentWidget(anyConnected ? deviceWidget : disconnectedWidget);
   });
+}
+
+// -------------------------------------------------------------------------------------------------
+void DevicesWidget::showEvent(QShowEvent* event)
+{
+  QWidget::showEvent(event);
+
+  // HID++ feature discovery is asynchronous. Re-evaluate optional device tabs
+  // when this page becomes visible so a capability discovered during startup
+  // cannot be missed because of signal ordering.
+  if (m_spotlight) { updateTimerTab(m_spotlight); }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -343,6 +356,16 @@ void DevicesWidget::updateTimerTab(Spotlight* spotlight)
     if (conn) {
       for (const auto& item : conn->subDevices()) {
         if (item.second->hasFlags(DeviceFlag::Vibrate)) { return item.second; }
+
+        // Derive support from the initialized feature table as well. This makes
+        // the preferences UI resilient if its flag-change notification happened
+        // before the page was constructed or shown.
+        const auto hidpp = qobject_cast<SubHidppConnection*>(item.second.get());
+        if (hidpp
+            && (hidpp->featureSet().featureCodeSupported(HIDPP::FeatureCode::PresenterControl)
+                || hidpp->featureSet().featureCodeSupported(HIDPP::FeatureCode::Haptic))) {
+          return item.second;
+        }
       }
     }
     return std::shared_ptr<SubDeviceConnection>{};
@@ -357,6 +380,8 @@ void DevicesWidget::updateTimerTab(Spotlight* spotlight)
   {
     if (m_tabWidget->indexOf(m_timerTabWidget) < 0) {
       m_tabWidget->insertTab(1, m_timerTabWidget, tr("Vibration Timer"));
+      logDebug(preferences) << tr("Added Vibration Timer tab for '%1'.")
+                               .arg(vibrateConn->path());
     }
     m_timerTabWidget->setSubDeviceConnection(vibrateConn.get());
   }

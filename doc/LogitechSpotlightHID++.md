@@ -91,6 +91,7 @@ enum class FeatureCode : uint16_t {
   DFUControlSigned     = 0x00c2,
   BatteryStatus        = 0x1000,
   UnifiedBattery       = 0x1004,
+  Haptic               = 0x19b0,
   PresenterControl     = 0x1a00,
   Sensor3D             = 0x1a01,
   ReprogramControlsV4  = 0x1b04,
@@ -236,6 +237,12 @@ Notification Feature Code (`0x1db4`).
 The spotlight device can vibrate if the HID++ message
 `{0x10, 0x01, (Feature Index for Presenter Control Feature Code), 0x1d, length, 0xe8, intensity}`
 is sent to it. In the message, length can range between `0x00` to `0x0a`.
+
+The Logitech Spotlight 2 instead exposes the Haptic Feature Code (`0x19b0`).
+Projecteur first sets its global haptic level with function `0x02` and payload
+`{enabled, level}`, where level is a percentage. It then plays the built-in
+Completed waveform (`0x07`) with function `0x04`. Unlike the original
+Presenter Control command, this feature does not accept a vibration length.
 
 ### Battery Status
 

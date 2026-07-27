@@ -12,6 +12,7 @@
 #include <QFontDatabase>
 #include <QGridLayout>
 #include <QGroupBox>
+#include <QLabel>
 #include <QPushButton>
 #include <QSocketNotifier>
 #include <QSpinBox>
@@ -372,7 +373,8 @@ VibrationSettingsWidget::VibrationSettingsWidget(QWidget* parent)
   layout->setAlignment(groupBox, Qt::AlignTop);
 
   const auto grid = new QGridLayout(groupBox);
-  grid->addWidget(new QLabel(tr("Length"), this), 0, 0);
+  m_lengthLabel = new QLabel(tr("Length"), this);
+  grid->addWidget(m_lengthLabel, 0, 0);
   grid->addWidget(new QLabel(tr("Intensity"), this), 1, 0);
   grid->addWidget(m_sbLength, 0, 1);
   grid->addWidget(m_sbIntensity, 1, 1);
@@ -428,6 +430,13 @@ void VibrationSettingsWidget::setIntensity(uint8_t intensity)
 void VibrationSettingsWidget::setSubDeviceConnection(SubDeviceConnection *sdc)
 {
   m_subDeviceConnection = qobject_cast<SubHidppConnection*>(sdc);
+  const bool usesHapticWaveform = m_subDeviceConnection
+    && m_subDeviceConnection->featureSet().featureCodeSupported(HIDPP::FeatureCode::Haptic);
+
+  // HAPTIC devices provide predefined waveforms rather than a duration
+  // parameter. Projecteur currently uses the "Completed" waveform for timers.
+  m_lengthLabel->setVisible(!usesHapticWaveform);
+  m_sbLength->setVisible(!usesHapticWaveform);
 }
 
 // -------------------------------------------------------------------------------------------------

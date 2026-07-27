@@ -77,7 +77,7 @@ So here it is: a Linux application for the Logitech Spotlight.
   * Map any button on the device to (almost) any keyboard combination.
   * Switch between (cycle through) custom spotlight presets.
   * Audio Volume / Horizontal and Vertical Scrolling (Logitech Spotlight).
-* Vibration (Timer) Support for the Logitech Spotlight
+* Vibration (Timer) Support for the Logitech Spotlight and Spotlight 2
 * Usable without a presenter device (e.g. for online presentations)
 
 ### Screenshots
@@ -268,7 +268,7 @@ projecteur -c border=true
 # Set the border color to red
 projecteur -c border.color=#ff0000
 # Send a vibrate command to the device with
-# intensity=128 and length=0 (only Logitech Spotlight)
+# intensity=128 and length=0 (length only applies to the original Logitech Spotlight)
 projecteur -c vibrate=128,0
 ```
 

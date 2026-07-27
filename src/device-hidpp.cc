@@ -14,6 +14,20 @@
 
 DECLARE_LOGGING_CATEGORY(hid)
 
+namespace {
+  // The HAPTIC feature uses a percentage, while Projecteur's existing vibration
+  // interface uses the original Spotlight's byte-sized intensity.
+  constexpr uint8_t hapticLevelFromIntensity(uint8_t intensity)
+  {
+    return static_cast<uint8_t>(
+      (static_cast<uint16_t>(intensity) * 100U + 127U) / 255U);
+  }
+
+  static_assert(hapticLevelFromIntensity(0) == 0);
+  static_assert(hapticLevelFromIntensity(128) == 50);
+  static_assert(hapticLevelFromIntensity(255) == 100);
+}
+
 // -------------------------------------------------------------------------------------------------
 SubHidppConnection::SubHidppConnection(SubHidrawConnection::Token token,
                                        const DeviceId& id, const DeviceScan::SubDevice& sd)
@@ -367,26 +381,56 @@ void SubHidppConnection::sendVibrateCommand(uint8_t intensity, uint8_t length,
 {
   const uint8_t pcIndex = m_featureSet.featureIndex(HIDPP::FeatureCode::PresenterControl);
 
-  if (pcIndex == 0)
+  if (pcIndex != 0)
   {
-    if (cb) { cb(MsgResult::FeatureNotSupported, HIDPP::Message()); }
+    // Original Logitech Spotlight vibration protocol.
+    length = length > 10 ? 10 : length; // length should be between 0 to 10.
+
+    using namespace HIDPP;
+    Message vibrateMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, pcIndex, 1, {
+      length, 0xe8, intensity
+    });
+
+    sendRequest(std::move(vibrateMsg), std::move(cb));
     return;
   }
 
-  // Logitech Spotlight:
-  //                                        present
-  //                                        controlID   len         intensity
-  // unsigned char vibrate[] = {0x10, 0x01, 0x09, 0x1d, 0x00, 0xe8, 0x80};
-
-  length = length > 10 ? 10 : length; // length should be between 0 to 10.
-
   using namespace HIDPP;
+  const uint8_t hapticIndex = m_featureSet.featureIndex(FeatureCode::Haptic);
+  if (hapticIndex == 0)
+  {
+    if (cb) { cb(MsgResult::FeatureNotSupported, Message()); }
+    return;
+  }
 
-  Message vibrateMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, pcIndex, 1, {
-    length, 0xe8, intensity
+  // Spotlight 2 uses the newer HAPTIC feature. Its level is a global percentage
+  // (setHapticLevel, function 2), and feedback is produced by asking the device
+  // to play one of its built-in waveforms (playWaveform, function 4).
+  //
+  // "Completed" (0x07) is a concise notification waveform suitable for the
+  // existing vibration timers. The legacy length has no HAPTIC equivalent.
+  constexpr uint8_t completedWaveform = 0x07;
+  constexpr uint8_t defaultDisabledLevel = 50;
+  const bool enabled = intensity != 0;
+  const uint8_t level = enabled ? hapticLevelFromIntensity(intensity)
+                                : defaultDisabledLevel;
+
+  Message setLevelMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, hapticIndex, 2, {
+    static_cast<uint8_t>(enabled), level
   });
 
-  sendRequest(std::move(vibrateMsg), std::move(cb));
+  sendRequest(std::move(setLevelMsg), makeSafeCallback(
+  [this, hapticIndex, cb=std::move(cb)](MsgResult result, Message&& response) mutable
+  {
+    if (result != MsgResult::Ok) {
+      if (cb) { cb(result, std::move(response)); }
+      return;
+    }
+
+    Message playMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, hapticIndex, 4,
+                    Message::Data{completedWaveform});
+    sendRequest(std::move(playMsg), std::move(cb));
+  }));
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -695,10 +739,16 @@ void SubHidppConnection::updateDeviceFlags()
   DeviceFlags featureFlagsSet = DeviceFlag::NoFlags;
   DeviceFlags featureFlagsUnset = DeviceFlag::NoFlags;
 
-  if (m_featureSet.featureCodeSupported(HIDPP::FeatureCode::PresenterControl)) {
+  const bool hasPresenterControl =
+    m_featureSet.featureCodeSupported(HIDPP::FeatureCode::PresenterControl);
+  const bool hasHaptic =
+    m_featureSet.featureCodeSupported(HIDPP::FeatureCode::Haptic);
+  if (hasPresenterControl || hasHaptic) {
     featureFlagsSet |= DeviceFlag::Vibrate;
     logDebug(hid) << tr("Subdevice '%1' reported %2 support.")
-                     .arg(path()).arg(toString(HIDPP::FeatureCode::PresenterControl));
+                     .arg(path()).arg(toString(hasPresenterControl
+                       ? HIDPP::FeatureCode::PresenterControl
+                       : HIDPP::FeatureCode::Haptic));
   } else {
     featureFlagsUnset |= DeviceFlag::Vibrate;
   }

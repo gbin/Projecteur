@@ -45,6 +45,7 @@ namespace HIDPP {
     DFUControlSigned     = 0x00c2,
     BatteryStatus        = 0x1000,
     UnifiedBattery       = 0x1004,
+    Haptic               = 0x19b0,
     PresenterControl     = 0x1a00,
     Sensor3D             = 0x1a01,
     ReprogramControlsV4  = 0x1b04,
