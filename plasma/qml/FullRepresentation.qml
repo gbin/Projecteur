@@ -193,9 +193,13 @@ PlasmaExtras.Representation {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
 
-                PlasmaComponents3.Label {
+                PlasmaComponents3.CheckBox {
                     text: i18n("Presentation timer")
                     font.bold: true
+                    checked: root.backend && root.backend.timerEnabled
+                    enabled: root.backend && root.backend.serviceAvailable
+                             && root.backend.timerAvailable
+                    onClicked: root.backend.setTimerEnabled(checked)
                 }
 
                 Kirigami.Separator {
@@ -206,6 +210,8 @@ PlasmaExtras.Representation {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
+                enabled: !root.backend || !root.backend.timerAvailable
+                         || root.backend.timerEnabled
 
                 PlasmaComponents3.Label {
                     Layout.fillWidth: true

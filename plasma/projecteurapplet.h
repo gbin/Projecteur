@@ -24,6 +24,7 @@ class ProjecteurApplet : public Plasma::Applet
              NOTIFY connectedDeviceBatteryStatusesChanged)
   Q_PROPERTY(QStringList presets READ presets NOTIFY presetsChanged)
   Q_PROPERTY(QString currentPreset READ currentPreset NOTIFY currentPresetChanged)
+  Q_PROPERTY(bool timerEnabled READ timerEnabled NOTIFY timerEnabledChanged)
   Q_PROPERTY(QString timerState READ timerState NOTIFY timerStateChanged)
   Q_PROPERTY(int timerDurationSeconds READ timerDurationSeconds NOTIFY timerDurationSecondsChanged)
   Q_PROPERTY(int timerRemainingSeconds READ timerRemainingSeconds NOTIFY timerRemainingSecondsChanged)
@@ -41,6 +42,7 @@ public:
   QStringList connectedDeviceBatteryStatuses() const { return m_connectedDeviceBatteryStatuses; }
   QStringList presets() const { return m_presets; }
   QString currentPreset() const { return m_currentPreset; }
+  bool timerEnabled() const { return m_timerEnabled; }
   QString timerState() const { return m_timerState; }
   int timerDurationSeconds() const { return m_timerDurationSeconds; }
   int timerRemainingSeconds() const { return m_timerRemainingSeconds; }
@@ -48,6 +50,7 @@ public:
   Q_INVOKABLE void setOverlayEnabled(bool enabled);
   Q_INVOKABLE void setSpotlightActive(bool active);
   Q_INVOKABLE void loadPreset(const QString& preset);
+  Q_INVOKABLE void setTimerEnabled(bool enabled);
   Q_INVOKABLE void startTimer();
   Q_INVOKABLE void restartTimer();
   Q_INVOKABLE void resetTimer();
@@ -67,6 +70,7 @@ signals:
   void connectedDeviceBatteryStatusesChanged();
   void presetsChanged();
   void currentPresetChanged();
+  void timerEnabledChanged();
   void timerStateChanged();
   void timerDurationSecondsChanged();
   void timerRemainingSecondsChanged();
@@ -81,6 +85,7 @@ private slots:
   void remoteConnectedDeviceBatteryStatusesChanged(const QStringList& statuses);
   void remotePresetsChanged(const QStringList& presets);
   void remoteCurrentPresetChanged(const QString& preset);
+  void remoteTimerEnabledChanged(bool enabled);
   void remoteTimerStateChanged(const QString& state);
   void remoteTimerDurationSecondsChanged(int seconds);
   void remoteTimerRemainingSecondsChanged(int seconds);
@@ -101,6 +106,7 @@ private:
   QStringList m_connectedDeviceBatteryStatuses;
   QStringList m_presets;
   QString m_currentPreset;
+  bool m_timerEnabled = false;
   QString m_timerState = QStringLiteral("idle");
   int m_timerDurationSeconds = 15 * 60;
   int m_timerRemainingSeconds = 15 * 60;

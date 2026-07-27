@@ -6,6 +6,7 @@
 #include <QPointer>
 
 class Spotlight;
+struct DeviceId;
 
 /// Class that offers easy access to device commands with a given Spotlight
 /// instance.
@@ -18,6 +19,7 @@ public:
   virtual ~DeviceCommandHelper();
 
   bool sendVibrateCommand(uint8_t intensity, uint8_t length);
+  bool sendVibrateCommand(const DeviceId& deviceId, uint8_t intensity, uint8_t length);
 
 private:
   QPointer<Spotlight> m_spotlight;

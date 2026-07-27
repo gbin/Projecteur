@@ -57,6 +57,9 @@ ProjecteurApplet::ProjecteurApplet(QObject* parent, const KPluginMetaData& data,
               QString::fromLatin1(interfaceName), QStringLiteral("currentPresetChanged"),
               this, SLOT(remoteCurrentPresetChanged(QString)));
   bus.connect(QString::fromLatin1(serviceName), QString::fromLatin1(objectPath),
+              QString::fromLatin1(interfaceName), QStringLiteral("timerEnabledChanged"),
+              this, SLOT(remoteTimerEnabledChanged(bool)));
+  bus.connect(QString::fromLatin1(serviceName), QString::fromLatin1(objectPath),
               QString::fromLatin1(interfaceName), QStringLiteral("timerStateChanged"),
               this, SLOT(remoteTimerStateChanged(QString)));
   bus.connect(QString::fromLatin1(serviceName), QString::fromLatin1(objectPath),
@@ -85,6 +88,11 @@ void ProjecteurApplet::setSpotlightActive(bool active)
 void ProjecteurApplet::loadPreset(const QString& preset)
 {
   call(QStringLiteral("LoadPreset"), {preset});
+}
+
+void ProjecteurApplet::setTimerEnabled(bool enabled)
+{
+  call(QStringLiteral("SetTimerEnabled"), {enabled});
 }
 
 void ProjecteurApplet::startTimer()
@@ -191,6 +199,13 @@ void ProjecteurApplet::remoteCurrentPresetChanged(const QString& preset)
   emit currentPresetChanged();
 }
 
+void ProjecteurApplet::remoteTimerEnabledChanged(bool enabled)
+{
+  if (m_timerEnabled == enabled) { return; }
+  m_timerEnabled = enabled;
+  emit timerEnabledChanged();
+}
+
 void ProjecteurApplet::remoteTimerStateChanged(const QString& state)
 {
   if (m_timerState == state) { return; }
@@ -239,6 +254,7 @@ void ProjecteurApplet::refresh()
     emit timerAvailableChanged();
   }
   if (timerAvailable) {
+    remoteTimerEnabledChanged(interface.property("TimerEnabled").toBool());
     remoteTimerStateChanged(timerStateProperty.toString());
     remoteTimerDurationSecondsChanged(interface.property("TimerDurationSeconds").toInt());
     remoteTimerRemainingSecondsChanged(interface.property("TimerRemainingSeconds").toInt());
@@ -262,6 +278,7 @@ void ProjecteurApplet::resetState()
     m_timerAvailable = false;
     emit timerAvailableChanged();
   }
+  remoteTimerEnabledChanged(false);
   remoteTimerStateChanged(QStringLiteral("idle"));
   remoteTimerDurationSecondsChanged(15 * 60);
   remoteTimerRemainingSecondsChanged(15 * 60);

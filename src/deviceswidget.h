@@ -14,6 +14,7 @@
 class DeviceConnection;
 class InputMapper;
 class QComboBox;
+class QSpinBox;
 class QTabWidget;
 class QTextEdit;
 class Settings;
@@ -38,11 +39,17 @@ private:
   void createDeviceComboBox(Spotlight* spotlight);
   QWidget* createDevicesWidget(Settings* settings, Spotlight* spotlight);
   QWidget* createInputMapperWidget(Settings* settings, Spotlight* spotlight);
+  QWidget* createTimerFeedbackWidget(Settings* settings);
   QWidget* createDeviceInfoWidget(Spotlight* spotlight);
+  void updateTimerFeedbackTab(Spotlight* spotlight);
+  void loadTimerFeedbackSettings(Settings* settings, const DeviceId& deviceId);
 
   QComboBox* m_devicesCombo = nullptr;
   QTabWidget* m_tabWidget = nullptr;
+  QWidget* m_timerFeedbackWidget = nullptr;
+  QSpinBox* m_timerFeedbackStrength = nullptr;
   QWidget* m_deviceDetailsTabWidget = nullptr;
+  QPointer<QObject> m_timerFeedbackContext;
 
   QPointer<InputMapper> m_inputMapper;
 };

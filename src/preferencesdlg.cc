@@ -77,7 +77,6 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
   tabWidget->addTab(settingsWidget, tr("Spotlight"));
   m_deviceswidget = new DevicesWidget(settings, spotlight, this);
   tabWidget->addTab(m_deviceswidget, tr("Devices"));
-  tabWidget->addTab(createGeneralTabWidget(settings), tr("General"));
   tabWidget->addTab(createLogTabWidget(), tr("Log"));
 
   const auto overlayCheckBox = new QCheckBox(this);
@@ -104,38 +103,6 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
   });
 }
 
-// -------------------------------------------------------------------------------------------------
-QWidget* PreferencesDialog::createGeneralTabWidget(Settings* settings)
-{
-  const auto widget = new QWidget(this);
-  const auto group = new QGroupBox(tr("Presentation timer feedback"), widget);
-  const auto strengthSpinBox = new QSpinBox(group);
-  strengthSpinBox->setRange(0, 100);
-  strengthSpinBox->setSingleStep(5);
-  strengthSpinBox->setSuffix(tr("%"));
-  strengthSpinBox->setValue(settings->presentationTimerHapticStrength());
-  strengthSpinBox->setToolTip(tr("Set to 0% to disable completion vibration."));
-
-  connect(strengthSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
-          settings, &Settings::setPresentationTimerHapticStrength);
-  connect(settings, &Settings::presentationTimerHapticStrengthChanged,
-          strengthSpinBox, &QSpinBox::setValue);
-
-  const auto groupLayout = new QGridLayout(group);
-  groupLayout->addWidget(new QLabel(tr("Completion vibration strength"), group), 0, 0);
-  groupLayout->addWidget(strengthSpinBox, 0, 1);
-  groupLayout->addWidget(
-    new QLabel(tr("Vibrates compatible connected presenters when the timer finishes."), group),
-    1, 0, 1, 2);
-  groupLayout->setColumnStretch(1, 1);
-
-  const auto layout = new QVBoxLayout(widget);
-  layout->addWidget(group);
-  layout->addStretch(1);
-  return widget;
-}
-
-// -------------------------------------------------------------------------------------------------
 QWidget* PreferencesDialog::createSettingsTabWidget(Settings* settings)
 {
   const auto widget = new QWidget(this);

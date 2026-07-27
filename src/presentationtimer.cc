@@ -22,23 +22,18 @@ PresentationTimer::PresentationTimer(Settings* settings, Spotlight* spotlight,
                                      DeviceCommandHelper* deviceCommandHelper, QObject* parent)
   : QObject(parent)
   , m_settings(settings)
+  , m_spotlight(spotlight)
   , m_deviceCommandHelper(deviceCommandHelper)
   , m_updateTimer(new QTimer(this))
+  , m_enabled(settings->presentationTimerEnabled())
   , m_durationSeconds(std::clamp(settings->presentationTimerDurationSeconds(),
                                  MinimumDurationSeconds, MaximumDurationSeconds))
   , m_remainingSeconds(m_durationSeconds)
-  , m_hapticStrength(std::clamp(settings->presentationTimerHapticStrength(), 0, 100))
 {
   m_updateTimer->setTimerType(Qt::PreciseTimer);
   m_updateTimer->setInterval(TimerUpdateIntervalMs);
   connect(m_updateTimer, &QTimer::timeout, this, &PresentationTimer::updateRemaining);
   connect(spotlight, &Spotlight::presenterButtonPressed, this, &PresentationTimer::start);
-  connect(m_settings, &Settings::presentationTimerHapticStrengthChanged, this,
-          [this](int strength) {
-    if (m_hapticStrength == strength) { return; }
-    m_hapticStrength = strength;
-    emit hapticStrengthChanged(strength);
-  });
 }
 
 QString PresentationTimer::stateName() const
@@ -51,13 +46,24 @@ QString PresentationTimer::stateName() const
   return QStringLiteral("idle");
 }
 
+void PresentationTimer::setEnabled(bool enabled)
+{
+  if (m_enabled == enabled) { return; }
+  m_enabled = enabled;
+  m_settings->setPresentationTimerEnabled(enabled);
+  emit enabledChanged(enabled);
+  if (!enabled) { reset(); }
+}
+
 void PresentationTimer::start()
 {
+  if (!m_enabled) { return; }
   if (m_state == State::Idle) { beginCountdown(); }
 }
 
 void PresentationTimer::restart()
 {
+  if (!m_enabled) { return; }
   beginCountdown();
 }
 
@@ -79,11 +85,6 @@ void PresentationTimer::setDurationSeconds(int seconds)
   if (m_state == State::Idle) { setRemainingSeconds(duration); }
 }
 
-void PresentationTimer::setHapticStrength(int strength)
-{
-  m_settings->setPresentationTimerHapticStrength(strength);
-}
-
 void PresentationTimer::updateRemaining()
 {
   if (m_state != State::Running) { return; }
@@ -99,10 +100,18 @@ void PresentationTimer::updateRemaining()
   setRemainingSeconds(0);
   setState(State::Completed);
 
-  if (m_hapticStrength > 0 && m_deviceCommandHelper) {
-    const auto intensity = static_cast<uint8_t>(
-      std::lround(static_cast<double>(m_hapticStrength) * 255.0 / 100.0));
-    m_deviceCommandHelper->sendVibrateCommand(intensity, 0);
+  if (m_deviceCommandHelper && m_spotlight)
+  {
+    for (const auto& device : m_spotlight->connectedDevices())
+    {
+      const int strength = std::clamp(
+        m_settings->devicePresentationTimerHapticStrength(device.id), 0, 100);
+      if (strength == 0) { continue; }
+
+      const auto intensity = static_cast<uint8_t>(
+        std::lround(static_cast<double>(strength) * 255.0 / 100.0));
+      m_deviceCommandHelper->sendVibrateCommand(device.id, intensity, 0);
+    }
   }
 }
 

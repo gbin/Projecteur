@@ -24,22 +24,22 @@ public:
 
   State state() const { return m_state; }
   QString stateName() const;
+  bool enabled() const { return m_enabled; }
   int durationSeconds() const { return m_durationSeconds; }
   int remainingSeconds() const { return m_remainingSeconds; }
-  int hapticStrength() const { return m_hapticStrength; }
 
 public slots:
+  void setEnabled(bool enabled);
   void start();
   void restart();
   void reset();
   void setDurationSeconds(int seconds);
-  void setHapticStrength(int strength);
 
 signals:
+  void enabledChanged(bool enabled);
   void stateChanged(PresentationTimer::State state);
   void durationSecondsChanged(int seconds);
   void remainingSecondsChanged(int seconds);
-  void hapticStrengthChanged(int strength);
 
 private slots:
   void updateRemaining();
@@ -52,11 +52,12 @@ private:
   void setRemainingSeconds(int seconds);
 
   Settings* const m_settings;
+  Spotlight* const m_spotlight;
   DeviceCommandHelper* const m_deviceCommandHelper;
   QTimer* const m_updateTimer;
   Clock::time_point m_deadline;
+  bool m_enabled = false;
   State m_state = State::Idle;
   int m_durationSeconds = 15 * 60;
   int m_remainingSeconds = m_durationSeconds;
-  int m_hapticStrength = 50;
 };

@@ -55,6 +55,11 @@ ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Setting
     emit spotlightActiveChanged(active);
     emitPropertiesChanged({{QStringLiteral("SpotlightActive"), active}});
   });
+  connect(m_presentationTimer, &PresentationTimer::enabledChanged, this,
+          [this](bool enabled) {
+    emit timerEnabledChanged(enabled);
+    emitPropertiesChanged({{QStringLiteral("TimerEnabled"), enabled}});
+  });
   connect(m_presentationTimer, &PresentationTimer::stateChanged, this, [this]() {
     const auto state = timerState();
     emit timerStateChanged(state);
@@ -70,12 +75,6 @@ ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Setting
     emit timerRemainingSecondsChanged(seconds);
     emitPropertiesChanged({{QStringLiteral("TimerRemainingSeconds"), seconds}});
   });
-  connect(m_presentationTimer, &PresentationTimer::hapticStrengthChanged, this,
-          [this](int strength) {
-    emit timerHapticStrengthChanged(strength);
-    emitPropertiesChanged({{QStringLiteral("TimerHapticStrength"), strength}});
-  });
-
   const auto updateConnectedDevices = [this]() {
     const auto devices = connectedDevices();
     emit connectedDevicesChanged(devices);
@@ -248,6 +247,11 @@ QStringList ProjecteurControl::presets() const
   return result;
 }
 
+bool ProjecteurControl::timerEnabled() const
+{
+  return m_presentationTimer->enabled();
+}
+
 QString ProjecteurControl::timerState() const
 {
   return m_presentationTimer->stateName();
@@ -261,11 +265,6 @@ int ProjecteurControl::timerDurationSeconds() const
 int ProjecteurControl::timerRemainingSeconds() const
 {
   return m_presentationTimer->remainingSeconds();
-}
-
-int ProjecteurControl::timerHapticStrength() const
-{
-  return m_presentationTimer->hapticStrength();
 }
 
 void ProjecteurControl::SetOverlayEnabled(bool enabled)
@@ -283,6 +282,11 @@ bool ProjecteurControl::LoadPreset(const QString& preset)
   if (!m_settings->presetModel()->hasPreset(preset)) { return false; }
   m_settings->loadPreset(preset);
   return true;
+}
+
+void ProjecteurControl::SetTimerEnabled(bool enabled)
+{
+  m_presentationTimer->setEnabled(enabled);
 }
 
 void ProjecteurControl::StartTimer()
@@ -303,11 +307,6 @@ void ProjecteurControl::ResetTimer()
 void ProjecteurControl::SetTimerDurationSeconds(int seconds)
 {
   m_presentationTimer->setDurationSeconds(seconds);
-}
-
-void ProjecteurControl::SetTimerHapticStrength(int strength)
-{
-  m_presentationTimer->setHapticStrength(strength);
 }
 
 void ProjecteurControl::ShowPreferences()

@@ -26,7 +26,8 @@ PlasmoidItem {
     hideOnWindowDeactivate: true
     Plasmoid.icon: "projecteur"
     badgeText: {
-        if (!backend || !backend.serviceAvailable || !backend.timerAvailable)
+        if (!backend || !backend.serviceAvailable || !backend.timerAvailable
+                || !backend.timerEnabled)
             return "";
 
         if (backend.timerState === "completed")
@@ -42,7 +43,8 @@ PlasmoidItem {
     Plasmoid.status: {
         if (!backend || !backend.serviceAvailable || !backend.trayVisible)
             return PlasmaCore.Types.HiddenStatus;
-        if (backend.timerAvailable && backend.timerState === "completed")
+        if (backend.timerAvailable && backend.timerEnabled
+                && backend.timerState === "completed")
             return PlasmaCore.Types.NeedsAttentionStatus;
         return PlasmaCore.Types.ActiveStatus;
     }
@@ -51,13 +53,16 @@ PlasmoidItem {
         if (!backend || !backend.serviceAvailable)
             return i18n("Projecteur is not running");
 
-        if (backend.timerAvailable && backend.timerState === "running")
+        if (backend.timerAvailable && backend.timerEnabled
+                && backend.timerState === "running")
             return i18n("Presentation timer: %1 remaining", root.formatTimer(backend.timerRemainingSeconds));
 
-        if (backend.timerAvailable && backend.timerState === "completed")
+        if (backend.timerAvailable && backend.timerEnabled
+                && backend.timerState === "completed")
             return i18n("Presentation timer finished");
 
-        if (backend.timerAvailable && backend.timerState === "idle")
+        if (backend.timerAvailable && backend.timerEnabled
+                && backend.timerState === "idle")
             return i18n("Timer ready: %1 — starts on the next presenter button press",
                         root.formatTimer(backend.timerDurationSeconds));
 

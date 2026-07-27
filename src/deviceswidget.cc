@@ -12,8 +12,10 @@
 #include "spotlight.h"
 
 #include <QComboBox>
+#include <QGroupBox>
 #include <QLabel>
 #include <QLayout>
+#include <QSignalBlocker>
 #include <QShortcut>
 #include <QSpinBox>
 #include <QStackedLayout>
@@ -87,10 +89,104 @@ QWidget* DevicesWidget::createDevicesWidget(Settings* settings, Spotlight* spotl
 
   m_tabWidget->addTab(createInputMapperWidget(settings, spotlight), tr("Input Mapping"));
 
+  m_timerFeedbackWidget = createTimerFeedbackWidget(settings);
+
   m_deviceDetailsTabWidget = createDeviceInfoWidget(spotlight);
   m_tabWidget->addTab(m_deviceDetailsTabWidget, tr("Details"));
 
+  updateTimerFeedbackTab(spotlight);
+  connect(this, &DevicesWidget::currentDeviceChanged, this,
+  [this, settings, spotlight](const DeviceId& deviceId) {
+    loadTimerFeedbackSettings(settings, deviceId);
+    updateTimerFeedbackTab(spotlight);
+  });
+
   return dw;
+}
+
+// -------------------------------------------------------------------------------------------------
+QWidget* DevicesWidget::createTimerFeedbackWidget(Settings* settings)
+{
+  const auto widget = new QWidget(this);
+  const auto group = new QGroupBox(tr("Presentation timer feedback"), widget);
+  m_timerFeedbackStrength = new QSpinBox(group);
+  m_timerFeedbackStrength->setRange(0, 100);
+  m_timerFeedbackStrength->setSingleStep(5);
+  m_timerFeedbackStrength->setSuffix(tr("%"));
+  m_timerFeedbackStrength->setToolTip(tr("Set to 0% to disable completion vibration."));
+
+  const auto groupLayout = new QGridLayout(group);
+  groupLayout->addWidget(new QLabel(tr("Completion vibration strength"), group), 0, 0);
+  groupLayout->addWidget(m_timerFeedbackStrength, 0, 1);
+  groupLayout->addWidget(
+    new QLabel(tr("Vibrates this presenter when the presentation timer finishes."), group),
+    1, 0, 1, 2);
+  groupLayout->setColumnStretch(1, 1);
+
+  const auto layout = new QVBoxLayout(widget);
+  layout->addWidget(group);
+  layout->addStretch(1);
+
+  loadTimerFeedbackSettings(settings, currentDeviceId());
+  connect(m_timerFeedbackStrength,
+          static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+          this, [this, settings](int strength) {
+    settings->setDevicePresentationTimerHapticStrength(currentDeviceId(), strength);
+  });
+
+  return widget;
+}
+
+// -------------------------------------------------------------------------------------------------
+void DevicesWidget::loadTimerFeedbackSettings(Settings* settings, const DeviceId& deviceId)
+{
+  if (!m_timerFeedbackStrength) { return; }
+  const QSignalBlocker blocker(m_timerFeedbackStrength);
+  m_timerFeedbackStrength->setValue(
+    settings->devicePresentationTimerHapticStrength(deviceId));
+}
+
+// -------------------------------------------------------------------------------------------------
+void DevicesWidget::updateTimerFeedbackTab(Spotlight* spotlight)
+{
+  const auto connection = spotlight->deviceConnection(currentDeviceId());
+  bool supportsVibration = false;
+  if (connection)
+  {
+    for (const auto& item : connection->subDevices())
+    {
+      const auto& subDevice = item.second;
+      if (subDevice && subDevice->hasFlags(DeviceFlag::Vibrate)) {
+        supportsVibration = true;
+        break;
+      }
+
+      const auto hidpp = qobject_cast<SubHidppConnection*>(subDevice.get());
+      if (hidpp
+          && (hidpp->featureSet().featureCodeSupported(HIDPP::FeatureCode::PresenterControl)
+              || hidpp->featureSet().featureCodeSupported(HIDPP::FeatureCode::Haptic))) {
+        supportsVibration = true;
+        break;
+      }
+    }
+  }
+
+  const int tabIndex = m_tabWidget->indexOf(m_timerFeedbackWidget);
+  if (supportsVibration && tabIndex < 0) {
+    m_tabWidget->insertTab(1, m_timerFeedbackWidget, tr("Timer Feedback"));
+  } else if (!supportsVibration && tabIndex >= 0) {
+    m_tabWidget->removeTab(tabIndex);
+  }
+
+  if (m_timerFeedbackContext) { m_timerFeedbackContext->deleteLater(); }
+  if (connection)
+  {
+    m_timerFeedbackContext = new QObject(this);
+    connect(connection.get(), &DeviceConnection::subDeviceFlagsChanged, m_timerFeedbackContext,
+    [this, spotlight](const DeviceId& id, const QString&) {
+      if (id == currentDeviceId()) { updateTimerFeedbackTab(spotlight); }
+    });
+  }
 }
 
 // -------------------------------------------------------------------------------------------------

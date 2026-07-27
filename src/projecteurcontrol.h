@@ -27,10 +27,10 @@ class ProjecteurControl : public QObject
              NOTIFY connectedDeviceBatteryStatusesChanged)
   Q_PROPERTY(QStringList Presets READ presets NOTIFY presetsChanged)
   Q_PROPERTY(QString CurrentPreset READ currentPreset NOTIFY currentPresetChanged)
+  Q_PROPERTY(bool TimerEnabled READ timerEnabled NOTIFY timerEnabledChanged)
   Q_PROPERTY(QString TimerState READ timerState NOTIFY timerStateChanged)
   Q_PROPERTY(int TimerDurationSeconds READ timerDurationSeconds NOTIFY timerDurationSecondsChanged)
   Q_PROPERTY(int TimerRemainingSeconds READ timerRemainingSeconds NOTIFY timerRemainingSecondsChanged)
-  Q_PROPERTY(int TimerHapticStrength READ timerHapticStrength NOTIFY timerHapticStrengthChanged)
 
 public:
   static constexpr auto ServiceName = "org.projecteur.Projecteur";
@@ -51,20 +51,20 @@ public:
   QStringList connectedDeviceBatteryStatuses() const;
   QStringList presets() const;
   QString currentPreset() const { return m_currentPreset; }
+  bool timerEnabled() const;
   QString timerState() const;
   int timerDurationSeconds() const;
   int timerRemainingSeconds() const;
-  int timerHapticStrength() const;
 
 public slots:
   void SetOverlayEnabled(bool enabled);
   void SetSpotlightActive(bool active);
   bool LoadPreset(const QString& preset);
+  void SetTimerEnabled(bool enabled);
   void StartTimer();
   void RestartTimer();
   void ResetTimer();
   void SetTimerDurationSeconds(int seconds);
-  void SetTimerHapticStrength(int strength);
   void ShowPreferences();
   void ShowAbout();
   void Quit();
@@ -77,10 +77,10 @@ signals:
   void connectedDeviceBatteryStatusesChanged(const QStringList& statuses);
   void presetsChanged(const QStringList& presets);
   void currentPresetChanged(const QString& preset);
+  void timerEnabledChanged(bool enabled);
   void timerStateChanged(const QString& state);
   void timerDurationSecondsChanged(int seconds);
   void timerRemainingSecondsChanged(int seconds);
-  void timerHapticStrengthChanged(int strength);
 
 private:
   void clearCurrentPreset();

@@ -57,7 +57,6 @@ private:
   void resetPresetCombo();
 
   QWidget* createSettingsTabWidget(Settings* settings);
-  QWidget* createGeneralTabWidget(Settings* settings);
   QGroupBox* createShapeGroupBox(Settings* settings);
   QGroupBox* createSpotGroupBox(Settings* settings);
   QGroupBox* createDotGroupBox(Settings* settings);

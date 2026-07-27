@@ -40,12 +40,14 @@ namespace {
     constexpr char zoomEnabled[] = "enableZoom";
     constexpr char zoomFactor[] = "zoomFactor";
     constexpr char multiScreenOverlay[] = "multiScreenOverlay";
+    constexpr char presentationTimerEnabled[] = "presentationTimerEnabled";
     constexpr char presentationTimerDurationSeconds[] = "presentationTimerDurationSeconds";
-    constexpr char presentationTimerHapticStrength[] = "presentationTimerHapticStrength";
 
     // -- device specific
     constexpr char inputSequenceInterval[] = "inputSequenceInterval";
     constexpr char inputMapConfig[] = "inputMapConfig";
+    constexpr char presentationTimerHapticStrength[] = "presentationTimerHapticStrength";
+    constexpr char legacyVibrationIntensity[] = "vibrationIntensity";
 
     namespace defaultValue {
       constexpr bool showSpotShade = true;
@@ -66,11 +68,12 @@ namespace {
       constexpr bool zoomEnabled = false;
       constexpr double zoomFactor = 2.0;
       constexpr bool multiScreenOverlay = false;
+      constexpr bool presentationTimerEnabled = false;
       constexpr int presentationTimerDurationSeconds = 15 * 60;
-      constexpr int presentationTimerHapticStrength = 50;
 
       // -- device specific defaults
       constexpr int inputSequenceInterval = 250;
+      constexpr int presentationTimerHapticStrength = 50;
     } // end namespace defaultValue
 
     namespace ranges {
@@ -844,6 +847,52 @@ InputMapConfig Settings::getDeviceInputMapConfig(const DeviceId& dId)
 }
 
 // -------------------------------------------------------------------------------------------------
+void Settings::setDevicePresentationTimerHapticStrength(const DeviceId& dId, int strength)
+{
+  m_settings->setValue(
+    settingsKey(dId, ::settings::presentationTimerHapticStrength),
+    std::clamp(strength, 0, 100));
+}
+
+// -------------------------------------------------------------------------------------------------
+int Settings::devicePresentationTimerHapticStrength(const DeviceId& dId) const
+{
+  const auto deviceKey = settingsKey(dId, ::settings::presentationTimerHapticStrength);
+  if (m_settings->contains(deviceKey)) {
+    return std::clamp(m_settings->value(deviceKey).toInt(), 0, 100);
+  }
+
+  const auto legacyDeviceKey = settingsKey(dId, ::settings::legacyVibrationIntensity);
+  if (m_settings->contains(legacyDeviceKey)) {
+    const int intensity = std::clamp(m_settings->value(legacyDeviceKey).toInt(), 0, 255);
+    return (intensity * 100 + 127) / 255;
+  }
+
+  // Preserve the value from the short-lived global setting as the initial value
+  // for devices that do not have an older per-device vibration setting.
+  if (m_settings->contains(::settings::presentationTimerHapticStrength)) {
+    return std::clamp(
+      m_settings->value(::settings::presentationTimerHapticStrength).toInt(), 0, 100);
+  }
+
+  return ::settings::defaultValue::presentationTimerHapticStrength;
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setPresentationTimerEnabled(bool enabled)
+{
+  m_settings->setValue(::settings::presentationTimerEnabled, enabled);
+}
+
+// -------------------------------------------------------------------------------------------------
+bool Settings::presentationTimerEnabled() const
+{
+  return m_settings->value(
+    ::settings::presentationTimerEnabled,
+    ::settings::defaultValue::presentationTimerEnabled).toBool();
+}
+
+// -------------------------------------------------------------------------------------------------
 void Settings::setPresentationTimerDurationSeconds(int seconds)
 {
   m_settings->setValue(::settings::presentationTimerDurationSeconds, seconds);
@@ -857,24 +906,6 @@ int Settings::presentationTimerDurationSeconds() const
     ::settings::defaultValue::presentationTimerDurationSeconds).toInt();
 }
 
-// -------------------------------------------------------------------------------------------------
-void Settings::setPresentationTimerHapticStrength(int strength)
-{
-  const int clampedStrength = std::clamp(strength, 0, 100);
-  if (presentationTimerHapticStrength() == clampedStrength) { return; }
-  m_settings->setValue(::settings::presentationTimerHapticStrength, clampedStrength);
-  emit presentationTimerHapticStrengthChanged(clampedStrength);
-}
-
-// -------------------------------------------------------------------------------------------------
-int Settings::presentationTimerHapticStrength() const
-{
-  return m_settings->value(
-    ::settings::presentationTimerHapticStrength,
-    ::settings::defaultValue::presentationTimerHapticStrength).toInt();
-}
-
-// -------------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 PresetModel::PresetModel(QObject* parent)
   : PresetModel({}, parent)

@@ -41,10 +41,6 @@ class Settings : public QObject
   Q_PROPERTY(double zoomFactor READ zoomFactor WRITE setZoomFactor NOTIFY zoomFactorChanged)
   Q_PROPERTY(bool multiScreenOverlayEnabled READ multiScreenOverlayEnabled
                   WRITE setMultiScreenOverlayEnabled NOTIFY multiScreenOverlayEnabledChanged)
-  Q_PROPERTY(int presentationTimerHapticStrength READ presentationTimerHapticStrength
-                  WRITE setPresentationTimerHapticStrength
-                  NOTIFY presentationTimerHapticStrengthChanged)
-
 public:
   explicit Settings(QObject* parent = nullptr);
   explicit Settings(const QString& configFile, QObject* parent = nullptr);
@@ -174,11 +170,13 @@ public:
   int deviceInputSeqInterval(const DeviceId& dId) const;
   void setDeviceInputMapConfig(const DeviceId& dId, const InputMapConfig& imc);
   InputMapConfig getDeviceInputMapConfig(const DeviceId& dId);
+  void setDevicePresentationTimerHapticStrength(const DeviceId& dId, int strength);
+  int devicePresentationTimerHapticStrength(const DeviceId& dId) const;
 
+  void setPresentationTimerEnabled(bool enabled);
+  bool presentationTimerEnabled() const;
   void setPresentationTimerDurationSeconds(int seconds);
   int presentationTimerDurationSeconds() const;
-  void setPresentationTimerHapticStrength(int strength);
-  int presentationTimerHapticStrength() const;
 
 signals:
   void showSpotShadeChanged(bool show);
@@ -200,7 +198,6 @@ signals:
   void zoomEnabledChanged(bool enabled);
   void zoomFactorChanged(double zoomFactor);
   void multiScreenOverlayEnabledChanged(bool enabled);
-  void presentationTimerHapticStrengthChanged(int strength);
   void overlayDisabledChanged(bool disabled);
 
   void presetLoaded(const QString& preset);

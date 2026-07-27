@@ -178,16 +178,16 @@ On Arch Linux and Arch-based distributions, the `Justfile` can install missing
 build dependencies and run the complete local packaging workflow:
 
 ```sh
-just build    # Build and smoke-test build/projecteur
+just build    # Compile build/projecteur
 just package  # Create build/packages/projecteur-*.pkg.tar.zst
 just install  # Build, package, and install the package with pacman
 ```
 
 `just package` packages the current working tree, including uncommitted files,
 through the checked-in `packaging/arch/PKGBUILD`. `just install` uses `sudo`
-only for dependency installation and the final `pacman -U`. If Projecteur is
-running, `just install` stops it before the upgrade and starts it again afterward
-so KWin can authorize zoom captures against the newly installed executable.
+only for dependency installation and the final `pacman -U`. It stops a running
+Projecteur instance, compiles, packages and installs the current tree, then
+restarts `plasma-plasmashell.service`.
 
 Installing is required for zoom: KWin authorizes the screenshot interface by matching
 the running executable with the installed `projecteur.desktop` metadata. A binary run
