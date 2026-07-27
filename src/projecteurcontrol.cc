@@ -88,6 +88,16 @@ ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Setting
     watchBatteryConnection(id, path);
   });
 
+  for (const auto& device : m_spotlight->connectedDevices())
+  {
+    const auto connection = m_spotlight->deviceConnection(device.id);
+    if (!connection) { continue; }
+    for (const auto& subDevice : connection->subDevices()) {
+      watchBatteryConnection(device.id, subDevice.first);
+    }
+  }
+  requestBatteryUpdates();
+
   auto* batteryTimer = new QTimer(this);
   batteryTimer->setTimerType(Qt::VeryCoarseTimer);
   batteryTimer->setInterval(5 * 60 * 1000);
@@ -367,6 +377,12 @@ void ProjecteurControl::watchBatteryConnection(const DeviceId& id, const QString
   const auto subDevice = connection->subDevice(path);
   const auto hidpp = qobject_cast<SubHidppConnection*>(subDevice.get());
   if (!hidpp) { return; }
+  if (m_watchedBatteryConnections.contains(hidpp)) { return; }
+
+  m_watchedBatteryConnections.insert(hidpp);
+  connect(hidpp, &QObject::destroyed, this, [this, hidpp]() {
+    m_watchedBatteryConnections.remove(hidpp);
+  });
 
   connect(hidpp, &SubHidppConnection::batteryInfoChanged, this,
           [this](const HIDPP::BatteryInfo&) { emitBatteryPropertiesChanged(); });

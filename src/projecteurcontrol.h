@@ -4,6 +4,7 @@
 
 #include <QList>
 #include <QObject>
+#include <QSet>
 #include <QStringList>
 #include <QVariantMap>
 
@@ -11,6 +12,7 @@ class ProjecteurApplication;
 class PresentationTimer;
 class Settings;
 class Spotlight;
+class SubHidppConnection;
 struct DeviceId;
 
 class ProjecteurControl : public QObject
@@ -95,6 +97,7 @@ private:
   PresentationTimer* const m_presentationTimer;
   const bool m_trayVisible;
   QString m_currentPreset;
+  QSet<SubHidppConnection*> m_watchedBatteryConnections;
   bool m_objectRegistered = false;
   bool m_serviceRegistered = false;
 };
