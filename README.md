@@ -166,6 +166,21 @@ cmake --build build
 sudo cmake --install build
 ```
 
+### Arch Linux
+
+On Arch Linux and Arch-based distributions, the `Justfile` can install missing
+build dependencies and run the complete local packaging workflow:
+
+```sh
+just build    # Build and smoke-test build/projecteur
+just package  # Create build/packages/projecteur-*.pkg.tar.zst
+just install  # Build, package, and install the package with pacman
+```
+
+`just package` packages the current working tree, including uncommitted files,
+through the checked-in `packaging/arch/PKGBUILD`. `just install` uses `sudo`
+only for dependency installation and the final `pacman -U`.
+
 Installing is required for zoom: KWin authorizes the screenshot interface by matching
 the running executable with the installed `projecteur.desktop` metadata. A binary run
 directly from the build directory can use the normal spotlight, but KWin will reject
