@@ -14,6 +14,7 @@ class AboutDialog;
 class DeviceCommandHelper;
 class LinuxDesktop;
 class PreferencesDialog;
+class PresentationTimer;
 class ProjecteurControl;
 class QLocalServer;
 class QLocalSocket;
@@ -85,6 +86,7 @@ private:
   Settings* m_settings = nullptr;
   Spotlight* m_spotlight = nullptr;
   DeviceCommandHelper* m_deviceCommandHelper = nullptr;
+  PresentationTimer* m_presentationTimer = nullptr;
   LinuxDesktop* m_linuxDesktop = nullptr;
   QQmlApplicationEngine* m_qmlEngine = nullptr;
   QQmlComponent* m_windowQmlComponent = nullptr;

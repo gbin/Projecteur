@@ -4,6 +4,7 @@
 #include "projecteurcontrol.h"
 
 #include "device-hidpp.h"
+#include "presentationtimer.h"
 #include "projecteurapp.h"
 #include "settings.h"
 #include "spotlight.h"
@@ -36,11 +37,13 @@ QString batteryStatusName(HIDPP::BatteryStatus status)
 }
 
 ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Settings* settings,
-                                     Spotlight* spotlight, bool trayVisible)
+                                     Spotlight* spotlight, PresentationTimer* presentationTimer,
+                                     bool trayVisible)
   : QObject(application)
   , m_application(application)
   , m_settings(settings)
   , m_spotlight(spotlight)
+  , m_presentationTimer(presentationTimer)
   , m_trayVisible(trayVisible)
 {
   connect(m_settings, &Settings::overlayDisabledChanged, this, [this](bool disabled) {
@@ -51,6 +54,26 @@ ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Setting
   connect(m_spotlight, &Spotlight::spotActiveChanged, this, [this](bool active) {
     emit spotlightActiveChanged(active);
     emitPropertiesChanged({{QStringLiteral("SpotlightActive"), active}});
+  });
+  connect(m_presentationTimer, &PresentationTimer::stateChanged, this, [this]() {
+    const auto state = timerState();
+    emit timerStateChanged(state);
+    emitPropertiesChanged({{QStringLiteral("TimerState"), state}});
+  });
+  connect(m_presentationTimer, &PresentationTimer::durationSecondsChanged, this,
+          [this](int seconds) {
+    emit timerDurationSecondsChanged(seconds);
+    emitPropertiesChanged({{QStringLiteral("TimerDurationSeconds"), seconds}});
+  });
+  connect(m_presentationTimer, &PresentationTimer::remainingSecondsChanged, this,
+          [this](int seconds) {
+    emit timerRemainingSecondsChanged(seconds);
+    emitPropertiesChanged({{QStringLiteral("TimerRemainingSeconds"), seconds}});
+  });
+  connect(m_presentationTimer, &PresentationTimer::hapticStrengthChanged, this,
+          [this](int strength) {
+    emit timerHapticStrengthChanged(strength);
+    emitPropertiesChanged({{QStringLiteral("TimerHapticStrength"), strength}});
   });
 
   const auto updateConnectedDevices = [this]() {
@@ -225,6 +248,26 @@ QStringList ProjecteurControl::presets() const
   return result;
 }
 
+QString ProjecteurControl::timerState() const
+{
+  return m_presentationTimer->stateName();
+}
+
+int ProjecteurControl::timerDurationSeconds() const
+{
+  return m_presentationTimer->durationSeconds();
+}
+
+int ProjecteurControl::timerRemainingSeconds() const
+{
+  return m_presentationTimer->remainingSeconds();
+}
+
+int ProjecteurControl::timerHapticStrength() const
+{
+  return m_presentationTimer->hapticStrength();
+}
+
 void ProjecteurControl::SetOverlayEnabled(bool enabled)
 {
   m_settings->setOverlayDisabled(!enabled);
@@ -240,6 +283,31 @@ bool ProjecteurControl::LoadPreset(const QString& preset)
   if (!m_settings->presetModel()->hasPreset(preset)) { return false; }
   m_settings->loadPreset(preset);
   return true;
+}
+
+void ProjecteurControl::StartTimer()
+{
+  m_presentationTimer->start();
+}
+
+void ProjecteurControl::RestartTimer()
+{
+  m_presentationTimer->restart();
+}
+
+void ProjecteurControl::ResetTimer()
+{
+  m_presentationTimer->reset();
+}
+
+void ProjecteurControl::SetTimerDurationSeconds(int seconds)
+{
+  m_presentationTimer->setDurationSeconds(seconds);
+}
+
+void ProjecteurControl::SetTimerHapticStrength(int strength)
+{
+  m_presentationTimer->setHapticStrength(strength);
 }
 
 void ProjecteurControl::ShowPreferences()

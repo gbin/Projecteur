@@ -55,6 +55,7 @@ signals:
   void subDeviceDisconnected(const DeviceId& id, const QString& name, const QString& path);
   void anySpotlightDeviceConnectedChanged(bool connected);
   void spotActiveChanged(bool isActive);
+  void presenterButtonPressed();
 
 private:
   enum class ConnectionResult { CouldNotOpen, NotASpotlightDevice, Connected };

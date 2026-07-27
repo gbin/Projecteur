@@ -79,6 +79,16 @@ PlasmaExtras.Representation {
                                 : i18n("Battery: %1%", level);
     }
 
+    function formatTimer(seconds) {
+        const safeSeconds = Math.max(0, seconds);
+        const hours = Math.floor(safeSeconds / 3600);
+        const minutes = Math.floor((safeSeconds % 3600) / 60);
+        const remainingSeconds = safeSeconds % 60;
+        const mm = minutes.toString().padStart(2, "0");
+        const ss = remainingSeconds.toString().padStart(2, "0");
+        return hours > 0 ? hours.toString() + ":" + mm + ":" + ss : mm + ":" + ss;
+    }
+
     implicitWidth: Kirigami.Units.gridUnit * 22
     implicitHeight: content.implicitHeight + header.implicitHeight
     focus: true
@@ -96,129 +106,266 @@ PlasmaExtras.Representation {
             margins: Kirigami.Units.largeSpacing
         }
 
-        PlasmaExtras.Heading {
+        ColumnLayout {
             Layout.fillWidth: true
-            level: 4
-            text: i18n("Connected presenters")
-        }
+            spacing: Kirigami.Units.smallSpacing
 
-        PlasmaComponents3.Label {
-            Layout.fillWidth: true
-            visible: !root.backend || root.backend.connectedDevices.length === 0
-            text: i18n("No compatible presenter connected")
-            opacity: 0.7
-            wrapMode: Text.WordWrap
-        }
-
-        Repeater {
-            model: root.backend ? root.backend.connectedDevices : []
-
-            delegate: RowLayout {
-                required property int index
-                required property string modelData
-
+            RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
 
-                Kirigami.Icon {
-                    source: "input-mouse-symbolic"
-                    implicitWidth: Kirigami.Units.iconSizes.smallMedium
-                    implicitHeight: implicitWidth
+                PlasmaComponents3.Label {
+                    text: i18n("Connected presenters")
+                    font.bold: true
+                }
+
+                Kirigami.Separator {
+                    Layout.fillWidth: true
+                }
+            }
+
+            PlasmaComponents3.Label {
+                Layout.fillWidth: true
+                visible: !root.backend || root.backend.connectedDevices.length === 0
+                text: i18n("No compatible presenter connected")
+                opacity: 0.7
+                wrapMode: Text.WordWrap
+            }
+
+            Repeater {
+                model: root.backend ? root.backend.connectedDevices : []
+
+                delegate: RowLayout {
+                    required property int index
+                    required property string modelData
+
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.smallSpacing
+                    Layout.rightMargin: Kirigami.Units.smallSpacing
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Kirigami.Icon {
+                        source: "input-mouse-symbolic"
+                        implicitWidth: Kirigami.Units.iconSizes.medium
+                        implicitHeight: implicitWidth
+                    }
+
+                    PlasmaComponents3.Label {
+                        Layout.fillWidth: true
+                        text: modelData
+                        elide: Text.ElideRight
+                    }
+
+                    Kirigami.Icon {
+                        id: batteryIcon
+
+                        readonly property string iconName: root.batteryIconName(index)
+                        readonly property string toolTipText: root.batteryToolTip(index)
+
+                        visible: iconName.length > 0
+                        source: iconName
+                        implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                        implicitHeight: implicitWidth
+                        Accessible.name: toolTipText
+
+                        MouseArea {
+                            id: batteryHover
+
+                            anchors.fill: parent
+                            acceptedButtons: Qt.NoButton
+                            hoverEnabled: true
+                        }
+
+                        PlasmaComponents3.ToolTip {
+                            text: batteryIcon.toolTipText
+                            visible: batteryHover.containsMouse && text.length > 0
+                        }
+                    }
+                }
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.smallSpacing
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                PlasmaComponents3.Label {
+                    text: i18n("Presentation timer")
+                    font.bold: true
+                }
+
+                Kirigami.Separator {
+                    Layout.fillWidth: true
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    visible: root.backend && root.backend.serviceAvailable && !root.backend.timerAvailable
+                    text: i18n("Restart Projecteur to load the timer controls.")
+                    wrapMode: Text.WordWrap
                 }
 
                 PlasmaComponents3.Label {
                     Layout.fillWidth: true
-                    text: modelData
-                    elide: Text.ElideRight
+                    visible: root.backend && root.backend.timerAvailable
+                             && root.backend.timerState === "idle"
+                    text: i18n("Ready — starts on the next presenter button press")
+                    opacity: 0.8
+                    wrapMode: Text.WordWrap
                 }
 
-                Kirigami.Icon {
-                    id: batteryIcon
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    visible: root.backend && root.backend.timerAvailable
+                             && root.backend.timerState !== "idle"
+                    horizontalAlignment: Text.AlignHCenter
+                    text: root.backend && root.backend.timerState === "completed"
+                          ? i18n("Time’s up")
+                          : root.formatTimer(root.backend ? root.backend.timerRemainingSeconds : 0)
+                    font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.8
+                    font.bold: true
+                }
 
-                    readonly property string iconName: root.batteryIconName(index)
-                    readonly property string toolTipText: root.batteryToolTip(index)
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: root.backend && root.backend.timerAvailable
+                             && root.backend.timerState === "idle"
+                    spacing: Kirigami.Units.smallSpacing
 
-                    visible: iconName.length > 0
-                    source: iconName
-                    implicitWidth: Kirigami.Units.iconSizes.smallMedium
-                    implicitHeight: implicitWidth
-                    Accessible.name: toolTipText
-
-                    MouseArea {
-                        id: batteryHover
-
-                        anchors.fill: parent
-                        acceptedButtons: Qt.NoButton
-                        hoverEnabled: true
+                    PlasmaComponents3.Label {
+                        text: i18n("Duration:")
                     }
 
-                    PlasmaComponents3.ToolTip {
-                        text: batteryIcon.toolTipText
-                        visible: batteryHover.containsMouse && text.length > 0
+                    PlasmaComponents3.SpinBox {
+                        Layout.fillWidth: true
+                        from: 1
+                        to: 180
+                        editable: true
+                        value: root.backend ? Math.round(root.backend.timerDurationSeconds / 60) : 15
+                        enabled: root.backend && root.backend.serviceAvailable
+                        onValueModified: root.backend.setTimerDurationSeconds(value * 60)
+                    }
+
+                    PlasmaComponents3.Label {
+                        text: i18n("min")
+                    }
+
+                    PlasmaComponents3.Button {
+                        enabled: root.backend && root.backend.serviceAvailable
+                        text: i18n("Start now")
+                        icon.name: "media-playback-start-symbolic"
+                        onClicked: root.backend.startTimer()
                     }
                 }
 
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: root.backend && root.backend.timerAvailable
+                             && root.backend.timerState !== "idle"
+                    spacing: Kirigami.Units.smallSpacing
+
+                    PlasmaComponents3.Button {
+                        Layout.fillWidth: true
+                        enabled: root.backend && root.backend.serviceAvailable
+                        text: i18n("Restart")
+                        icon.name: "view-refresh-symbolic"
+                        onClicked: root.backend.restartTimer()
+                    }
+
+                    PlasmaComponents3.Button {
+                        Layout.fillWidth: true
+                        enabled: root.backend && root.backend.serviceAvailable
+                        text: i18n("Reset")
+                        icon.name: "edit-clear-symbolic"
+                        onClicked: root.backend.resetTimer()
+                    }
+                }
             }
-
         }
 
-        Kirigami.Separator {
-            Layout.fillWidth: true
-        }
-
-        RowLayout {
+        ColumnLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
 
-            PlasmaComponents3.Label {
-                text: i18n("Preset:")
-            }
-
-            PlasmaComponents3.ComboBox {
-                id: presetCombo
-
+            RowLayout {
                 Layout.fillWidth: true
-                enabled: root.backend && root.backend.serviceAvailable
-                model: [i18n("Current Settings")].concat(root.backend ? root.backend.presets : [])
-                currentIndex: {
-                    if (!root.backend || root.backend.currentPreset.length === 0)
-                        return 0;
+                spacing: Kirigami.Units.smallSpacing
 
-                    const index = root.backend.presets.indexOf(root.backend.currentPreset);
-                    return index < 0 ? 0 : index + 1;
+                PlasmaComponents3.Label {
+                    text: i18n("Spotlight")
+                    font.bold: true
                 }
-                onActivated: (index) => {
-                    if (index > 0)
-                        root.backend.loadPreset(root.backend.presets[index - 1]);
 
+                Kirigami.Separator {
+                    Layout.fillWidth: true
                 }
             }
 
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            PlasmaComponents3.Button {
+            ColumnLayout {
                 Layout.fillWidth: true
-                enabled: root.backend && root.backend.serviceAvailable
-                text: root.backend && root.backend.spotlightActive ? i18n("Hide Spotlight") : i18n("Test Spotlight")
-                icon.name: root.backend && root.backend.spotlightActive ? "visibility-hidden-symbolic" : "visibility-symbolic"
-                onClicked: root.backend.setSpotlightActive(!root.backend.spotlightActive)
-            }
+                spacing: Kirigami.Units.smallSpacing
 
-            PlasmaComponents3.Button {
-                Layout.fillWidth: true
-                enabled: root.backend && root.backend.serviceAvailable
-                text: i18n("Preferences…")
-                icon.name: "configure-symbolic"
-                onClicked: {
-                    root.plasmoidItem.expanded = false;
-                    root.backend.showPreferences();
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    PlasmaComponents3.Label {
+                        text: i18n("Preset:")
+                    }
+
+                    PlasmaComponents3.ComboBox {
+                        id: presetCombo
+
+                        Layout.fillWidth: true
+                        enabled: root.backend && root.backend.serviceAvailable
+                        model: [i18n("Current Settings")].concat(root.backend ? root.backend.presets : [])
+                        currentIndex: {
+                            if (!root.backend || root.backend.currentPreset.length === 0)
+                                return 0;
+
+                            const index = root.backend.presets.indexOf(root.backend.currentPreset);
+                            return index < 0 ? 0 : index + 1;
+                        }
+                        onActivated: (index) => {
+                            if (index > 0)
+                                root.backend.loadPreset(root.backend.presets[index - 1]);
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    PlasmaComponents3.Button {
+                        Layout.fillWidth: true
+                        enabled: root.backend && root.backend.serviceAvailable
+                        text: root.backend && root.backend.spotlightActive ? i18n("Hide Spotlight") : i18n("Test Spotlight")
+                        icon.name: root.backend && root.backend.spotlightActive ? "visibility-hidden-symbolic" : "visibility-symbolic"
+                        onClicked: root.backend.setSpotlightActive(!root.backend.spotlightActive)
+                    }
+
+                    PlasmaComponents3.Button {
+                        Layout.fillWidth: true
+                        enabled: root.backend && root.backend.serviceAvailable
+                        text: i18n("Preferences…")
+                        icon.name: "configure-symbolic"
+                        onClicked: {
+                            root.plasmoidItem.expanded = false;
+                            root.backend.showPreferences();
+                        }
+                    }
                 }
             }
-
         }
 
     }

@@ -43,7 +43,6 @@ add_executable(projecteur
   src/device-command-helper.cc src/device-command-helper.h
   src/device-hidpp.cc          src/device-hidpp.h
   src/device-key-lookup.cc     src/device-key-lookup.h
-  src/device-vibration.cc      src/device-vibration.h
   src/deviceinput.cc           src/deviceinput.h
   src/devicescan.cc            src/devicescan.h
   src/deviceswidget.cc         src/deviceswidget.h
@@ -56,6 +55,7 @@ add_executable(projecteur
   src/logging.cc               src/logging.h
   src/nativekeyseqedit.cc      src/nativekeyseqedit.h
   src/preferencesdlg.cc        src/preferencesdlg.h
+  src/presentationtimer.cc     src/presentationtimer.h
   src/projecteurapp.cc         src/projecteurapp.h
   src/projecteurcontrol.cc     src/projecteurcontrol.h
   src/runguard.cc              src/runguard.h

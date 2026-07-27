@@ -40,14 +40,12 @@ namespace {
     constexpr char zoomEnabled[] = "enableZoom";
     constexpr char zoomFactor[] = "zoomFactor";
     constexpr char multiScreenOverlay[] = "multiScreenOverlay";
+    constexpr char presentationTimerDurationSeconds[] = "presentationTimerDurationSeconds";
+    constexpr char presentationTimerHapticStrength[] = "presentationTimerHapticStrength";
 
     // -- device specific
     constexpr char inputSequenceInterval[] = "inputSequenceInterval";
     constexpr char inputMapConfig[] = "inputMapConfig";
-    constexpr char timerEnabled[] = "timer%1enabled";
-    constexpr char timerSeconds[] = "timer%1seconds";
-    constexpr char vibrationLength[] = "vibrationLength";
-    constexpr char vibrationIntensity[] = "vibrationIntensity";
 
     namespace defaultValue {
       constexpr bool showSpotShade = true;
@@ -68,11 +66,11 @@ namespace {
       constexpr bool zoomEnabled = false;
       constexpr double zoomFactor = 2.0;
       constexpr bool multiScreenOverlay = false;
+      constexpr int presentationTimerDurationSeconds = 15 * 60;
+      constexpr int presentationTimerHapticStrength = 50;
 
       // -- device specific defaults
       constexpr int inputSequenceInterval = 250;
-      constexpr uint8_t vibrationLength = 0;
-      constexpr uint8_t vibrationIntensity = 128;
     } // end namespace defaultValue
 
     namespace ranges {
@@ -846,39 +844,34 @@ InputMapConfig Settings::getDeviceInputMapConfig(const DeviceId& dId)
 }
 
 // -------------------------------------------------------------------------------------------------
-void Settings::setTimerSettings(const DeviceId& dId, int timerId, bool enabled, int seconds)
+void Settings::setPresentationTimerDurationSeconds(int seconds)
 {
-  m_settings->setValue(settingsKey(dId, QString(::settings::timerEnabled).arg(timerId)), enabled);
-  m_settings->setValue(settingsKey(dId, QString(::settings::timerSeconds).arg(timerId)), seconds);
+  m_settings->setValue(::settings::presentationTimerDurationSeconds, seconds);
 }
 
 // -------------------------------------------------------------------------------------------------
-std::pair<bool, int> Settings::timerSettings(const DeviceId& dId, int timerId) const
+int Settings::presentationTimerDurationSeconds() const
 {
-  const auto enabled = m_settings->value(
-    settingsKey(dId, QString(::settings::timerEnabled).arg(timerId)), false).toBool();
-  const auto seconds = m_settings->value(
-    settingsKey(dId, QString(::settings::timerSeconds).arg(timerId)), 900 + 900 * timerId).toInt();
-  return std::make_pair(enabled, seconds);
+  return m_settings->value(
+    ::settings::presentationTimerDurationSeconds,
+    ::settings::defaultValue::presentationTimerDurationSeconds).toInt();
 }
 
 // -------------------------------------------------------------------------------------------------
-void Settings::setVibrationSettings(const DeviceId& dId, uint8_t len, uint8_t intensity)
+void Settings::setPresentationTimerHapticStrength(int strength)
 {
-  m_settings->setValue(settingsKey(dId, ::settings::vibrationLength), len);
-  m_settings->setValue(settingsKey(dId, ::settings::vibrationIntensity), intensity);
+  const int clampedStrength = std::clamp(strength, 0, 100);
+  if (presentationTimerHapticStrength() == clampedStrength) { return; }
+  m_settings->setValue(::settings::presentationTimerHapticStrength, clampedStrength);
+  emit presentationTimerHapticStrengthChanged(clampedStrength);
 }
 
 // -------------------------------------------------------------------------------------------------
-std::pair<uint8_t, uint8_t> Settings::vibrationSettings(const DeviceId& dId) const
+int Settings::presentationTimerHapticStrength() const
 {
-  const auto len = m_settings->value(
-    settingsKey(dId, ::settings::vibrationLength),
-    ::settings::defaultValue::vibrationLength).toUInt();
-  const auto intensity = m_settings->value(
-    settingsKey(dId, ::settings::vibrationIntensity),
-    ::settings::defaultValue::vibrationIntensity).toUInt();
-  return std::make_pair(len, intensity);
+  return m_settings->value(
+    ::settings::presentationTimerHapticStrength,
+    ::settings::defaultValue::presentationTimerHapticStrength).toInt();
 }
 
 // -------------------------------------------------------------------------------------------------

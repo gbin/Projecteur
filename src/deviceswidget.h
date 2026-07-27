@@ -13,17 +13,13 @@
 
 class DeviceConnection;
 class InputMapper;
-class MultiTimerWidget;
 class QComboBox;
-class QShowEvent;
 class QTabWidget;
 class QTextEdit;
 class Settings;
 class Spotlight;
-class VibrationSettingsWidget;
 class SubDeviceConnection;
 class SubHidppConnection;
-class TimerTabWidget;
 
 // -------------------------------------------------------------------------------------------------
 class DevicesWidget : public QWidget
@@ -37,45 +33,18 @@ public:
 signals:
   void currentDeviceChanged(const DeviceId&);
 
-protected:
-  void showEvent(QShowEvent* event) override;
-
 private:
   QWidget* createDisconnectedStateWidget();
   void createDeviceComboBox(Spotlight* spotlight);
   QWidget* createDevicesWidget(Settings* settings, Spotlight* spotlight);
   QWidget* createInputMapperWidget(Settings* settings, Spotlight* spotlight);
   QWidget* createDeviceInfoWidget(Spotlight* spotlight);
-  TimerTabWidget* createTimerTabWidget(Settings* settings, Spotlight* spotlight);
-  void updateTimerTab(Spotlight* spotlight);
 
   QComboBox* m_devicesCombo = nullptr;
   QTabWidget* m_tabWidget = nullptr;
-  TimerTabWidget* m_timerTabWidget = nullptr;
-  QPointer<QObject> m_timerTabContext;
   QWidget* m_deviceDetailsTabWidget = nullptr;
 
   QPointer<InputMapper> m_inputMapper;
-  QPointer<Spotlight> m_spotlight;
-};
-
-// -------------------------------------------------------------------------------------------------
-class TimerTabWidget : public QWidget
-{
-  Q_OBJECT
-
-public:
-  TimerTabWidget(Settings* settings, QWidget* parent = nullptr);
-  VibrationSettingsWidget* vibrationSettingsWidget();
-
-  void loadSettings(const DeviceId& deviceId);
-  void setSubDeviceConnection(SubDeviceConnection* sdc);
-
-private:
-  DeviceId m_deviceId;
-  Settings* const m_settings = nullptr;
-  MultiTimerWidget* m_multiTimerWidget = nullptr;
-  VibrationSettingsWidget* m_vibrationSettingsWidget = nullptr;
 };
 
 // -------------------------------------------------------------------------------------------------

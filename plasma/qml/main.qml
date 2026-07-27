@@ -10,16 +10,56 @@ PlasmoidItem {
 
     readonly property var backend: Plasmoid
 
+    function formatTimer(seconds) {
+        const safeSeconds = Math.max(0, seconds);
+        const hours = Math.floor(safeSeconds / 3600);
+        const minutes = Math.floor((safeSeconds % 3600) / 60);
+        const remainingSeconds = safeSeconds % 60;
+        const mm = minutes.toString().padStart(2, "0");
+        const ss = remainingSeconds.toString().padStart(2, "0");
+        return hours > 0 ? hours.toString() + ":" + mm + ":" + ss : mm + ":" + ss;
+    }
+
     switchWidth: 320
     switchHeight: 320
     activationTogglesExpanded: true
     hideOnWindowDeactivate: true
     Plasmoid.icon: "projecteur"
-    Plasmoid.status: backend && backend.serviceAvailable && backend.trayVisible ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.HiddenStatus
+    badgeText: {
+        if (!backend || !backend.serviceAvailable || !backend.timerAvailable)
+            return "";
+
+        if (backend.timerState === "completed")
+            return "!";
+
+        if (backend.timerState === "running") {
+            const seconds = Math.max(0, backend.timerRemainingSeconds);
+            return seconds >= 60 ? Math.ceil(seconds / 60).toString() : seconds.toString();
+        }
+
+        return "…";
+    }
+    Plasmoid.status: {
+        if (!backend || !backend.serviceAvailable || !backend.trayVisible)
+            return PlasmaCore.Types.HiddenStatus;
+        if (backend.timerAvailable && backend.timerState === "completed")
+            return PlasmaCore.Types.NeedsAttentionStatus;
+        return PlasmaCore.Types.ActiveStatus;
+    }
     toolTipMainText: i18n("Projecteur")
     toolTipSubText: {
         if (!backend || !backend.serviceAvailable)
             return i18n("Projecteur is not running");
+
+        if (backend.timerAvailable && backend.timerState === "running")
+            return i18n("Presentation timer: %1 remaining", root.formatTimer(backend.timerRemainingSeconds));
+
+        if (backend.timerAvailable && backend.timerState === "completed")
+            return i18n("Presentation timer finished");
+
+        if (backend.timerAvailable && backend.timerState === "idle")
+            return i18n("Timer ready: %1 — starts on the next presenter button press",
+                        root.formatTimer(backend.timerDurationSeconds));
 
         if (backend.connectedDevices.length === 0)
             return i18n("No presenter connected");

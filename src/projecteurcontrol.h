@@ -8,6 +8,7 @@
 #include <QVariantMap>
 
 class ProjecteurApplication;
+class PresentationTimer;
 class Settings;
 class Spotlight;
 struct DeviceId;
@@ -26,6 +27,10 @@ class ProjecteurControl : public QObject
              NOTIFY connectedDeviceBatteryStatusesChanged)
   Q_PROPERTY(QStringList Presets READ presets NOTIFY presetsChanged)
   Q_PROPERTY(QString CurrentPreset READ currentPreset NOTIFY currentPresetChanged)
+  Q_PROPERTY(QString TimerState READ timerState NOTIFY timerStateChanged)
+  Q_PROPERTY(int TimerDurationSeconds READ timerDurationSeconds NOTIFY timerDurationSecondsChanged)
+  Q_PROPERTY(int TimerRemainingSeconds READ timerRemainingSeconds NOTIFY timerRemainingSecondsChanged)
+  Q_PROPERTY(int TimerHapticStrength READ timerHapticStrength NOTIFY timerHapticStrengthChanged)
 
 public:
   static constexpr auto ServiceName = "org.projecteur.Projecteur";
@@ -33,7 +38,7 @@ public:
   static constexpr auto InterfaceName = "org.projecteur.Projecteur";
 
   ProjecteurControl(ProjecteurApplication* application, Settings* settings, Spotlight* spotlight,
-                    bool trayVisible);
+                    PresentationTimer* presentationTimer, bool trayVisible);
 
   bool registerService();
   void unregisterService();
@@ -46,11 +51,20 @@ public:
   QStringList connectedDeviceBatteryStatuses() const;
   QStringList presets() const;
   QString currentPreset() const { return m_currentPreset; }
+  QString timerState() const;
+  int timerDurationSeconds() const;
+  int timerRemainingSeconds() const;
+  int timerHapticStrength() const;
 
 public slots:
   void SetOverlayEnabled(bool enabled);
   void SetSpotlightActive(bool active);
   bool LoadPreset(const QString& preset);
+  void StartTimer();
+  void RestartTimer();
+  void ResetTimer();
+  void SetTimerDurationSeconds(int seconds);
+  void SetTimerHapticStrength(int strength);
   void ShowPreferences();
   void ShowAbout();
   void Quit();
@@ -63,6 +77,10 @@ signals:
   void connectedDeviceBatteryStatusesChanged(const QStringList& statuses);
   void presetsChanged(const QStringList& presets);
   void currentPresetChanged(const QString& preset);
+  void timerStateChanged(const QString& state);
+  void timerDurationSecondsChanged(int seconds);
+  void timerRemainingSecondsChanged(int seconds);
+  void timerHapticStrengthChanged(int strength);
 
 private:
   void clearCurrentPreset();
@@ -74,6 +92,7 @@ private:
   ProjecteurApplication* const m_application;
   Settings* const m_settings;
   Spotlight* const m_spotlight;
+  PresentationTimer* const m_presentationTimer;
   const bool m_trayVisible;
   QString m_currentPreset;
   bool m_objectRegistered = false;

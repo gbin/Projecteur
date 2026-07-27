@@ -56,6 +56,15 @@ ProjecteurApplet::ProjecteurApplet(QObject* parent, const KPluginMetaData& data,
   bus.connect(QString::fromLatin1(serviceName), QString::fromLatin1(objectPath),
               QString::fromLatin1(interfaceName), QStringLiteral("currentPresetChanged"),
               this, SLOT(remoteCurrentPresetChanged(QString)));
+  bus.connect(QString::fromLatin1(serviceName), QString::fromLatin1(objectPath),
+              QString::fromLatin1(interfaceName), QStringLiteral("timerStateChanged"),
+              this, SLOT(remoteTimerStateChanged(QString)));
+  bus.connect(QString::fromLatin1(serviceName), QString::fromLatin1(objectPath),
+              QString::fromLatin1(interfaceName), QStringLiteral("timerDurationSecondsChanged"),
+              this, SLOT(remoteTimerDurationSecondsChanged(int)));
+  bus.connect(QString::fromLatin1(serviceName), QString::fromLatin1(objectPath),
+              QString::fromLatin1(interfaceName), QStringLiteral("timerRemainingSecondsChanged"),
+              this, SLOT(remoteTimerRemainingSecondsChanged(int)));
 
   const auto registered = bus.interface()->isServiceRegistered(QString::fromLatin1(serviceName));
   if (registered.isValid() && registered.value()) {
@@ -76,6 +85,26 @@ void ProjecteurApplet::setSpotlightActive(bool active)
 void ProjecteurApplet::loadPreset(const QString& preset)
 {
   call(QStringLiteral("LoadPreset"), {preset});
+}
+
+void ProjecteurApplet::startTimer()
+{
+  call(QStringLiteral("StartTimer"));
+}
+
+void ProjecteurApplet::restartTimer()
+{
+  call(QStringLiteral("RestartTimer"));
+}
+
+void ProjecteurApplet::resetTimer()
+{
+  call(QStringLiteral("ResetTimer"));
+}
+
+void ProjecteurApplet::setTimerDurationSeconds(int seconds)
+{
+  call(QStringLiteral("SetTimerDurationSeconds"), {seconds});
 }
 
 void ProjecteurApplet::showPreferences()
@@ -162,6 +191,27 @@ void ProjecteurApplet::remoteCurrentPresetChanged(const QString& preset)
   emit currentPresetChanged();
 }
 
+void ProjecteurApplet::remoteTimerStateChanged(const QString& state)
+{
+  if (m_timerState == state) { return; }
+  m_timerState = state;
+  emit timerStateChanged();
+}
+
+void ProjecteurApplet::remoteTimerDurationSecondsChanged(int seconds)
+{
+  if (m_timerDurationSeconds == seconds) { return; }
+  m_timerDurationSeconds = seconds;
+  emit timerDurationSecondsChanged();
+}
+
+void ProjecteurApplet::remoteTimerRemainingSecondsChanged(int seconds)
+{
+  if (m_timerRemainingSeconds == seconds) { return; }
+  m_timerRemainingSeconds = seconds;
+  emit timerRemainingSecondsChanged();
+}
+
 void ProjecteurApplet::refresh()
 {
   QDBusInterface interface(QString::fromLatin1(serviceName), QString::fromLatin1(objectPath),
@@ -182,6 +232,17 @@ void ProjecteurApplet::refresh()
     interface.property("ConnectedDeviceBatteryStatuses").toStringList());
   remotePresetsChanged(interface.property("Presets").toStringList());
   remoteCurrentPresetChanged(interface.property("CurrentPreset").toString());
+  const auto timerStateProperty = interface.property("TimerState");
+  const bool timerAvailable = timerStateProperty.isValid();
+  if (m_timerAvailable != timerAvailable) {
+    m_timerAvailable = timerAvailable;
+    emit timerAvailableChanged();
+  }
+  if (timerAvailable) {
+    remoteTimerStateChanged(timerStateProperty.toString());
+    remoteTimerDurationSecondsChanged(interface.property("TimerDurationSeconds").toInt());
+    remoteTimerRemainingSecondsChanged(interface.property("TimerRemainingSeconds").toInt());
+  }
 }
 
 void ProjecteurApplet::resetState()
@@ -197,6 +258,13 @@ void ProjecteurApplet::resetState()
   remoteConnectedDeviceBatteryStatusesChanged({});
   remotePresetsChanged({});
   remoteCurrentPresetChanged({});
+  if (m_timerAvailable) {
+    m_timerAvailable = false;
+    emit timerAvailableChanged();
+  }
+  remoteTimerStateChanged(QStringLiteral("idle"));
+  remoteTimerDurationSecondsChanged(15 * 60);
+  remoteTimerRemainingSecondsChanged(15 * 60);
 }
 
 void ProjecteurApplet::call(const QString& method, const QVariantList& arguments)

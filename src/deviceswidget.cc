@@ -4,7 +4,6 @@
 #include "deviceswidget.h"
 
 #include "device-hidpp.h"
-#include "device-vibration.h"
 #include "deviceinput.h"
 #include "iconwidgets.h"
 #include "inputmapconfig.h"
@@ -16,7 +15,6 @@
 #include <QLabel>
 #include <QLayout>
 #include <QShortcut>
-#include <QShowEvent>
 #include <QSpinBox>
 #include <QStackedLayout>
 #include <QStyle>
@@ -37,21 +35,11 @@ namespace {
 
   const auto invalidDeviceId = DeviceId(); // vendorId = 0, productId = 0
 
-  bool removeTab(QTabWidget* tabWidget, QWidget* widget)
-  {
-    const auto idx = tabWidget->indexOf(widget);
-    if (idx >= 0) {
-      tabWidget->removeTab(idx);
-      return true;
-    }
-    return false;
-  }
 } // end anonymous namespace
 
 // -------------------------------------------------------------------------------------------------
 DevicesWidget::DevicesWidget(Settings* settings, Spotlight* spotlight, QWidget* parent)
   : QWidget(parent)
-  , m_spotlight(spotlight)
 {
   createDeviceComboBox(spotlight);
 
@@ -71,17 +59,6 @@ DevicesWidget::DevicesWidget(Settings* settings, Spotlight* spotlight, QWidget* 
 }
 
 // -------------------------------------------------------------------------------------------------
-void DevicesWidget::showEvent(QShowEvent* event)
-{
-  QWidget::showEvent(event);
-
-  // HID++ feature discovery is asynchronous. Re-evaluate optional device tabs
-  // when this page becomes visible so a capability discovered during startup
-  // cannot be missed because of signal ordering.
-  if (m_spotlight) { updateTimerTab(m_spotlight); }
-}
-
-// -------------------------------------------------------------------------------------------------
 DeviceId DevicesWidget::currentDeviceId() const
 {
   if (m_devicesCombo->currentIndex() < 0) {
@@ -89,20 +66,6 @@ DeviceId DevicesWidget::currentDeviceId() const
   }
 
   return qvariant_cast<DeviceId>(m_devicesCombo->currentData());
-}
-
-// -------------------------------------------------------------------------------------------------
-TimerTabWidget* DevicesWidget::createTimerTabWidget(Settings* settings, Spotlight* spotlight)
-{
-  Q_UNUSED(spotlight);
-  const auto w = new TimerTabWidget(settings, this);
-  w->loadSettings(currentDeviceId());
-
-  connect(this, &DevicesWidget::currentDeviceChanged, this, [this](const DeviceId& dId) {
-    if (m_timerTabWidget) { m_timerTabWidget->loadSettings(dId); }
-  });
-
-  return w;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -123,16 +86,9 @@ QWidget* DevicesWidget::createDevicesWidget(Settings* settings, Spotlight* spotl
   vLayout->addWidget(m_tabWidget);
 
   m_tabWidget->addTab(createInputMapperWidget(settings, spotlight), tr("Input Mapping"));
-  m_timerTabWidget = createTimerTabWidget(settings, spotlight);
-
-  updateTimerTab(spotlight);
 
   m_deviceDetailsTabWidget = createDeviceInfoWidget(spotlight);
   m_tabWidget->addTab(m_deviceDetailsTabWidget, tr("Details"));
-
-  // Update the timer tab when the current device has changed
-  connect(this, &DevicesWidget::currentDeviceChanged, this,
-  [spotlight, this]() { updateTimerTab(spotlight); });
 
   return dw;
 }
@@ -310,123 +266,6 @@ QWidget* DevicesWidget::createDisconnectedStateWidget()
   hbox->addWidget(label);
   hbox->addStretch();
   return stateWidget;
-}
-
-// -------------------------------------------------------------------------------------------------
-TimerTabWidget::TimerTabWidget(Settings* settings, QWidget* parent)
-  : QWidget(parent)
-  , m_settings(settings)
-  , m_multiTimerWidget(new MultiTimerWidget(this))
-  , m_vibrationSettingsWidget(new VibrationSettingsWidget(this))
-{
-  const auto layout = new QVBoxLayout(this);
-
-  layout->addWidget(m_multiTimerWidget);
-  layout->addWidget(m_vibrationSettingsWidget);
-
-  connect(m_multiTimerWidget, &MultiTimerWidget::timerValueChanged, this,
-  [this](int id, int secs) {
-    m_settings->setTimerSettings(m_deviceId, id, m_multiTimerWidget->timerEnabled(id), secs);
-  });
-
-  connect(m_multiTimerWidget, &MultiTimerWidget::timerEnabledChanged, this,
-  [this](int id, bool enabled) {
-    m_settings->setTimerSettings(m_deviceId, id, enabled, m_multiTimerWidget->timerValue(id));
-  });
-
-  connect(m_vibrationSettingsWidget, &VibrationSettingsWidget::intensityChanged, this,
-  [this](uint8_t intensity) {
-    m_settings->setVibrationSettings(m_deviceId, m_vibrationSettingsWidget->length(), intensity);
-  });
-
-  connect(m_vibrationSettingsWidget, &VibrationSettingsWidget::lengthChanged, this,
-  [this](uint8_t len) {
-    m_settings->setVibrationSettings(m_deviceId, len, m_vibrationSettingsWidget->intensity());
-  });
-
-  connect(m_multiTimerWidget, &MultiTimerWidget::timeout,
-          m_vibrationSettingsWidget, &VibrationSettingsWidget::sendVibrateCommand);
-}
-
-// -------------------------------------------------------------------------------------------------
-void DevicesWidget::updateTimerTab(Spotlight* spotlight)
-{
-    // Helper method to return the first subconnection that supports vibrate.
-  auto getVibrateConnection = [](const std::shared_ptr<DeviceConnection>& conn) {
-    if (conn) {
-      for (const auto& item : conn->subDevices()) {
-        if (item.second->hasFlags(DeviceFlag::Vibrate)) { return item.second; }
-
-        // Derive support from the initialized feature table as well. This makes
-        // the preferences UI resilient if its flag-change notification happened
-        // before the page was constructed or shown.
-        const auto hidpp = qobject_cast<SubHidppConnection*>(item.second.get());
-        if (hidpp
-            && (hidpp->featureSet().featureCodeSupported(HIDPP::FeatureCode::PresenterControl)
-                || hidpp->featureSet().featureCodeSupported(HIDPP::FeatureCode::Haptic))) {
-          return item.second;
-        }
-      }
-    }
-    return std::shared_ptr<SubDeviceConnection>{};
-  };
-
-  const auto currentConn = spotlight->deviceConnection(currentDeviceId());
-  const auto vibrateConn = getVibrateConnection(currentConn);
-
-  if (m_timerTabContext) { m_timerTabContext->deleteLater(); }
-
-  if (vibrateConn)
-  {
-    if (m_tabWidget->indexOf(m_timerTabWidget) < 0) {
-      m_tabWidget->insertTab(1, m_timerTabWidget, tr("Vibration Timer"));
-      logDebug(preferences) << tr("Added Vibration Timer tab for '%1'.")
-                               .arg(vibrateConn->path());
-    }
-    m_timerTabWidget->setSubDeviceConnection(vibrateConn.get());
-  }
-  else if (m_timerTabWidget) {
-    removeTab(m_tabWidget, m_timerTabWidget);
-    m_timerTabWidget->setSubDeviceConnection(nullptr);
-  }
-
-  if (currentConn) {
-    m_timerTabContext = QPointer<QObject>(new QObject(this));
-    connect(&*currentConn, &DeviceConnection::subDeviceFlagsChanged, m_timerTabContext,
-    [currId=currentDeviceId(), spotlight, this](const DeviceId& id, const QString& /* path */) {
-      if (currId != id) { return; }
-      updateTimerTab(spotlight);
-    });
-  }
-
-}
-
-// -------------------------------------------------------------------------------------------------
-void TimerTabWidget::loadSettings(const DeviceId& deviceId)
-{
-  m_multiTimerWidget->stopAllTimers();
-  m_multiTimerWidget->blockSignals(true);
-  m_vibrationSettingsWidget->blockSignals(true);
-
-  m_deviceId = deviceId;
-
-  for (int i = 0; i < m_multiTimerWidget->timerCount(); ++i) {
-    const auto ts = m_settings->timerSettings(deviceId, i);
-    m_multiTimerWidget->setTimerEnabled(i, ts.first);
-    m_multiTimerWidget->setTimerValue(i, ts.second);
-  }
-
-  const auto vs = m_settings->vibrationSettings(deviceId);
-  m_vibrationSettingsWidget->setLength(vs.first);
-  m_vibrationSettingsWidget->setIntensity(vs.second);
-
-  m_vibrationSettingsWidget->blockSignals(false);
-  m_multiTimerWidget->blockSignals(false);
-}
-
-// -------------------------------------------------------------------------------------------------
-void TimerTabWidget::setSubDeviceConnection(SubDeviceConnection* sdc) {
-  m_vibrationSettingsWidget->setSubDeviceConnection(sdc);
 }
 
 // -------------------------------------------------------------------------------------------------

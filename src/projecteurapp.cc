@@ -9,6 +9,7 @@
 #include "linuxdesktop.h"
 #include "logging.h"
 #include "preferencesdlg.h"
+#include "presentationtimer.h"
 #include "projecteurcontrol.h"
 #include "settings.h"
 #include "spotlight.h"
@@ -64,6 +65,8 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
                               m_settings);
 
   m_deviceCommandHelper = new DeviceCommandHelper(this, m_spotlight);
+  m_presentationTimer =
+    new PresentationTimer(m_settings, m_spotlight, m_deviceCommandHelper, this);
 
   m_settings->setOverlayDisabled(options.disableOverlay);
   m_dialog = std::make_unique<PreferencesDialog>(m_settings, m_spotlight,
@@ -259,7 +262,8 @@ void ProjecteurApplication::setupSpotlight()
 // -------------------------------------------------------------------------------------------------
 void ProjecteurApplication::setupControlService(Options const& options)
 {
-  m_control = new ProjecteurControl(this, m_settings, m_spotlight, !options.hideSysTrayIcon);
+  m_control = new ProjecteurControl(this, m_settings, m_spotlight, m_presentationTimer,
+                                    !options.hideSysTrayIcon);
   if (!m_control->registerService()) {
     logError(mainapp) << tr("Could not register the Projecteur session D-Bus service.");
   }
