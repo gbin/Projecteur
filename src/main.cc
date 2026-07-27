@@ -5,8 +5,9 @@
 #include "projecteur-GitVersion.h"
 
 #include "logging.h"
-#include "runguard.h"
 #include "settings.h"
+
+#include <KDBusService>
 
 #include <QCommandLineParser>
 
@@ -21,11 +22,8 @@
 #define XSTRINGIFY(s) STRINGIFY(s)
 #define STRINGIFY(x) #x
 
-LOGGING_CATEGORY(appMain, "main")
-
 namespace {
   // -----------------------------------------------------------------------------------------------
-  constexpr int PROJECTEUR_ERROR_ANOTHER_INST_RUNNING = 42;
   constexpr int PROJECTEUR_ERROR_NO_INSTANCE_FOUND = 43;
   constexpr int PROJECTEUR_ERROR_EMPTY_COMMAND_PROPS = 44;
 
@@ -337,9 +335,10 @@ namespace {
 int main(int argc, char *argv[])
 {
   QCoreApplication::setApplicationName("Projecteur");
+  QCoreApplication::setOrganizationDomain("projecteur.org");
   QCoreApplication::setApplicationVersion(projecteur::version_string());
+  QGuiApplication::setDesktopFileName(QStringLiteral("org.projecteur.Projecteur"));
   ProjecteurApplication::Options options;
-  QStringList ipcCommands;
   {
     ProjecteurCmdLineParser parser;
     parser.processArgs(argc, argv);
@@ -371,13 +370,13 @@ int main(int argc, char *argv[])
     // Check and trim ipc commands if set
     if (parser.commandOptionSet())
     {
-      ipcCommands = parser.commandOptionValues();
-      for (auto& value : ipcCommands) {
+      options.commands = parser.commandOptionValues();
+      for (auto& value : options.commands) {
         value = value.trimmed();
       }
-      ipcCommands.removeAll("");
+      options.commands.removeAll("");
 
-      if (ipcCommands.isEmpty()) {
+      if (options.commands.isEmpty()) {
         error() << Main::tr("Command/Properties cannot be an empty string.");
         return PROJECTEUR_ERROR_EMPTY_COMMAND_PROPS;
       }
@@ -403,26 +402,38 @@ int main(int argc, char *argv[])
     }
   }
 
-  RunGuard guard(QCoreApplication::applicationName());
-  if (!guard.tryToRun())
-  {
-    if (ipcCommands.size() > 0) {
-      return ProjecteurCommandClientApp(ipcCommands, argc, argv).exec();
-    }
-    error() << Main::tr("Another application instance is already running. Exiting.");
-    return PROJECTEUR_ERROR_ANOTHER_INST_RUNNING;
-  }
-
-  if (ipcCommands.size() > 0)
-  {
-    // No other application instance running - but command option was used.
-    logInfo(appMain) << Main::tr("Cannot send commands '%1' - no running application instance found.").arg(ipcCommands.join("; "));
-    logWarning(appMain) << Main::tr("Cannot send commands '%1' - no running application instance found.").arg(ipcCommands.join("; "));
-    error() << Main::tr("Cannot send commands '%1' - no running application instance found.").arg(ipcCommands.join("; "));
-    return PROJECTEUR_ERROR_NO_INSTANCE_FOUND;
-  }
-
   ProjecteurApplication app(argc, argv, options);
+  if (!app.isPrimaryInstance()) {
+    if (app.startupExitCode() == PROJECTEUR_ERROR_NO_INSTANCE_FOUND) {
+      error() << Main::tr("Cannot send commands '%1' - no running application instance found.")
+                   .arg(options.commands.join("; "));
+    }
+    return app.startupExitCode();
+  }
+
+  QObject::connect(app.dbusService(), &KDBusService::activateRequested, &app,
+    [&app](const QStringList& arguments, const QString& /*workingDirectory*/) {
+      QStringList commands;
+      bool showPreferences = false;
+      for (qsizetype i = 1; i < arguments.size(); ++i) {
+        const auto& argument = arguments[i];
+        if ((argument == QStringLiteral("-c") || argument == QStringLiteral("--command"))
+            && i + 1 < arguments.size()) {
+          commands.push_back(arguments[++i].trimmed());
+        } else if (argument.startsWith(QStringLiteral("--command="))) {
+          commands.push_back(argument.mid(QStringLiteral("--command=").size()).trimmed());
+        } else if (argument == QStringLiteral("--show-dialog")) {
+          showPreferences = true;
+        }
+      }
+      commands.removeAll(QString());
+      if (!commands.isEmpty()) {
+        app.applyCommands(commands);
+      } else if (showPreferences) {
+        app.activate();
+      }
+    });
+
   signal(SIGINT, ctrl_c_signal_handler);
   return app.exec();
 }

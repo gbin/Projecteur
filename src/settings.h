@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <map>
+#include <memory>
 #include <vector>
 
 #include <QAbstractListModel>
@@ -13,7 +14,7 @@
 struct DeviceId;
 class InputMapConfig;
 class PresetModel;
-class QSettings;
+class ProjecteurConfig;
 class QQmlPropertyMap;
 
 // -------------------------------------------------------------------------------------------------
@@ -203,9 +204,9 @@ signals:
   void presetLoaded(const QString& preset);
 
 private:
-  QSettings* m_settings = nullptr;
+  std::unique_ptr<ProjecteurConfig> m_config;
 
-  PresetModel* m_presetModel;
+  PresetModel* m_presetModel = nullptr;
   std::map<QString, QQmlPropertyMap*> m_shapeSettings;
   QQmlPropertyMap* m_shapeSettingsRoot = nullptr;
 
@@ -234,6 +235,13 @@ private:
 
 private:
   void init();
+  QVariant readValue(const QString& path, const QVariant& defaultValue = {}) const;
+  void writeValue(const QString& path, const QVariant& value);
+  bool contains(const QString& path) const;
+  void remove(const QString& path);
+  QString configFileName() const;
+  void save();
+  void sync();
   void load(const QString& preset = QString());
   QObject* shapeSettingsRootObject();
   void shapeSettingsPopulateRoot();

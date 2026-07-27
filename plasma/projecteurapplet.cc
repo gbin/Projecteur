@@ -15,7 +15,7 @@
 
 namespace {
 constexpr auto serviceName = "org.projecteur.Projecteur";
-constexpr auto objectPath = "/org/projecteur/Projecteur";
+constexpr auto objectPath = "/org/projecteur/Projecteur/Control";
 constexpr auto interfaceName = "org.projecteur.Projecteur";
 }
 

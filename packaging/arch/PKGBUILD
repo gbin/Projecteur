@@ -13,7 +13,9 @@ license=('MIT')
 depends=(
   'gcc-libs'
   'glibc'
+  'kconfig>=6.7'
   'kcoreaddons>=6.7'
+  'kdbusaddons>=6.7'
   'layer-shell-qt>=6.7'
   'libplasma>=6.7'
   'libglvnd'

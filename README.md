@@ -159,7 +159,7 @@ and Hold Move actions for the same button.
 * C++17 compiler
 * CMake 3.20 or later
 * Qt 6.11 with Core, DBus, Gui, LinguistTools, Quick, and Widgets
-* KDE Plasma 6.7 Wayland, including Libplasma and KCoreAddons
+* KDE Plasma 6.7 Wayland, including Libplasma, KConfig, KCoreAddons, and KDBusAddons
 * LayerShellQt 6.7
 * Extra CMake Modules 6.7 or later
 
@@ -191,11 +191,13 @@ Projecteur instance, compiles, packages and installs the current tree, then
 restarts `plasma-plasmashell.service`.
 
 Installing is required for zoom: KWin authorizes the screenshot interface by matching
-the running executable with the installed `projecteur.desktop` metadata. A binary run
+the running executable with the installed `org.projecteur.Projecteur.desktop` metadata. A binary run
 directly from the build directory can use the normal spotlight, but KWin will reject
 its zoom capture request.
 
 ## Installation/Running
+
+Projecteur stores its KDE configuration in `~/.config/projecteurrc`.
 
 ### Pre-requisites
 

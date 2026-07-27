@@ -114,7 +114,9 @@ deps: _require-arch
         cmake
         extra-cmake-modules
         git
+        kconfig
         kcoreaddons
+        kdbusaddons
         layer-shell-qt
         libplasma
         libglvnd

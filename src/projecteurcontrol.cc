@@ -150,30 +150,19 @@ ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Setting
   });
 }
 
-bool ProjecteurControl::registerService()
+bool ProjecteurControl::registerObject()
 {
   auto connection = QDBusConnection::sessionBus();
   m_objectRegistered = connection.registerObject(
     QString::fromLatin1(ObjectPath), this,
     QDBusConnection::ExportAllProperties | QDBusConnection::ExportAllSignals |
       QDBusConnection::ExportAllSlots);
-  if (!m_objectRegistered) { return false; }
-
-  m_serviceRegistered = connection.registerService(QString::fromLatin1(ServiceName));
-  if (!m_serviceRegistered) {
-    connection.unregisterObject(QString::fromLatin1(ObjectPath));
-    m_objectRegistered = false;
-  }
-  return m_serviceRegistered;
+  return m_objectRegistered;
 }
 
-void ProjecteurControl::unregisterService()
+void ProjecteurControl::unregisterObject()
 {
   auto connection = QDBusConnection::sessionBus();
-  if (m_serviceRegistered) {
-    connection.unregisterService(QString::fromLatin1(ServiceName));
-    m_serviceRegistered = false;
-  }
   if (m_objectRegistered) {
     connection.unregisterObject(QString::fromLatin1(ObjectPath));
     m_objectRegistered = false;
@@ -329,6 +318,11 @@ void ProjecteurControl::ShowAbout()
   m_application->showAbout();
 }
 
+void ProjecteurControl::ApplyCommands(const QStringList& commands)
+{
+  m_application->applyCommands(commands);
+}
+
 void ProjecteurControl::Quit()
 {
   QCoreApplication::quit();
@@ -400,7 +394,7 @@ void ProjecteurControl::watchBatteryConnection(const DeviceId& id, const QString
 
 void ProjecteurControl::emitPropertiesChanged(const QVariantMap& changedProperties)
 {
-  if (!m_serviceRegistered) { return; }
+  if (!m_objectRegistered) { return; }
   auto message = QDBusMessage::createSignal(
     QString::fromLatin1(ObjectPath), QStringLiteral("org.freedesktop.DBus.Properties"),
     QStringLiteral("PropertiesChanged"));

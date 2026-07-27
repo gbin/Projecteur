@@ -14,11 +14,10 @@
 #include "settings.h"
 #include "spotlight.h"
 
+#include <KDBusService>
 #include <LayerShellQt/Window>
 
 #include <QFontDatabase>
-#include <QLocalServer>
-#include <QLocalSocket>
 #include <QMessageBox>
 #include <QPointer>
 #include <QQmlApplicationEngine>
@@ -30,21 +29,31 @@
 #include <QWindow>
 
 LOGGING_CATEGORY(mainapp, "mainapp")
-LOGGING_CATEGORY(cmdclient, "cmdclient")
 LOGGING_CATEGORY(cmdserver, "cmdserver")
-
-namespace {
-  QString localServerName() {
-    return QCoreApplication::applicationName() + "_local_socket";
-  }
-} // end anonymous namespace
 
 // -------------------------------------------------------------------------------------------------
 ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Options& options)
   : QApplication(argc, argv)
-  , m_localServer(new QLocalServer(this))
-  , m_linuxDesktop(new LinuxDesktop(this))
 {
+  m_dbusService = new KDBusService(
+    KDBusService::Unique | KDBusService::NoExitOnFailure, this);
+  if (!m_dbusService->isRegistered()) {
+    return;
+  }
+  m_primaryInstance = true;
+
+  if (!options.commands.isEmpty()) {
+    const auto commands = options.commands.join(QStringLiteral("; "));
+    logWarning(mainapp)
+      << tr("Cannot send commands '%1' - no running application instance found.").arg(commands);
+    m_startupExitCode = 43;
+    m_dbusService->unregister();
+    m_primaryInstance = false;
+    return;
+  }
+
+  m_linuxDesktop = new LinuxDesktop(this);
+
   if (screens().empty())
   {
     const auto title = tr("No Screens detected");
@@ -147,56 +156,12 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
 
   // Setup the spotlight connections.
   setupSpotlight();
-
-  // Open local server for local IPC commands, e.g. from other command line instances
-  QLocalServer::removeServer(localServerName());
-  if (m_localServer->listen(localServerName()))
-  {
-    connect(m_localServer, &QLocalServer::newConnection, this, [this]()
-    {
-      while(QLocalSocket *clientConnection = m_localServer->nextPendingConnection())
-      {
-        connect(clientConnection, &QLocalSocket::readyRead, this, [this, clientConnection]() {
-          this->readCommand(clientConnection);
-        });
-        connect(clientConnection, &QLocalSocket::disconnected, this, [this, clientConnection]() {
-          const auto it = m_commandConnections.find(clientConnection);
-          if (it != m_commandConnections.end())
-          {
-            quint32& commandSize = it->second;
-            while (clientConnection->bytesAvailable() && commandSize <= clientConnection->bytesAvailable()) {
-              this->readCommand(clientConnection);
-            }
-            m_commandConnections.erase(it);
-          }
-          clientConnection->close();
-          clientConnection->deleteLater();
-        });
-
-        // Timeout timer - if after 5 seconds the connection is still open just disconnect...
-        const auto clientConnPtr = QPointer<QLocalSocket>(clientConnection);
-        QTimer::singleShot(5000, clientConnection, [clientConnPtr](){
-          if (clientConnPtr) {
-            // time out
-            clientConnPtr->disconnectFromServer();
-          }
-        });
-
-        m_commandConnections.emplace(clientConnection, 0);
-      }
-    });
-  }
-  else
-  {
-    logError(cmdserver) << tr("Error starting local socket for inter-process communication.");
-  }
 }
 
 // -------------------------------------------------------------------------------------------------
 ProjecteurApplication::~ProjecteurApplication()
 {
-  if (m_control) { m_control->unregisterService(); }
-  if (m_localServer) { m_localServer->close(); }
+  if (m_control) { m_control->unregisterObject(); }
   for (const auto window : m_overlayWindows) { delete window; }
   m_overlayWindows.clear();
   m_screenWindowMap.clear();
@@ -270,8 +235,8 @@ void ProjecteurApplication::setupControlService(Options const& options)
 {
   m_control = new ProjecteurControl(this, m_settings, m_spotlight, m_presentationTimer,
                                     !options.hideSysTrayIcon);
-  if (!m_control->registerService()) {
-    logError(mainapp) << tr("Could not register the Projecteur session D-Bus service.");
+  if (!m_control->registerObject()) {
+    logError(mainapp) << tr("Could not register the Projecteur D-Bus control object.");
   }
 }
 
@@ -491,37 +456,27 @@ void ProjecteurApplication::setCurrentCursorPos(const QPoint& pos)
 }
 
 // -------------------------------------------------------------------------------------------------
-void ProjecteurApplication::readCommand(QLocalSocket* clientConnection)
+void ProjecteurApplication::activate()
 {
-  auto it = m_commandConnections.find(clientConnection);
-  if (it == m_commandConnections.end()) {
-    return;
+  if (m_dialog) {
+    showPreferences(true);
   }
+}
 
-  quint32& commandSize = it->second;
-
-  // Read size of command (always quint32) if not already done.
-  if (commandSize == 0) {
-    if (clientConnection->bytesAvailable() < static_cast<int>(sizeof(quint32))) {
-      return;
-    }
-
-    QDataStream in(clientConnection);
-    in >> commandSize;
-
-    if (commandSize > 256)
-    {
-      logWarning(cmdserver) << tr("Received invalid command size (%1)").arg(commandSize);
-      clientConnection->disconnectFromServer();
-      return ;
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::applyCommands(const QStringList& commands)
+{
+  for (const auto& command : commands) {
+    const auto trimmedCommand = command.trimmed();
+    if (!trimmedCommand.isEmpty()) {
+      applyCommand(trimmedCommand);
     }
   }
+}
 
-  if (clientConnection->bytesAvailable() < commandSize || clientConnection->atEnd()) {
-    return;
-  }
-
-  const auto command = QString::fromLocal8Bit(clientConnection->read(commandSize));
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::applyCommand(const QString& command)
+{
   const QString cmdKey = command.section('=', 0, 0).trimmed();
   const QString cmdValue = command.section('=', 1).trimmed();
 
@@ -617,8 +572,6 @@ void ProjecteurApplication::readCommand(QLocalSocket* clientConnection)
       logWarning(cmdserver) << tr("Received unknown command key (%1)").arg(cmdKey);
     }
   }
-  // reset command size, for next command
-  commandSize = 0;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -638,57 +591,4 @@ void ProjecteurApplication::showPreferences(bool show)
       m_dialog->hide();
     }
   }
-}
-
-// =================================================================================================
-ProjecteurCommandClientApp::ProjecteurCommandClientApp(const QStringList& ipcCommands, int &argc, char **argv)
-  : QCoreApplication(argc, argv)
-{
-  if (ipcCommands.isEmpty())
-  {
-    QMetaObject::invokeMethod(this, "quit", Qt::QueuedConnection);
-    return;
-  }
-
-  QLocalSocket* const localSocket = new QLocalSocket(this);
-
-  auto socketErrorFunc = [this, localSocket](QLocalSocket::LocalSocketError /*socketError*/) {
-    logError(cmdclient) << tr("Error sending commands: %1", "%1=error message")
-                             .arg(localSocket->errorString());
-    localSocket->close();
-    QMetaObject::invokeMethod(this, "quit", Qt::QueuedConnection);
-  };
-
-  connect(localSocket, &QLocalSocket::errorOccurred, this, std::move(socketErrorFunc));
-
-  connect(localSocket, &QLocalSocket::connected, [localSocket, &ipcCommands]()
-  {
-    for (const auto& ipcCommand : ipcCommands)
-    {
-      if (ipcCommand.isEmpty()) { continue; }
-
-      const QByteArray commandBlock = [&ipcCommand]()
-      {
-        const QByteArray ipcBytes = ipcCommand.toLocal8Bit();
-        QByteArray block;
-        {
-          QDataStream out(&block, QIODevice::WriteOnly);
-          out << static_cast<quint32>(ipcBytes.size());
-        }
-        block.append(ipcBytes);
-        return block;
-      }();
-
-      localSocket->write(commandBlock);
-      localSocket->flush();
-    }
-    localSocket->disconnectFromServer();
-  });
-
-  connect(localSocket, &QLocalSocket::disconnected, this, [this, localSocket]() {
-    localSocket->close();
-    QMetaObject::invokeMethod(this, "quit", Qt::QueuedConnection);
-  });
-
-  localSocket->connectToServer(localServerName());
 }

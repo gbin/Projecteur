@@ -2,7 +2,9 @@ list(APPEND _PkgDeps_Projecteur_archlinux
   "qt6-base>=6.11"
   "qt6-declarative>=6.11"
   "layer-shell-qt>=6.7"
+  "kconfig>=6.7"
   "kcoreaddons>=6.7"
+  "kdbusaddons>=6.7"
   "libplasma>=6.7"
   "udev"
 )

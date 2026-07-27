@@ -25,7 +25,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui LinguistTools Quick Widgets)
-find_package(KF6 6.7 REQUIRED COMPONENTS Config CoreAddons Package KirigamiPlatform WindowSystem)
+find_package(KF6 6.7 REQUIRED COMPONENTS Config CoreAddons DBusAddons Package KirigamiPlatform WindowSystem)
 find_package(Plasma 6.7 REQUIRED)
 find_package(LayerShellQt 6.7 REQUIRED)
 set(QT_PACKAGE_NAME Qt6)
@@ -58,17 +58,26 @@ add_executable(projecteur
   src/presentationtimer.cc     src/presentationtimer.h
   src/projecteurapp.cc         src/projecteurapp.h
   src/projecteurcontrol.cc     src/projecteurcontrol.h
-  src/runguard.cc              src/runguard.h
   src/settings.cc              src/settings.h
   src/spotlight.cc             src/spotlight.h
   src/spotshapes.cc            src/spotshapes.h
   src/virtualdevice.cc         src/virtualdevice.h
   ${RESOURCES})
 
-target_include_directories(projecteur PRIVATE src)
+kconfig_target_kcfg_file(projecteur
+  FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/projecteurconfig.kcfg"
+  CLASS_NAME ProjecteurConfig
+  MUTATORS
+  DEFAULT_VALUE_GETTERS
+  KCONFIG_CONSTRUCTOR
+)
+
+target_include_directories(projecteur PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
 
 target_link_libraries(projecteur
-  PRIVATE Qt6::Core Qt6::DBus Qt6::Quick Qt6::Widgets LayerShellQt::Interface
+  PRIVATE Qt6::Core Qt6::DBus Qt6::Quick Qt6::Widgets
+          KF6::ConfigCore KF6::ConfigGui KF6::CoreAddons KF6::DBusAddons
+          LayerShellQt::Interface
 )
 
 target_compile_options(projecteur
@@ -110,7 +119,8 @@ add_translation_update_task("projecteur" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_
 
 # Add target with non-source files for convenience when using IDEs like QtCreator and others
 add_custom_target(non-sources SOURCES README.md LICENSE.md doc/CHANGELOG.md devices.conf
-                                      src/extra-devices.cc.in 55-projecteur.rules.in
+                                      src/extra-devices.cc.in src/projecteurconfig.kcfg
+                                      55-projecteur.rules.in
                                       cmake/templates/projecteur.desktop.in)
 
 # Install
@@ -201,8 +211,16 @@ get_target_property(VERSION_STRING projecteur VERSION_STRING)
 get_target_property(VERSION_DATE_MONTH_YEAR projecteur VERSION_DATE_MONTH_YEAR)
 set(HOMEPAGE "https://github.com/gbin/Projecteur-kde")
 
-configure_file("${TMPLDIR}/projecteur.desktop.in" "projecteur.desktop" @ONLY)
-install(FILES "${OUTDIR}/projecteur.desktop" DESTINATION share/applications/)
+set(PROJECTEUR_APPLICATION_ID "org.projecteur.Projecteur")
+configure_file("${TMPLDIR}/projecteur.desktop.in"
+               "${PROJECTEUR_APPLICATION_ID}.desktop" @ONLY)
+install(FILES "${OUTDIR}/${PROJECTEUR_APPLICATION_ID}.desktop"
+        DESTINATION share/applications/)
+kdbusaddons_generate_dbus_service_file(
+  projecteur
+  "${PROJECTEUR_APPLICATION_ID}"
+  "${KDE_INSTALL_FULL_BINDIR}"
+)
 
 # Configure man page and gzip it.
 option(COMPRESS_MAN_PAGE "Compress the man page" ON)
@@ -221,8 +239,10 @@ else()
   install(FILES "${OUTDIR}/projecteur.1" DESTINATION share/man/man1/)
 endif()
 
-configure_file("${TMPLDIR}/projecteur.metainfo.xml" "projecteur.metainfo.xml" @ONLY)
-install(FILES "${OUTDIR}/projecteur.metainfo.xml" DESTINATION share/metainfo/)
+configure_file("${TMPLDIR}/projecteur.metainfo.xml"
+               "${PROJECTEUR_APPLICATION_ID}.metainfo.xml" @ONLY)
+install(FILES "${OUTDIR}/${PROJECTEUR_APPLICATION_ID}.metainfo.xml"
+        DESTINATION share/metainfo/)
 
 configure_file("${TMPLDIR}/projecteur.bash-completion" "projecteur.bash-completion" @ONLY)
 install(FILES "${OUTDIR}/projecteur.bash-completion"

@@ -11,10 +11,10 @@
 #include <memory>
 #include <random>
 
+#include <KSharedDataCache>
+
 #include <QDataStream>
-#include <QDir>
-#include <QSettings>
-#include <QStandardPaths>
+#include <QIODevice>
 
 DECLARE_LOGGING_CATEGORY(hid)
 
@@ -23,9 +23,8 @@ namespace {
                                     && qRegisterMetaType<HIDPP::FeatureSet::FeatureTable>();
 
   // -----------------------------------------------------------------------------------------------
-  constexpr char featureSetFilename[] = "DeviceFeatureSet.conf";
-  constexpr char firmwareKey[] = "firmwareVersion";
-  constexpr char featureTableKey[] = "featureTable";
+  constexpr quint32 featureSetCacheFormatVersion = 1;
+  constexpr unsigned featureSetCacheSize = 1024 * 1024;
 
   // -----------------------------------------------------------------------------------------------
   namespace Defaults {
@@ -74,9 +73,56 @@ namespace {
   }
 
   // -----------------------------------------------------------------------------------------------
-  QString settingsKey(const DeviceId& dId, const QString& key) {
-    return QString("Device_%1_%2/%3")
-      .arg(logging::hexId(dId.vendorId), logging::hexId(dId.productId), key);
+  QString featureSetCacheKey(const DeviceId& dId) {
+    return QString("Device_%1_%2")
+      .arg(logging::hexId(dId.vendorId), logging::hexId(dId.productId));
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  KSharedDataCache& featureSetCache()
+  {
+    static KSharedDataCache cache(
+      QStringLiteral("projecteur-hidpp-features"), featureSetCacheSize);
+    return cache;
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  bool loadCachedFeatureSet(const DeviceId& dId, const HIDPP::FirmwareInfo& firmware,
+                            HIDPP::FeatureSet::FeatureTable& featureTable)
+  {
+    QByteArray data;
+    if (!featureSetCache().find(featureSetCacheKey(dId), &data)) {
+      return false;
+    }
+
+    QDataStream stream(data);
+    stream.setVersion(QDataStream::Qt_6_0);
+
+    quint32 formatVersion = 0;
+    HIDPP::FirmwareInfo cachedFirmware;
+    HIDPP::FeatureSet::FeatureTable cachedFeatureTable;
+    stream >> formatVersion >> cachedFirmware >> cachedFeatureTable;
+    if (stream.status() != QDataStream::Ok
+        || formatVersion != featureSetCacheFormatVersion
+        || !(cachedFirmware == firmware)) {
+      return false;
+    }
+
+    featureTable = std::move(cachedFeatureTable);
+    return true;
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  void cacheFeatureSet(const DeviceId& dId, const HIDPP::FirmwareInfo& firmware,
+                       const HIDPP::FeatureSet::FeatureTable& featureTable)
+  {
+    QByteArray data;
+    QDataStream stream(&data, QIODevice::WriteOnly);
+    stream.setVersion(QDataStream::Qt_6_0);
+    stream << featureSetCacheFormatVersion << firmware << featureTable;
+    if (stream.status() == QDataStream::Ok) {
+      featureSetCache().insert(featureSetCacheKey(dId), data);
+    }
   }
 }  // end anonymous namespace
 
@@ -508,31 +554,15 @@ void FeatureSet::initFromDevice(DeviceId dId, std::function<void(State)> cb)
         m_mainFirmwareInfo = std::move(fi);
       }
 
-      // --- Try to load feature set from cache file
-      const auto cacheFile = QStandardPaths::locate(
-        QStandardPaths::StandardLocation::AppLocalDataLocation, featureSetFilename);
-
-      if (!cacheFile.isEmpty() && res == MsgResult::Ok && m_mainFirmwareInfo.isValid())
+      // --- Try to load the feature set from the KDE shared data cache.
+      if (res == MsgResult::Ok && m_mainFirmwareInfo.isValid()
+          && loadCachedFeatureSet(dId, m_mainFirmwareInfo, m_featureTable))
       {
-        // load feature set and return
-        QSettings settings(cacheFile, QSettings::NativeFormat);
-        const auto fw = settings.value(settingsKey(dId, firmwareKey));
-        if (fw.canConvert<FirmwareInfo>())
-        {
-          auto cacheFirmwareInfo = fw.value<FirmwareInfo>();
-          if (cacheFirmwareInfo == m_mainFirmwareInfo)
-          {
-            const auto table = settings.value(settingsKey(dId, featureTableKey));
-            if (table.canConvert<FeatureTable>())
-            {
-              m_featureTable = table.value<FeatureTable>();
-              logDebug(hid) << tr("Loaded feature set with %1 entries from local cache").arg(m_featureTable.size());
-              setState(State::Initialized);
-              if (cb) { cb(m_state); }
-              return;
-            }
-          }
-        }
+        logDebug(hid)
+          << tr("Loaded feature set with %1 entries from local cache").arg(m_featureTable.size());
+        setState(State::Initialized);
+        if (cb) { cb(m_state); }
+        return;
       }
 
       getFeatureCount(makeSafeCallback(
@@ -559,16 +589,8 @@ void FeatureSet::initFromDevice(DeviceId dId, std::function<void(State)> cb)
             m_featureTable = std::move(ft);
             setState(State::Initialized);
 
-            // Store feature table in cache file
-            const auto dataPath = QStandardPaths::writableLocation(
-              QStandardPaths::StandardLocation::AppLocalDataLocation);
-
-            if (!dataPath.isEmpty() && m_mainFirmwareInfo.isValid())
-            {
-              const auto cacheFile = QDir(dataPath).filePath(featureSetFilename);
-              QSettings settings(cacheFile, QSettings::NativeFormat);
-              settings.setValue(settingsKey(dId, firmwareKey), QVariant::fromValue(m_mainFirmwareInfo));
-              settings.setValue(settingsKey(dId, featureTableKey), QVariant::fromValue(m_featureTable));
+            if (m_mainFirmwareInfo.isValid()) {
+              cacheFeatureSet(dId, m_mainFirmwareInfo, m_featureTable);
             }
           }
 

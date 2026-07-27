@@ -12,12 +12,11 @@
 
 class AboutDialog;
 class DeviceCommandHelper;
+class KDBusService;
 class LinuxDesktop;
 class PreferencesDialog;
 class PresentationTimer;
 class ProjecteurControl;
-class QLocalServer;
-class QLocalSocket;
 class QQmlApplicationEngine;
 class QQmlComponent;
 class Settings;
@@ -38,13 +37,19 @@ public:
     bool dialogMinimizeOnly = false;
     bool disableOverlay = false;
     bool hideSysTrayIcon = false;
+    QStringList commands;
     std::vector<SupportedDevice> additionalDevices;
   };
 
   explicit ProjecteurApplication(int &argc, char **argv, const Options& options);
   virtual ~ProjecteurApplication() override;
 
+  KDBusService* dbusService() const { return m_dbusService; }
+  bool isPrimaryInstance() const { return m_primaryInstance; }
+  int startupExitCode() const { return m_startupExitCode; }
   bool overlayVisible() const { return m_overlayVisible; }
+  void activate();
+  void applyCommands(const QStringList& commands);
 
 signals:
   void overlayVisibleChanged(bool visible);
@@ -57,12 +62,10 @@ public slots:
   void spotlightWindowClicked();
   void cursorPositionChanged(const QPoint& pos);
 
-private slots:
-  void readCommand(QLocalSocket* client);
-
 private:
   friend class ProjecteurControl;
 
+  void applyCommand(const QString& command);
   void showPreferences(bool show = true);
   void showAbout();
   void setScreenForCursorPos();
@@ -81,8 +84,8 @@ private:
 private:
   std::unique_ptr<PreferencesDialog> m_dialog;
   QPointer<AboutDialog> m_aboutDialog;
+  KDBusService* m_dbusService = nullptr;
   ProjecteurControl* m_control = nullptr;
-  QLocalServer* const m_localServer = nullptr;
   Settings* m_settings = nullptr;
   Spotlight* m_spotlight = nullptr;
   DeviceCommandHelper* m_deviceCommandHelper = nullptr;
@@ -90,19 +93,12 @@ private:
   LinuxDesktop* m_linuxDesktop = nullptr;
   QQmlApplicationEngine* m_qmlEngine = nullptr;
   QQmlComponent* m_windowQmlComponent = nullptr;
-  std::map<QLocalSocket*, quint32> m_commandConnections;
+  bool m_primaryInstance = false;
+  int m_startupExitCode = 0;
   bool m_overlayVisible = false;
 
   QList<QWindow*> m_overlayWindows;
   std::map<QScreen*, QWindow*> m_screenWindowMap;
   quint64 m_currentSpotScreen = 0;
   QPoint m_currentCursorPos;
-};
-
-class ProjecteurCommandClientApp : public QCoreApplication
-{
-  Q_OBJECT
-
-public:
-  explicit ProjecteurCommandClientApp(const QStringList& ipcCommands, int &argc, char **argv);
 };

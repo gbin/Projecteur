@@ -6,5 +6,6 @@ GenericName=Wayland spotlight for Logitech presenter devices
 Icon=projecteur
 Terminal=false
 StartupNotify=false
+DBusActivatable=true
 Categories=Office;Presentation;
 X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2

@@ -36,14 +36,14 @@ class ProjecteurControl : public QObject
 
 public:
   static constexpr auto ServiceName = "org.projecteur.Projecteur";
-  static constexpr auto ObjectPath = "/org/projecteur/Projecteur";
+  static constexpr auto ObjectPath = "/org/projecteur/Projecteur/Control";
   static constexpr auto InterfaceName = "org.projecteur.Projecteur";
 
   ProjecteurControl(ProjecteurApplication* application, Settings* settings, Spotlight* spotlight,
                     PresentationTimer* presentationTimer, bool trayVisible);
 
-  bool registerService();
-  void unregisterService();
+  bool registerObject();
+  void unregisterObject();
 
   bool trayVisible() const { return m_trayVisible; }
   bool overlayEnabled() const;
@@ -69,6 +69,7 @@ public slots:
   void SetTimerDurationSeconds(int seconds);
   void ShowPreferences();
   void ShowAbout();
+  void ApplyCommands(const QStringList& commands);
   void Quit();
 
 signals:
@@ -99,5 +100,4 @@ private:
   QString m_currentPreset;
   QSet<SubHidppConnection*> m_watchedBatteryConnections;
   bool m_objectRegistered = false;
-  bool m_serviceRegistered = false;
 };
