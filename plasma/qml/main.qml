@@ -28,6 +28,15 @@ PlasmoidItem {
     }
     Plasmoid.onActivated: root.expanded = !root.expanded
 
+    Plasmoid.contextualActions: [
+        PlasmaCore.Action {
+            text: i18n("Quit Projecteur")
+            icon.name: "application-exit-symbolic"
+            enabled: backend && backend.serviceAvailable
+            onTriggered: backend.quitProjecteur()
+        }
+    ]
+
     fullRepresentation: FullRepresentation {
         backend: root.backend
         plasmoidItem: root
