@@ -2,7 +2,8 @@
 Type=Application
 Exec=@PROJECTEUR_INSTALL_PATH@
 Name=Projecteur
-GenericName=Linux/X11 application for the Logitech Spotlight device.
+GenericName=Wayland spotlight for Logitech presenter devices
 Icon=projecteur
 Terminal=false
 Categories=Office;Presentation;
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2

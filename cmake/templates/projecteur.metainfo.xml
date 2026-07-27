@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<component>
-    <id>projecteur</id>
-    <metadata_license>Expat</metadata_license>
-    <project_license>Expat</project_license>
+<component type="desktop-application">
+    <id>io.github.jahnf.Projecteur</id>
+    <metadata_license>FSFAP</metadata_license>
+    <project_license>MIT</project_license>
     <name>Projecteur</name>
     <summary>Virtual pointer for the Logitech Spotlight device</summary>
+    <developer id="io.github.jahnf">
+        <name>Jahn Fuchs</name>
+    </developer>
+    <launchable type="desktop-id">projecteur.desktop</launchable>
+    <content_rating type="oars-1.1" />
     <url type="homepage">@HOMEPAGE@</url>
     <description>
         <p>

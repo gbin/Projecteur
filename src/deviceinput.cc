@@ -19,12 +19,8 @@
 LOGGING_CATEGORY(input, "input")
 
 namespace  {
-  // -----------------------------------------------------------------------------------------------
-  #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-  const auto registered_ = qRegisterMetaTypeStreamOperators<KeyEventSequence>()
-                           && qRegisterMetaTypeStreamOperators<MappedAction>();
-  #endif
-
+  const auto registeredMetaTypes_ = qRegisterMetaType<KeyEventSequence>()
+                                    && qRegisterMetaType<MappedAction>();
 
   // -----------------------------------------------------------------------------------------------
   void addKeyToString(QString& str, const QString& key)
@@ -393,11 +389,7 @@ QString NativeKeySequence::toString() const
   {
     if (i > 0) { seqString += QLatin1String(", "); }
 
-    #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-    const auto key = m_keySequence[i];
-    #else
     const auto key = m_keySequence[i].key();
-    #endif
 
     seqString += toString(key,
                           (i < m_nativeModifiers.size()) ? m_nativeModifiers[i]

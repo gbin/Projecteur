@@ -15,11 +15,10 @@ RUN pacman --noconfirm -Sy && pacman --noconfirm -S \
   make \
   cmake \
   git \
-  qt5-tools \
-  qt5-base \
-  qt5-declarative \
-  qt5-x11extras \
-  qt5-graphicaleffects
+  qt6-tools \
+  qt6-base \
+  qt6-declarative \
+  layer-shell-qt
 
 RUN pacman --noconfirm -Sy && pacman --noconfirm -S \
   libusb

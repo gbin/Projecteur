@@ -3,8 +3,8 @@
 develop: [![Build Status develop][gh-badge-dev]][gh-link-dev]
 master: [![Build Status master][gh-badge-rel]][gh-link-rel]
 
-Linux/X11 application for the Logitech Spotlight device (and similar devices). \
-See **[Download](#download)** section for binary packages.
+Qt 6 / KDE Plasma Wayland application for the Logitech Spotlight device (and similar devices). \
+This branch is the Qt 6 / Plasma Wayland port.
 
 [gh-badge-dev]: https://github.com/jahnf/Projecteur/workflows/ci-build/badge.svg?branch=develop
 [gh-badge-rel]: https://github.com/jahnf/Projecteur/workflows/ci-build/badge.svg?branch=master
@@ -32,7 +32,6 @@ So here it is: a Linux application for the Logitech Spotlight.
   - [How it works](#how-it-works)
     - [Button mapping](#button-mapping)
       - [Hold Button Mapping for Logitech Spotlight](#hold-button-mapping-for-logitech-spotlight)
-  - [Download](#download)
   - [Building](#building)
     - [Requirements](#requirements)
     - [Build Example](#build-example)
@@ -84,10 +83,12 @@ So here it is: a Linux application for the Logitech Spotlight.
 
 ## Supported Environments
 
-The application was mostly tested on Ubuntu 18.04, Ubuntu 20.04 (GNOME) and
-OpenSuse 15 (GNOME) but should work on almost any Linux/X11 Desktop. In case
-you are building the application yourself, make sure you have the correct udev
-rules installed (see [pre-requisites section](#pre-requisites)).
+This port targets KDE Plasma 6.7 on Wayland with Qt 6.11. X11 and Qt 5 are not
+supported. The spotlight overlay and device features are Wayland-native; zoom uses
+KWin's restricted `org.kde.KWin.ScreenShot2` interface.
+
+If you build the application yourself, install both the generated desktop entry and
+udev rules (see [pre-requisites](#pre-requisites)).
 
 ## How it works
 
@@ -145,54 +146,30 @@ mapped for a particular button, both actions will executed if user hold the
 button and move device. To avoid this situation, do not set both Long-Press
 and Hold Move actions for the same button.
 
-## Download
-
-The latest binary packages for some Linux distributions are available for download on cloudsmith.
-Currently binary packages for _Ubuntu_, _Debian_, _Fedora_, _OpenSuse_, _CentOS_ and
-_Arch_ Linux are automatically built. For release version downloads you can also visit
-the project's [github releases page](https://github.com/jahnf/Projecteur/releases).
-
-* **Latest release:**
-  * on cloudsmith: [![cloudsmith-rel-badge]][cloudsmith-rel-latest]
-  * on secondery server: [![projecteur-rel-badge]][projecteur-rel-dl]
-* Latest development version:
-  * on cloudsmith: [![cloudsmith-dev-badge]][cloudsmith-dev-latest]
-  * on secondary server: [![projecteur-dev-badge]][projecteur-dev-dl]
-
-See also the **[list of Linux repositories](./doc/LinuxRepositories.md)** where _Projecteur_
-is available.
-
-[cloudsmith-rel-badge]: https://img.shields.io/badge/dynamic/json?color=blue&labelColor=12577e&logo=cloudsmith&label=Projecteur&prefix=v&query=%24.version&url=https%3A%2F%2Fprojecteur.de%2Fdownloads%2Fstable-latest.json
-[cloudsmith-rel-latest]: https://cloudsmith.io/~jahnf/repos/projecteur-stable/packages/?q=format%3Araw+tag%3Alatest
-[cloudsmith-dev-badge]: https://img.shields.io/badge/dynamic/json?color=blue&labelColor=12577e&logo=cloudsmith&label=Projecteur&prefix=v&query=%24.version&url=https%3A%2F%2Fprojecteur.de%2Fdownloads%2Fdevelop-latest.json
-[cloudsmith-dev-latest]: https://cloudsmith.io/~jahnf/repos/projecteur-develop/packages/?q=format%3Araw+tag%3Alatest
-[projecteur-rel-badge]: https://img.shields.io/badge/dynamic/json?color=blue&label=Projecteur&prefix=v&query=%24.version&url=https%3A%2F%2Fprojecteur.de%2Fdownloads%2Fstable-latest.json
-[projecteur-dev-badge]: https://img.shields.io/badge/dynamic/json?color=blue&label=Projecteur&prefix=v&query=%24.version&url=https%3A%2F%2Fprojecteur.de%2Fdownloads%2Fdevelop-latest.json
-[projecteur-dev-dl]: https://projecteur.de/downloads/develop/latest
-[projecteur-rel-dl]: https://projecteur.de/downloads/stable/latest
-
 ## Building
 
 ### Requirements
 
-* C++14 compiler
-* CMake 3.6 or later
-* Qt 5.7 and later
+* C++17 compiler
+* CMake 3.20 or later
+* Qt 6.11 with Core, DBus, Gui, LinguistTools, Quick, and Widgets
+* KDE Plasma 6.7 Wayland
+* LayerShellQt 6.7
 
 ### Build Example
 
 ```sh
-    git clone https://github.com/jahnf/Projecteur
-    cd Projecteur
-    mkdir build && cd build
-    cmake ..
-    make
+git clone https://github.com/jahnf/Projecteur
+cd Projecteur
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build
+sudo cmake --install build
 ```
 
-Building against other Qt versions, than the default one from your Linux distribution
-can be done by setting the `QTDIR` variable during CMake configuration.
-
-Example: `QTDIR=/opt/Qt/5.9.6/gcc_64 cmake ..`
+Installing is required for zoom: KWin authorizes the screenshot interface by matching
+the running executable with the installed `projecteur.desktop` metadata. A binary run
+directly from the build directory can use the normal spotlight, but KWin will reject
+its zoom capture request.
 
 ## Installation/Running
 
@@ -212,11 +189,6 @@ file in this repository: `55-projecteur.rules.in`
 * After that, the input devices from the Logitech USB Receiver (but also the Bluetooth device)
   in /dev/input should be readable/writable by you.
   (See also about [device detection](#device-shows-as-not-connected))
-* When building against the Qt version that comes with your distribution's packages,
-  you might need to install some  additional QML module packages. For example this
-  is the case for Ubuntu, where you need to install the packages
-  `qml-module-qtgraphicaleffects`, `qml-module-qtquick-window2`, `qml-modules-qtquick2` and
-  `qtdeclarative5-dev` to satisfy the application's run time dependencies.
 
 ### Application Menu
 
@@ -326,32 +298,17 @@ sure the device is accessible (via udev rules).
 
 #### Opaque Spotlight / No Transparency
 
-To be able to show transparent windows, a **compositing manager** is necessary. If there is no
-compositing manager running you will see the spotlight overlay as an opaque window.
-
-* On **KDE** it might be necessary to turn on Desktop effects to allow transparent windows.
-* Depending on your Linux Desktop and configuration there might not be a compositing manager
-  running by default. You can run `xcompmgr`, `compton` or others manually.
-  * Examples: `xcompmgr -c -t-6 -l-6 -o.1` or `xcompmgr -c`
+The overlay requires the Plasma Wayland compositor. Verify that the session reports
+`XDG_SESSION_TYPE=wayland` and that Projecteur logs `Qt platform plugin: wayland`.
 
 #### Missing System Tray
 
-_Projecteur_ was developed and tested on GNOME and KDE Desktop environments, but should
-work on most other desktop environments. If the system tray with the _Application Menu_
-is not showing, commands can be send to the application to bring up the preferences
+If the Plasma system tray does not show the _Application Menu_, commands can be sent
+to the application to bring up the preferences
 dialog, test the spotlight, quit the application or set spotlight properties.
 See [Command Line Interface](#command-line-interface). There is also a command
 line option (`-m`) to prevent the preferences dialog from hiding, allowing it
 only to minimize - behaving more like a regular application window.
-
-On some distributions that have a **GNOME Desktop** by default there is
-**no system tray extensions** installed (_Fedora_ for example). You can install the
-[KStatusNotifierItem/AppIndicator Support][appind-ext] or the [TopIcons Plus][topicon-ext]
-GNOME extension to have a system tray that can show the _Projecteur_ tray icon
-(and also from other applications like Dropbox or Skype).
-
-[appind-ext]: https://extensions.gnome.org/extension/615/appindicator-support/
-[topicon-ext]: https://extensions.gnome.org/extension/1031/topicons/
 
 #### Zoom is not updated while spotlight is shown
 
@@ -365,20 +322,15 @@ same position on the screen.
 
 #### Wayland
 
-While not developed with Wayland in mind, users reported _Projecteur_ works with
-Wayland. If you experience problems, you can try to set the `QT_QPA_PLATFORM` environment
-variable to `wayland`, example:
-
-```bash
-user@ubuntu1904:~/Projecteur/build$ QT_QPA_PLATFORM=wayland ./projecteur
-Using Wayland-EGL
-```
+Wayland is the only supported windowing platform in this port. Do not force
+`QT_QPA_PLATFORM=xcb`.
 
 #### Wayland Zoom
 
-On Wayland the Zoom feature is currently only implemented on KDE and GNOME. This is done with
-the help of their respective DBus interfaces for screen capturing. On other environments with
-Wayland, the zoom feature is not currently supported.
+Zoom is implemented for KDE Plasma through KWin's `ScreenShot2` DBus interface. The
+installed desktop entry declares the required restricted interface. If the log says
+the process is not authorized to take a screenshot, install Projecteur instead of
+running it from an arbitrary build path.
 
 #### Device shows as not connected
 

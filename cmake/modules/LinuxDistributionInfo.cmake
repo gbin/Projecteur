@@ -1,5 +1,5 @@
 # This file is part of Projecteur - https://github.com/jahnf/projecteur - See LICENSE.md and README.md
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.20)
 
 # Try to get the Linux distribution and version as a string (host system)
 # When cross compiling this function won't work to get the target distribution.

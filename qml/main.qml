@@ -1,8 +1,7 @@
 // This file is part of Projecteur - https://github.com/jahnf/projecteur - See LICENSE.md and README.md
-import QtQuick 2.3
-import QtQuick.Window 2.2
-
-import QtGraphicalEffects 1.0
+import QtQuick
+import QtQuick.Effects
+import QtQuick.Window
 
 import Projecteur.Utils 1.0 as Utils
 
@@ -14,7 +13,7 @@ Window {
 
     width: 300; height: 200
 
-    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SplashScreen
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
 
     color: "transparent"
 
@@ -49,12 +48,12 @@ Window {
             }
         }
 
-        OpacityMask {
+        MultiEffect {
             visible: Settings.zoomEnabled && mainWindow.spotOnCurrentWindow
-            cached: true
             anchors.fill: centerRect
             source: desktopItem
-            maskSource: spotShapeLoader.item
+            maskEnabled: true
+            maskSource: spotShapeLoader
             enabled: false
         }
 
@@ -75,7 +74,7 @@ Window {
                 onClicked: { ProjecteurApp.spotlightWindowClicked() }
                 onExited: { ProjecteurApp.cursorExitedWindow() }
                 onEntered: { ProjecteurApp.cursorEntered(screenId) }
-                onPositionChanged: {
+                onPositionChanged: (mouse) => {
 
                     if (Settings.multiScreenOverlayEnabled) {
                         ProjecteurApp.cursorPositionChanged(
@@ -103,18 +102,20 @@ Window {
             visible: false; enabled: false
             anchors.centerIn: centerRect
             width: centerRect.width;  height: width
+            layer.enabled: true
             sourceComponent: Qt.createComponent(Settings.spotShape)
+            onLoaded: item.visible = true
         }
 
-        OpacityMask {
+        MultiEffect {
             id: spot
             visible: Settings.showSpotShade
             opacity: centerRect.opacity
-            cached: true
-            invert: true
             anchors.fill: centerRect
             source: centerRect
-            maskSource: spotShapeLoader.item
+            maskEnabled: true
+            maskInverted: true
+            maskSource: spotShapeLoader
             enabled: false
         }
 
@@ -123,9 +124,11 @@ Window {
             anchors.centerIn: centerRect
             width: centerRect.width;  height: width
             visible: false; enabled: false
+            layer.enabled: true
             sourceComponent: spotShapeLoader.sourceComponent
             onStatusChanged: {
                 if (status == Loader.Ready) {
+                    borderShapeLoader.item.visible = true
                     borderShapeLoader.item.color = Qt.binding(function(){ return Settings.borderColor; })
                 }
             }
@@ -136,6 +139,7 @@ Window {
             anchors.centerIn: centerRect
             width: centerRect.width;  height: width
             enabled: false; visible: false
+            layer.enabled: true
             Item {
                 id: borderShapeScaled
                 anchors.centerIn: parent
@@ -150,14 +154,14 @@ Window {
             }
         }
 
-        OpacityMask {
+        MultiEffect {
             id: spotBorder
             visible: Settings.showBorder && Settings.borderSize > 0
             opacity: Settings.borderOpacity
-            cached: true
-            invert: true
             anchors.fill: centerRect
-            source: borderShapeLoader.item
+            source: borderShapeLoader
+            maskEnabled: true
+            maskInverted: true
             maskSource: borderShapeMask
             enabled: false
         }

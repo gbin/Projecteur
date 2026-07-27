@@ -28,13 +28,8 @@ namespace  {
       constexpr int verticalMargin = 3;
       constexpr int horizontalMargin = 3;
       const int h = opt.fontMetrics.height() + 2 * verticalMargin;
-    #if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
       const int w = std::max(opt.fontMetrics.horizontalAdvance(ActionDelegate::tr("None")) + 2 * horizontalMargin,
                              opt.fontMetrics.horizontalAdvance(action->keySequence.toString()));
-    #else
-      const int w = std::max(opt.fontMetrics.width(ActionDelegate::tr("None")) + 2 * horizontalMargin,
-                             opt.fontMetrics.width(action->keySequence.toString()));
-    #endif
       return { w, h };
     }
   } // end namespace keysequence
@@ -315,12 +310,12 @@ void ActionTypeDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
 
   const auto symbol = [&item]() -> QChar {
     switch(item.action->type()) {
-    case Action::Type::KeySequence: return QChar(Font::Icon::keyboard_4);
-    case Action::Type::CyclePresets: return QChar(Font::Icon::connection_8);
-    case Action::Type::ToggleSpotlight: return QChar(Font::Icon::power_on_off_11);
-    case Action::Type::ScrollHorizontal: return QChar(Font::Icon::cursor_21_rotated);
-    case Action::Type::ScrollVertical: return QChar(Font::Icon::cursor_21);
-    case Action::Type::VolumeControl: return QChar(Font::Icon::audio_6);
+    case Action::Type::KeySequence: return QChar(static_cast<char16_t>(Font::Icon::keyboard_4));
+    case Action::Type::CyclePresets: return QChar(static_cast<char16_t>(Font::Icon::connection_8));
+    case Action::Type::ToggleSpotlight: return QChar(static_cast<char16_t>(Font::Icon::power_on_off_11));
+    case Action::Type::ScrollHorizontal: return QChar(static_cast<char16_t>(Font::Icon::cursor_21_rotated));
+    case Action::Type::ScrollVertical: return QChar(static_cast<char16_t>(Font::Icon::cursor_21));
+    case Action::Type::VolumeControl: return QChar(static_cast<char16_t>(Font::Icon::audio_6));
     }
     return QChar(0);
   }();
@@ -352,12 +347,12 @@ void ActionTypeDelegate::actionContextMenu(QWidget* parent, InputMapConfigModel*
   };
 
   static std::vector<actionEntry> items {
-    {Action::Type::KeySequence, QChar(Font::Icon::keyboard_4), tr("Key Sequence"), false},
-    {Action::Type::CyclePresets, QChar(Font::Icon::connection_8), tr("Cycle Presets"), false},
-    {Action::Type::ToggleSpotlight, QChar(Font::Icon::power_on_off_11), tr("Toggle Spotlight"), false},
-    {Action::Type::ScrollHorizontal, QChar(Font::Icon::cursor_21_rotated), tr("Scroll Horizontal"), true},
-    {Action::Type::ScrollVertical, QChar(Font::Icon::cursor_21), tr("Scroll Vertical"), true},
-    {Action::Type::VolumeControl, QChar(Font::Icon::audio_6), tr("Volume Control"), true},
+    {Action::Type::KeySequence, QChar(static_cast<char16_t>(Font::Icon::keyboard_4)), tr("Key Sequence"), false},
+    {Action::Type::CyclePresets, QChar(static_cast<char16_t>(Font::Icon::connection_8)), tr("Cycle Presets"), false},
+    {Action::Type::ToggleSpotlight, QChar(static_cast<char16_t>(Font::Icon::power_on_off_11)), tr("Toggle Spotlight"), false},
+    {Action::Type::ScrollHorizontal, QChar(static_cast<char16_t>(Font::Icon::cursor_21_rotated)), tr("Scroll Horizontal"), true},
+    {Action::Type::ScrollVertical, QChar(static_cast<char16_t>(Font::Icon::cursor_21)), tr("Scroll Vertical"), true},
+    {Action::Type::VolumeControl, QChar(static_cast<char16_t>(Font::Icon::audio_6)), tr("Volume Control"), true},
   };
 
   static bool initIcons = []()

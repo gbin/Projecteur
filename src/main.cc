@@ -212,7 +212,7 @@ namespace {
     // ---------------------------------------------------------------------------------------------
     ProjecteurCmdLineParser()
     {
-      parser.setApplicationDescription(Main::tr("Linux/X11 application for the Logitech Spotlight device."));
+      parser.setApplicationDescription(Main::tr("Wayland application for the Logitech Spotlight device."));
       parser.addOptions({versionOption_, helpOption_, fullHelpOption_, commandOption_,
                         cfgFileOption_, fullVersionOption_, deviceInfoOption_, logLvlOption_,
                         disableUInputOption_, showDlgOnStartOption_, dialogMinOnlyOption_,
