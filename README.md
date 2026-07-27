@@ -296,6 +296,7 @@ your screen in an online presentation or call.
 
 Besides the _Logitech Spotlight_, the following devices are currently supported out of the box:
 
+* Logitech Spotlight 2 via Bluetooth _(046d:b506)_
 * AVATTO H100 / August WP200 _(0c45:8101)_
 * August LP315 _(2312:863d)_
 * AVATTO i10 Pro _(2571:4109)_
