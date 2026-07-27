@@ -3,6 +3,7 @@
 
 #include "projecteurcontrol.h"
 
+#include "device-hidpp.h"
 #include "projecteurapp.h"
 #include "settings.h"
 #include "spotlight.h"
@@ -12,7 +13,27 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QQmlPropertyMap>
+#include <QTimer>
 #include <QVariantMap>
+
+namespace {
+QString batteryStatusName(HIDPP::BatteryStatus status)
+{
+  using BatteryStatus = HIDPP::BatteryStatus;
+  switch (status) {
+    case BatteryStatus::Discharging: return QStringLiteral("discharging");
+    case BatteryStatus::Charging: return QStringLiteral("charging");
+    case BatteryStatus::AlmostFull: return QStringLiteral("almost-full");
+    case BatteryStatus::Full: return QStringLiteral("full");
+    case BatteryStatus::SlowCharging: return QStringLiteral("slow-charging");
+    case BatteryStatus::InvalidBattery: return QStringLiteral("invalid-battery");
+    case BatteryStatus::ThermalError: return QStringLiteral("thermal-error");
+    case BatteryStatus::ChargingError: return QStringLiteral("charging-error");
+    case BatteryStatus::Uninitialized: return {};
+  }
+  return {};
+}
+}
 
 ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Settings* settings,
                                      Spotlight* spotlight, bool trayVisible)
@@ -36,9 +57,20 @@ ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Setting
     const auto devices = connectedDevices();
     emit connectedDevicesChanged(devices);
     emitPropertiesChanged({{QStringLiteral("ConnectedDevices"), devices}});
+    emitBatteryPropertiesChanged();
   };
   connect(m_spotlight, &Spotlight::deviceConnected, this, updateConnectedDevices);
   connect(m_spotlight, &Spotlight::deviceDisconnected, this, updateConnectedDevices);
+  connect(m_spotlight, &Spotlight::subDeviceConnected, this,
+  [this](const DeviceId& id, const QString& /* name */, const QString& path) {
+    watchBatteryConnection(id, path);
+  });
+
+  auto* batteryTimer = new QTimer(this);
+  batteryTimer->setTimerType(Qt::VeryCoarseTimer);
+  batteryTimer->setInterval(5 * 60 * 1000);
+  connect(batteryTimer, &QTimer::timeout, this, &ProjecteurControl::requestBatteryUpdates);
+  batteryTimer->start();
 
   const auto updatePresets = [this]() {
     if (!m_currentPreset.isEmpty() && !m_settings->presetModel()->hasPreset(m_currentPreset)) {
@@ -135,6 +167,55 @@ QStringList ProjecteurControl::connectedDevices() const
   return result;
 }
 
+QList<int> ProjecteurControl::connectedDeviceBatteryLevels() const
+{
+  QList<int> result;
+  for (const auto& device : m_spotlight->connectedDevices())
+  {
+    int level = -1;
+    const auto connection = m_spotlight->deviceConnection(device.id);
+    if (connection)
+    {
+      for (const auto& subDevice : connection->subDevices())
+      {
+        const auto hidpp = qobject_cast<SubHidppConnection*>(subDevice.second.get());
+        if (hidpp && hidpp->hasFlags(DeviceFlag::ReportBattery)
+            && hidpp->batteryInfo().status != HIDPP::BatteryStatus::Uninitialized)
+        {
+          level = hidpp->batteryInfo().currentLevel;
+          break;
+        }
+      }
+    }
+    result.push_back(level);
+  }
+  return result;
+}
+
+QStringList ProjecteurControl::connectedDeviceBatteryStatuses() const
+{
+  QStringList result;
+  for (const auto& device : m_spotlight->connectedDevices())
+  {
+    QString status;
+    const auto connection = m_spotlight->deviceConnection(device.id);
+    if (connection)
+    {
+      for (const auto& subDevice : connection->subDevices())
+      {
+        const auto hidpp = qobject_cast<SubHidppConnection*>(subDevice.second.get());
+        if (hidpp && hidpp->hasFlags(DeviceFlag::ReportBattery))
+        {
+          status = batteryStatusName(hidpp->batteryInfo().status);
+          if (!status.isEmpty()) { break; }
+        }
+      }
+    }
+    result.push_back(status);
+  }
+  return result;
+}
+
 QStringList ProjecteurControl::presets() const
 {
   QStringList result;
@@ -182,6 +263,56 @@ void ProjecteurControl::clearCurrentPreset()
   m_currentPreset.clear();
   emit currentPresetChanged(m_currentPreset);
   emitPropertiesChanged({{QStringLiteral("CurrentPreset"), m_currentPreset}});
+}
+
+void ProjecteurControl::emitBatteryPropertiesChanged()
+{
+  const auto levels = connectedDeviceBatteryLevels();
+  const auto statuses = connectedDeviceBatteryStatuses();
+  emit connectedDeviceBatteryLevelsChanged(levels);
+  emit connectedDeviceBatteryStatusesChanged(statuses);
+  emitPropertiesChanged({
+    {QStringLiteral("ConnectedDeviceBatteryLevels"), QVariant::fromValue(levels)},
+    {QStringLiteral("ConnectedDeviceBatteryStatuses"), statuses}
+  });
+}
+
+void ProjecteurControl::requestBatteryUpdates()
+{
+  for (const auto& device : m_spotlight->connectedDevices())
+  {
+    const auto connection = m_spotlight->deviceConnection(device.id);
+    if (!connection) { continue; }
+    for (const auto& subDevice : connection->subDevices())
+    {
+      const auto hidpp = qobject_cast<SubHidppConnection*>(subDevice.second.get());
+      if (hidpp && hidpp->hasFlags(DeviceFlag::ReportBattery)) {
+        hidpp->triggerBattyerInfoUpdate();
+      }
+    }
+  }
+}
+
+void ProjecteurControl::watchBatteryConnection(const DeviceId& id, const QString& path)
+{
+  const auto connection = m_spotlight->deviceConnection(id);
+  if (!connection) { return; }
+  const auto subDevice = connection->subDevice(path);
+  const auto hidpp = qobject_cast<SubHidppConnection*>(subDevice.get());
+  if (!hidpp) { return; }
+
+  connect(hidpp, &SubHidppConnection::batteryInfoChanged, this,
+          [this](const HIDPP::BatteryInfo&) { emitBatteryPropertiesChanged(); });
+  connect(hidpp, &SubHidppConnection::featureSetInitialized, this, [this, hidpp]() {
+    emitBatteryPropertiesChanged();
+    if (hidpp->hasFlags(DeviceFlag::ReportBattery)) {
+      hidpp->triggerBattyerInfoUpdate();
+    }
+  });
+
+  if (hidpp->hasFlags(DeviceFlag::ReportBattery)) {
+    hidpp->triggerBattyerInfoUpdate();
+  }
 }
 
 void ProjecteurControl::emitPropertiesChanged(const QVariantMap& changedProperties)

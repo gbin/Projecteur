@@ -731,10 +731,15 @@ void DeviceInfoWidget::updateBatteryInfo(SubHidppConnection* hdc)
   const auto batteryInfo = hdc->batteryInfo();
   if (batteryInfo.status == HIDPP::BatteryStatus::Discharging)
   {
-    m_batteryInfo =  QString("%1% - %2% (%3)").arg(
-                QString::number(batteryInfo.currentLevel),
-                QString::number(batteryInfo.nextReportedLevel),
-                toString(batteryInfo.status));
+    if (batteryInfo.currentLevel == batteryInfo.nextReportedLevel) {
+      m_batteryInfo = QString("%1% (%2)").arg(
+        QString::number(batteryInfo.currentLevel), toString(batteryInfo.status));
+    } else {
+      m_batteryInfo = QString("%1% - %2% (%3)").arg(
+        QString::number(batteryInfo.currentLevel),
+        QString::number(batteryInfo.nextReportedLevel),
+        toString(batteryInfo.status));
+    }
   } else {
     m_batteryInfo = toString(batteryInfo.status);
   }

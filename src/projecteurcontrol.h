@@ -2,6 +2,7 @@
 // - See LICENSE.md and README.md
 #pragma once
 
+#include <QList>
 #include <QObject>
 #include <QStringList>
 #include <QVariantMap>
@@ -9,6 +10,7 @@
 class ProjecteurApplication;
 class Settings;
 class Spotlight;
+struct DeviceId;
 
 class ProjecteurControl : public QObject
 {
@@ -18,6 +20,10 @@ class ProjecteurControl : public QObject
   Q_PROPERTY(bool OverlayEnabled READ overlayEnabled NOTIFY overlayEnabledChanged)
   Q_PROPERTY(bool SpotlightActive READ spotlightActive NOTIFY spotlightActiveChanged)
   Q_PROPERTY(QStringList ConnectedDevices READ connectedDevices NOTIFY connectedDevicesChanged)
+  Q_PROPERTY(QList<int> ConnectedDeviceBatteryLevels READ connectedDeviceBatteryLevels
+             NOTIFY connectedDeviceBatteryLevelsChanged)
+  Q_PROPERTY(QStringList ConnectedDeviceBatteryStatuses READ connectedDeviceBatteryStatuses
+             NOTIFY connectedDeviceBatteryStatusesChanged)
   Q_PROPERTY(QStringList Presets READ presets NOTIFY presetsChanged)
   Q_PROPERTY(QString CurrentPreset READ currentPreset NOTIFY currentPresetChanged)
 
@@ -36,6 +42,8 @@ public:
   bool overlayEnabled() const;
   bool spotlightActive() const;
   QStringList connectedDevices() const;
+  QList<int> connectedDeviceBatteryLevels() const;
+  QStringList connectedDeviceBatteryStatuses() const;
   QStringList presets() const;
   QString currentPreset() const { return m_currentPreset; }
 
@@ -51,11 +59,16 @@ signals:
   void overlayEnabledChanged(bool enabled);
   void spotlightActiveChanged(bool active);
   void connectedDevicesChanged(const QStringList& devices);
+  void connectedDeviceBatteryLevelsChanged(const QList<int>& levels);
+  void connectedDeviceBatteryStatusesChanged(const QStringList& statuses);
   void presetsChanged(const QStringList& presets);
   void currentPresetChanged(const QString& preset);
 
 private:
   void clearCurrentPreset();
+  void emitBatteryPropertiesChanged();
+  void requestBatteryUpdates();
+  void watchBatteryConnection(const DeviceId& id, const QString& path);
   void emitPropertiesChanged(const QVariantMap& changedProperties);
 
   ProjecteurApplication* const m_application;

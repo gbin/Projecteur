@@ -5,6 +5,7 @@
 
 #include <KPluginFactory>
 
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusInterface>
@@ -41,6 +42,14 @@ ProjecteurApplet::ProjecteurApplet(QObject* parent, const KPluginMetaData& data,
   bus.connect(QString::fromLatin1(serviceName), QString::fromLatin1(objectPath),
               QString::fromLatin1(interfaceName), QStringLiteral("connectedDevicesChanged"),
               this, SLOT(remoteConnectedDevicesChanged(QStringList)));
+  bus.connect(QString::fromLatin1(serviceName), QString::fromLatin1(objectPath),
+              QString::fromLatin1(interfaceName),
+              QStringLiteral("connectedDeviceBatteryLevelsChanged"),
+              this, SLOT(remoteConnectedDeviceBatteryLevelsChanged(QList<int>)));
+  bus.connect(QString::fromLatin1(serviceName), QString::fromLatin1(objectPath),
+              QString::fromLatin1(interfaceName),
+              QStringLiteral("connectedDeviceBatteryStatusesChanged"),
+              this, SLOT(remoteConnectedDeviceBatteryStatusesChanged(QStringList)));
   bus.connect(QString::fromLatin1(serviceName), QString::fromLatin1(objectPath),
               QString::fromLatin1(interfaceName), QStringLiteral("presetsChanged"),
               this, SLOT(remotePresetsChanged(QStringList)));
@@ -125,6 +134,20 @@ void ProjecteurApplet::remoteConnectedDevicesChanged(const QStringList& devices)
   emit connectedDevicesChanged();
 }
 
+void ProjecteurApplet::remoteConnectedDeviceBatteryLevelsChanged(const QList<int>& levels)
+{
+  if (m_connectedDeviceBatteryLevels == levels) { return; }
+  m_connectedDeviceBatteryLevels = levels;
+  emit connectedDeviceBatteryLevelsChanged();
+}
+
+void ProjecteurApplet::remoteConnectedDeviceBatteryStatusesChanged(const QStringList& statuses)
+{
+  if (m_connectedDeviceBatteryStatuses == statuses) { return; }
+  m_connectedDeviceBatteryStatuses = statuses;
+  emit connectedDeviceBatteryStatusesChanged();
+}
+
 void ProjecteurApplet::remotePresetsChanged(const QStringList& presets)
 {
   if (m_presets == presets) { return; }
@@ -153,6 +176,10 @@ void ProjecteurApplet::refresh()
   remoteOverlayEnabledChanged(interface.property("OverlayEnabled").toBool());
   remoteSpotlightActiveChanged(interface.property("SpotlightActive").toBool());
   remoteConnectedDevicesChanged(interface.property("ConnectedDevices").toStringList());
+  remoteConnectedDeviceBatteryLevelsChanged(
+    qdbus_cast<QList<int>>(interface.property("ConnectedDeviceBatteryLevels")));
+  remoteConnectedDeviceBatteryStatusesChanged(
+    interface.property("ConnectedDeviceBatteryStatuses").toStringList());
   remotePresetsChanged(interface.property("Presets").toStringList());
   remoteCurrentPresetChanged(interface.property("CurrentPreset").toString());
 }
@@ -166,6 +193,8 @@ void ProjecteurApplet::resetState()
   remoteOverlayEnabledChanged(true);
   remoteSpotlightActiveChanged(false);
   remoteConnectedDevicesChanged({});
+  remoteConnectedDeviceBatteryLevelsChanged({});
+  remoteConnectedDeviceBatteryStatusesChanged({});
   remotePresetsChanged({});
   remoteCurrentPresetChanged({});
 }

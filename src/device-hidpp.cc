@@ -395,22 +395,32 @@ void SubHidppConnection::getBatteryLevelStatus(
 {
   using namespace HIDPP;
 
-  const auto batteryIndex = m_featureSet.featureIndex(FeatureCode::BatteryStatus);
+  const auto batteryStatusIndex = m_featureSet.featureIndex(FeatureCode::BatteryStatus);
+  const auto unifiedBatteryIndex = m_featureSet.featureIndex(FeatureCode::UnifiedBattery);
+  const auto batteryIndex = batteryStatusIndex != 0 ? batteryStatusIndex : unifiedBatteryIndex;
   if (batteryIndex == 0)
   {
     if (cb) { cb(MsgResult::FeatureNotSupported, {}); }
     return;
   }
 
-  Message batteryReqMsg(Message::Type::Short, DeviceIndex::WirelessDevice1, batteryIndex, 0);
-  sendRequest(std::move(batteryReqMsg), [cb=std::move(cb)](MsgResult res, Message&& msg) mutable
+  // BATTERY_STATUS uses getBatteryLevelStatus (function 0), whereas
+  // UNIFIED_BATTERY uses getStatus (function 1).
+  const uint8_t function = batteryStatusIndex != 0 ? 0 : 1;
+  Message batteryReqMsg(
+    Message::Type::Short, DeviceIndex::WirelessDevice1, batteryIndex, function);
+  sendRequest(std::move(batteryReqMsg),
+  [cb=std::move(cb), unified=unifiedBatteryIndex != 0 && batteryStatusIndex == 0]
+  (MsgResult res, Message&& msg) mutable
   {
     if (!cb) { return; }
 
-    auto batteryInfo = (res != MsgResult::Ok) ? BatteryInfo{}
-                                              : BatteryInfo{msg[4],
-                                                            msg[5],
-                                                            to_enum<BatteryStatus>(msg[6])};
+    // UNIFIED_BATTERY returns the exact discharge percentage, an approximate
+    // level, and the same status byte as BATTERY_STATUS. It has no "next
+    // reported percentage", so use the current percentage for both fields.
+    auto batteryInfo = (res != MsgResult::Ok)
+      ? BatteryInfo{}
+      : BatteryInfo{msg[4], unified ? msg[4] : msg[5], to_enum<BatteryStatus>(msg[6])};
     cb(res, std::move(batteryInfo));
   });
 }
@@ -693,10 +703,16 @@ void SubHidppConnection::updateDeviceFlags()
     featureFlagsUnset |= DeviceFlag::Vibrate;
   }
 
-  if (m_featureSet.featureCodeSupported(HIDPP::FeatureCode::BatteryStatus)) {
+  const bool hasBatteryStatus =
+    m_featureSet.featureCodeSupported(HIDPP::FeatureCode::BatteryStatus);
+  const bool hasUnifiedBattery =
+    m_featureSet.featureCodeSupported(HIDPP::FeatureCode::UnifiedBattery);
+  if (hasBatteryStatus || hasUnifiedBattery) {
     featureFlagsSet |= DeviceFlag::ReportBattery;
     logDebug(hid) << tr("Subdevice '%1' reported %2 support.")
-                     .arg(path()).arg(toString(HIDPP::FeatureCode::BatteryStatus));
+                     .arg(path()).arg(toString(hasBatteryStatus
+                       ? HIDPP::FeatureCode::BatteryStatus
+                       : HIDPP::FeatureCode::UnifiedBattery));
   } else {
     featureFlagsUnset |= DeviceFlag::ReportBattery;
   }
@@ -771,6 +787,13 @@ void SubHidppConnection::registerForFeatureNotifications()
     registerNotificationCallback(this, batIndex, makeSafeCallback([this](Message&& msg) {
       setBatteryInfo(BatteryInfo{msg[4], msg[5], to_enum<BatteryStatus>(msg[6])});
     }), 0 /* function 0 */);  }
+
+  if (const auto batIndex = m_featureSet.featureIndex(FeatureCode::UnifiedBattery))
+  {
+    registerNotificationCallback(this, batIndex, makeSafeCallback([this](Message&& msg) {
+      setBatteryInfo(BatteryInfo{msg[4], msg[4], to_enum<BatteryStatus>(msg[6])});
+    }), 0 /* function 0 */);
+  }
 }
 
 // -------------------------------------------------------------------------------------------------

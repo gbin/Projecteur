@@ -90,6 +90,7 @@ enum class FeatureCode : uint16_t {
   Reset                = 0x0020,
   DFUControlSigned     = 0x00c2,
   BatteryStatus        = 0x1000,
+  UnifiedBattery       = 0x1004,
   PresenterControl     = 0x1a00,
   Sensor3D             = 0x1a01,
   ReprogramControlsV4  = 0x1b04,
@@ -257,6 +258,12 @@ enum class BatteryStatus : uint8_t {Discharging    = 0x00,
                                     ChargingError  = 0x07
                                    };
 ```
+
+Newer devices such as the Logitech Spotlight 2 use the Unified Battery Feature
+Code (`0x1004`). Its `getStatus` request uses function code `0x01`; the response
+contains the current discharge percentage in the fifth byte, an approximate
+battery level in the sixth byte, and the same battery status value in the
+seventh byte.
 
 ## Processing of device response
 

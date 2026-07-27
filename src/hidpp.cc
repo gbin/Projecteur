@@ -729,6 +729,7 @@ const char* toString(HIDPP::FeatureCode fc)
     ENUM_CASE_STRINGIFY(FeatureCode::Reset);
     ENUM_CASE_STRINGIFY(FeatureCode::DFUControlSigned);
     ENUM_CASE_STRINGIFY(FeatureCode::BatteryStatus);
+    ENUM_CASE_STRINGIFY(FeatureCode::UnifiedBattery);
     ENUM_CASE_STRINGIFY(FeatureCode::PresenterControl);
     ENUM_CASE_STRINGIFY(FeatureCode::Sensor3D);
     ENUM_CASE_STRINGIFY(FeatureCode::ReprogramControlsV4);
