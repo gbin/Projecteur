@@ -3,7 +3,6 @@
 
 #include "projecteurapp.h"
 
-#include "aboutdlg.h"
 #include "device-command-helper.h"
 #include "imageitem.h"
 #include "linuxdesktop.h"
@@ -14,12 +13,19 @@
 #include "settings.h"
 #include "spotlight.h"
 
+#include <KAboutApplicationDialog>
+#include <KAboutData>
 #include <KDBusService>
+#include <KNotification>
+#include <KWindowSystem>
 #include <LayerShellQt/Window>
 
 #include <QFontDatabase>
+#include <QIcon>
 #include <QMessageBox>
 #include <QPointer>
+#include <QHash>
+#include <QSet>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlProperty>
@@ -31,6 +37,18 @@
 LOGGING_CATEGORY(mainapp, "mainapp")
 LOGGING_CATEGORY(cmdserver, "cmdserver")
 
+namespace {
+constexpr auto notificationComponent = "projecteur";
+
+void sendNotification(const QString& eventId, const QString& title, const QString& text,
+                      const QString& iconName = QStringLiteral("projecteur"))
+{
+  KNotification::event(
+    eventId, title, text, iconName, KNotification::CloseOnTimeout,
+    QString::fromLatin1(notificationComponent));
+}
+}
+
 // -------------------------------------------------------------------------------------------------
 ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Options& options)
   : QApplication(argc, argv)
@@ -41,6 +59,8 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
     return;
   }
   m_primaryInstance = true;
+  setWindowIcon(QIcon::fromTheme(
+    QStringLiteral("projecteur"), QIcon(QStringLiteral(":/icons/projecteur-tray.svg"))));
 
   if (!options.commands.isEmpty()) {
     const auto commands = options.commands.join(QStringLiteral("; "));
@@ -146,6 +166,7 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
 
   // Expose application state and actions to the native Plasma system tray applet.
   setupControlService(options);
+  setupNotifications();
 
   connect(this, &ProjecteurApplication::aboutToQuit, this, [this](){
     m_linuxDesktop->setShakeCursorEffectSuppressed(false);
@@ -224,8 +245,7 @@ void ProjecteurApplication::setupSpotlight()
 
   connect(m_spotlight, &Spotlight::spotActiveChanged, this, [this](bool active){
     if (!active && m_dialog->isVisible()) {
-      m_dialog->raise();
-      m_dialog->activateWindow();
+      showAndActivate(m_dialog.get());
     }
   });
 }
@@ -241,21 +261,112 @@ void ProjecteurApplication::setupControlService(Options const& options)
 }
 
 // -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::setupNotifications()
+{
+  connect(m_presentationTimer, &PresentationTimer::stateChanged, this,
+          [this](PresentationTimer::State state) {
+    if (state == PresentationTimer::State::Completed) {
+      sendNotification(
+        QStringLiteral("presentationTimerFinished"),
+        tr("Presentation timer finished"),
+        tr("The configured presentation time has elapsed."),
+        QStringLiteral("chronometer"));
+    }
+  });
+
+  connect(m_spotlight, &Spotlight::deviceConnected, this,
+          [this](const DeviceId&, const QString& name) {
+    sendNotification(
+      QStringLiteral("presenterConnected"),
+      tr("Presenter connected"),
+      tr("%1 is ready.").arg(name),
+      QStringLiteral("input-mouse"));
+  });
+  connect(m_spotlight, &Spotlight::deviceDisconnected, this,
+          [this](const DeviceId&, const QString& name) {
+    sendNotification(
+      QStringLiteral("presenterDisconnected"),
+      tr("Presenter disconnected"),
+      tr("%1 is no longer available.").arg(name),
+      QStringLiteral("input-mouse"));
+  });
+
+  const auto inaccessiblePaths = std::make_shared<QSet<QString>>();
+  connect(m_spotlight, &Spotlight::deviceAccessError, this,
+          [this, inaccessiblePaths](const QString& name, const QString& path) {
+    if (inaccessiblePaths->contains(path)) { return; }
+    inaccessiblePaths->insert(path);
+    sendNotification(
+      QStringLiteral("deviceAccessError"),
+      tr("Presenter access failed"),
+      tr("%1 cannot access %2. Check the installed udev rules and device permissions.")
+        .arg(name, path),
+      QStringLiteral("dialog-warning"));
+  });
+  connect(m_spotlight, &Spotlight::subDeviceConnected, this,
+          [inaccessiblePaths](const DeviceId&, const QString&, const QString& path) {
+    inaccessiblePaths->remove(path);
+  });
+
+  const auto batteryWarnings = std::make_shared<QHash<QString, QString>>();
+  connect(m_control, &ProjecteurControl::batteryStateChanged, this,
+          [this, batteryWarnings](const QString& name, int level, const QString& status) {
+    QString warningKey;
+    QString eventId;
+    QString title;
+    QString text;
+    QString iconName;
+
+    if (status == QStringLiteral("invalid-battery")
+        || status == QStringLiteral("thermal-error")
+        || status == QStringLiteral("charging-error")) {
+      warningKey = QStringLiteral("error:") + status;
+      eventId = QStringLiteral("presenterBatteryError");
+      title = tr("Presenter battery problem");
+      text = tr("%1 reported a battery error: %2.").arg(name, status);
+      iconName = QStringLiteral("dialog-warning");
+    } else if (level >= 0 && level <= 20 && status == QStringLiteral("discharging")) {
+      warningKey = QStringLiteral("low");
+      eventId = QStringLiteral("presenterBatteryLow");
+      title = tr("Presenter battery low");
+      text = tr("%1 has %2% battery remaining.").arg(name).arg(level);
+      iconName = QStringLiteral("battery-low");
+    }
+
+    if (warningKey.isEmpty()) {
+      batteryWarnings->remove(name);
+      return;
+    }
+    if (batteryWarnings->value(name) == warningKey) { return; }
+    batteryWarnings->insert(name, warningKey);
+    sendNotification(eventId, title, text, iconName);
+  });
+  connect(m_spotlight, &Spotlight::deviceDisconnected, this,
+          [batteryWarnings](const DeviceId&, const QString& name) {
+    batteryWarnings->remove(name);
+  });
+}
+
+// -------------------------------------------------------------------------------------------------
 void ProjecteurApplication::showAbout()
 {
   if (!m_aboutDialog) {
-    m_aboutDialog = new AboutDialog();
-    connect(m_aboutDialog, &QDialog::finished, this, [this](int /* result */) {
-      m_aboutDialog->deleteLater();
-    });
+    m_aboutDialog = new KAboutApplicationDialog(KAboutData::applicationData());
+    m_aboutDialog->setAttribute(Qt::WA_DeleteOnClose);
   }
 
-  if (m_aboutDialog->isVisible()) {
-    m_aboutDialog->show();
-    m_aboutDialog->raise();
-    m_aboutDialog->activateWindow();
-  } else {
-    m_aboutDialog->open();
+  showAndActivate(m_aboutDialog);
+}
+
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::showAndActivate(QWidget* widget)
+{
+  if (!widget) { return; }
+  widget->show();
+  widget->raise();
+  if (auto* window = widget->windowHandle()) {
+    KWindowSystem::updateStartupId(window);
+    KWindowSystem::activateWindow(window);
   }
 }
 
@@ -579,10 +690,7 @@ void ProjecteurApplication::showPreferences(bool show)
 {
   if (show)
   {
-    m_dialog->show();
-    m_dialog->raise();
-    static const bool qtPlatformIsWayland = QGuiApplication::platformName().toLower().startsWith("wayland");
-    if (!qtPlatformIsWayland) { m_dialog->activateWindow(); }
+    showAndActivate(m_dialog.get());
   }
   else {
     if (m_dialog->mode() == PreferencesDialog::Mode::MinimizeOnlyDialog) {

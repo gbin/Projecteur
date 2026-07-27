@@ -8,6 +8,7 @@
 #include <QStringList>
 
 class QDBusServiceWatcher;
+class OrgProjecteurProjecteurInterface;
 
 class ProjecteurApplet : public Plasma::Applet
 {
@@ -91,11 +92,12 @@ private slots:
   void remoteTimerRemainingSecondsChanged(int seconds);
 
 private:
+  void createInterface();
   void refresh();
   void resetState();
-  void call(const QString& method, const QVariantList& arguments = {});
 
   QDBusServiceWatcher* m_serviceWatcher = nullptr;
+  OrgProjecteurProjecteurInterface* m_interface = nullptr;
   bool m_serviceAvailable = false;
   bool m_timerAvailable = false;
   bool m_trayVisible = true;

@@ -6,6 +6,7 @@
 #include "device-hidpp.h"
 #include "presentationtimer.h"
 #include "projecteurapp.h"
+#include "projecteurcontroladaptor.h"
 #include "settings.h"
 #include "spotlight.h"
 
@@ -46,6 +47,8 @@ ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Setting
   , m_presentationTimer(presentationTimer)
   , m_trayVisible(trayVisible)
 {
+  new ProjecteurControlAdaptor(this);
+
   connect(m_settings, &Settings::overlayDisabledChanged, this, [this](bool disabled) {
     const bool enabled = !disabled;
     emit overlayEnabledChanged(enabled);
@@ -155,8 +158,7 @@ bool ProjecteurControl::registerObject()
   auto connection = QDBusConnection::sessionBus();
   m_objectRegistered = connection.registerObject(
     QString::fromLatin1(ObjectPath), this,
-    QDBusConnection::ExportAllProperties | QDBusConnection::ExportAllSignals |
-      QDBusConnection::ExportAllSlots);
+    QDBusConnection::ExportAdaptors);
   return m_objectRegistered;
 }
 
@@ -368,6 +370,7 @@ void ProjecteurControl::watchBatteryConnection(const DeviceId& id, const QString
 {
   const auto connection = m_spotlight->deviceConnection(id);
   if (!connection) { return; }
+  const auto deviceName = connection->deviceName();
   const auto subDevice = connection->subDevice(path);
   const auto hidpp = qobject_cast<SubHidppConnection*>(subDevice.get());
   if (!hidpp) { return; }
@@ -379,9 +382,17 @@ void ProjecteurControl::watchBatteryConnection(const DeviceId& id, const QString
   });
 
   connect(hidpp, &SubHidppConnection::batteryInfoChanged, this,
-          [this](const HIDPP::BatteryInfo&) { emitBatteryPropertiesChanged(); });
-  connect(hidpp, &SubHidppConnection::featureSetInitialized, this, [this, hidpp]() {
+          [this, deviceName](const HIDPP::BatteryInfo& info) {
     emitBatteryPropertiesChanged();
+    emit batteryStateChanged(deviceName, info.currentLevel, batteryStatusName(info.status));
+  });
+  connect(hidpp, &SubHidppConnection::featureSetInitialized, this,
+          [this, hidpp, deviceName]() {
+    emitBatteryPropertiesChanged();
+    const auto& info = hidpp->batteryInfo();
+    if (info.status != HIDPP::BatteryStatus::Uninitialized) {
+      emit batteryStateChanged(deviceName, info.currentLevel, batteryStatusName(info.status));
+    }
     if (hidpp->hasFlags(DeviceFlag::ReportBattery)) {
       hidpp->triggerBattyerInfoUpdate();
     }

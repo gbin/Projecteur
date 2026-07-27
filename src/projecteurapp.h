@@ -10,8 +10,8 @@
 #include <map>
 #include <memory>
 
-class AboutDialog;
 class DeviceCommandHelper;
+class KAboutApplicationDialog;
 class KDBusService;
 class LinuxDesktop;
 class PreferencesDialog;
@@ -66,6 +66,7 @@ private:
   friend class ProjecteurControl;
 
   void applyCommand(const QString& command);
+  void showAndActivate(QWidget* widget);
   void showPreferences(bool show = true);
   void showAbout();
   void setScreenForCursorPos();
@@ -79,11 +80,12 @@ private:
   void setCurrentCursorPos(const QPoint& pos);
 
   void setupControlService(Options const& options);
+  void setupNotifications();
   void setupSpotlight();
 
 private:
   std::unique_ptr<PreferencesDialog> m_dialog;
-  QPointer<AboutDialog> m_aboutDialog;
+  QPointer<KAboutApplicationDialog> m_aboutDialog;
   KDBusService* m_dbusService = nullptr;
   ProjecteurControl* m_control = nullptr;
   Settings* m_settings = nullptr;

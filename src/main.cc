@@ -7,6 +7,7 @@
 #include "logging.h"
 #include "settings.h"
 
+#include <KAboutData>
 #include <KDBusService>
 
 #include <QCommandLineParser>
@@ -29,6 +30,68 @@ namespace {
 
   // -----------------------------------------------------------------------------------------------
   class Main : public QObject {};
+
+  KAboutData projecteurAboutData()
+  {
+    KAboutData aboutData(
+      QStringLiteral("Projecteur"),
+      QStringLiteral("Projecteur"),
+      QString::fromUtf8(projecteur::version_string()),
+      Main::tr("A KDE Plasma spotlight for Logitech presenter devices."),
+      KAboutLicense::MIT,
+      Main::tr("Copyright 2018–2021 Jahn Fuchs\n"
+               "Fork modifications copyright 2026 Guillaume Binet"),
+      {},
+      QStringLiteral("https://github.com/gbin/Projecteur-kde"),
+      QStringLiteral("https://github.com/gbin/Projecteur-kde/issues"));
+
+    aboutData.setOrganizationDomain("projecteur.org");
+    aboutData.setDesktopFileName(QStringLiteral("org.projecteur.Projecteur"));
+    aboutData.setOtherText(
+      Main::tr("Independent, unofficial KDE/Wayland fork based on Projecteur.\n\n"
+               "Build information:\n"
+               "Git branch: %1\n"
+               "Git hash: %2\n"
+               "Build type: %3")
+        .arg(QString::fromUtf8(projecteur::version_branch()),
+             QString::fromUtf8(projecteur::version_shorthash()),
+             QString::fromUtf8(projecteur::version_buildtype())));
+
+    aboutData.addAuthor(
+      QStringLiteral("Guillaume Binet"), Main::tr("KDE/Wayland fork maintainer"), {},
+      QStringLiteral("https://github.com/gbin"));
+    aboutData.addAuthor(
+      QStringLiteral("Jahn Fuchs"), Main::tr("Original Projecteur author"), {},
+      QStringLiteral("https://github.com/jahnf"));
+
+    const struct {
+      const char* name;
+      const char* githubName;
+    } contributors[] = {
+      {"Ricardo Jesus", "rj-jesus"},
+      {"Mayank Suman", "mayanksuman"},
+      {"Tiziano Müller", "dev-zero"},
+      {"Torsten Maehne", "maehne"},
+      {"TBK", "TBK"},
+      {"Louie Lu", "mlouielu"},
+      {"fmuelle4711", "fmuelle4711"},
+      {"Deniz Bahadir", "Bagira80"},
+      {"Tomáš Chvátal", "scarabeusiv"},
+      {"Brandon Johnson", "dbrandonjohnson"},
+      {"Stuart Prescott", "llimeht"},
+      {"Crista Renouard", "Lumnicence"},
+      {"freddii", "freddii"},
+      {"Matthias Blümel", "Blaimi"},
+      {"Grzegorz Szymaszek", "gszy"},
+      {"TheAssassin", "TheAssassin"},
+    };
+    for (const auto& contributor : contributors) {
+      aboutData.addCredit(
+        QString::fromUtf8(contributor.name), Main::tr("Contributor"), {},
+        QStringLiteral("https://github.com/%1").arg(QString::fromUtf8(contributor.githubName)));
+    }
+    return aboutData;
+  }
 
   std::ostream& operator<<(std::ostream& os, const QString& s) {
     os << s.toStdString();
@@ -334,10 +397,13 @@ namespace {
 // -------------------------------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
-  QCoreApplication::setApplicationName("Projecteur");
-  QCoreApplication::setOrganizationDomain("projecteur.org");
-  QCoreApplication::setApplicationVersion(projecteur::version_string());
-  QGuiApplication::setDesktopFileName(QStringLiteral("org.projecteur.Projecteur"));
+  const auto aboutData = projecteurAboutData();
+  KAboutData::setApplicationData(aboutData);
+  QCoreApplication::setApplicationName(aboutData.componentName());
+  QCoreApplication::setOrganizationDomain(aboutData.organizationDomain());
+  QCoreApplication::setApplicationVersion(aboutData.version());
+  QGuiApplication::setApplicationDisplayName(aboutData.displayName());
+  QGuiApplication::setDesktopFileName(aboutData.desktopFileName());
   ProjecteurApplication::Options options;
   {
     ProjecteurCmdLineParser parser;

@@ -71,7 +71,6 @@ private:
   std::unique_ptr<PresetComboCustomStyle> m_presetComboStyle;
   QComboBox* m_presetCombo = nullptr;
   QPushButton* m_closeMinimizeBtn = nullptr;
-  QPushButton* m_exitBtn = nullptr;
   DevicesWidget* m_deviceswidget = nullptr;
   bool m_active = false;
   Mode m_dialogMode = Mode::ClosableDialog;

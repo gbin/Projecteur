@@ -55,7 +55,6 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
   : QDialog(parent)
   , m_presetComboStyle(std::make_unique<PresetComboCustomStyle>())
   , m_closeMinimizeBtn(new QPushButton(this))
-  , m_exitBtn(new QPushButton(tr("&Quit %1").arg(QCoreApplication::applicationName()),this))
 {
   setWindowTitle(QCoreApplication::applicationName() + " - " + tr("Preferences"));
   setWindowIcon(QIcon(":/icons/projecteur-tray.svg"));
@@ -64,10 +63,6 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
   connect(m_closeMinimizeBtn, &QPushButton::clicked, this, [this](){
     if (m_dialogMode == Mode::ClosableDialog) { this->close(); }
     else { this->showMinimized(); }
-  });
-
-  connect(m_exitBtn, &QPushButton::clicked, this, [this](){
-    emit exitApplicationRequested();
   });
 
   const auto settingsWidget = createSettingsTabWidget(settings);
@@ -84,7 +79,6 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
   tabWidget->tabBar()->setTabButton(0, QTabBar::ButtonPosition::LeftSide, overlayCheckBox);
 
   const auto btnHBox = new QHBoxLayout;
-  btnHBox->addWidget(m_exitBtn);
   btnHBox->addStretch(1);
   btnHBox->addWidget(m_closeMinimizeBtn);
 

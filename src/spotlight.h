@@ -53,6 +53,7 @@ signals:
   void deviceDisconnected(const DeviceId& id, const QString& name);
   void subDeviceConnected(const DeviceId& id, const QString& name, const QString& path);
   void subDeviceDisconnected(const DeviceId& id, const QString& name, const QString& path);
+  void deviceAccessError(const QString& name, const QString& path);
   void anySpotlightDeviceConnectedChanged(bool connected);
   void spotActiveChanged(bool isActive);
   void slideNavigationPressed();

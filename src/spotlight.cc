@@ -184,10 +184,18 @@ int Spotlight::connectDevices()
     const bool anyConnectedBefore = anySpotlightDeviceConnected();
     for (const auto& scanSubDevice : dev.subDevices)
     {
-      if (!scanSubDevice.deviceReadable)
+      const bool requiresWriteAccess =
+        scanSubDevice.type == DeviceScan::SubDevice::Type::Hidraw;
+      if (!scanSubDevice.deviceReadable
+          || (requiresWriteAccess && !scanSubDevice.deviceWritable))
       {
-        logWarn(device) << tr("Sub-device not readable: %1 (%2:%3) %4")
+        logWarn(device) << tr("Sub-device not accessible: %1 (%2:%3) %4")
           .arg(dc->deviceName(), hexId(dev.id.vendorId), hexId(dev.id.productId), scanSubDevice.deviceFile);
+        QTimer::singleShot(
+          0, this,
+          [this, name = dc->deviceName(), path = scanSubDevice.deviceFile]() {
+            emit deviceAccessError(name, path);
+          });
         continue;
       }
       if (dc->hasSubDevice(scanSubDevice.deviceFile)) { continue; }

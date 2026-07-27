@@ -5,6 +5,9 @@ list(APPEND _PkgDeps_Projecteur_archlinux
   "kconfig>=6.7"
   "kcoreaddons>=6.7"
   "kdbusaddons>=6.7"
+  "knotifications>=6.7"
+  "kwindowsystem>=6.7"
+  "kxmlgui>=6.7"
   "libplasma>=6.7"
   "udev"
 )

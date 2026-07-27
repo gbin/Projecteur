@@ -84,6 +84,7 @@ signals:
   void timerStateChanged(const QString& state);
   void timerDurationSecondsChanged(int seconds);
   void timerRemainingSecondsChanged(int seconds);
+  void batteryStateChanged(const QString& deviceName, int level, const QString& status);
 
 private:
   void clearCurrentPreset();

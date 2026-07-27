@@ -22,6 +22,9 @@ RUN pacman --noconfirm -Sy && pacman --noconfirm -S \
   kconfig \
   kcoreaddons \
   kdbusaddons \
+  knotifications \
+  kwindowsystem \
+  kxmlgui \
   libplasma \
   layer-shell-qt
 

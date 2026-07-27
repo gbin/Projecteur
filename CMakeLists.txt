@@ -25,7 +25,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui LinguistTools Quick Widgets)
-find_package(KF6 6.7 REQUIRED COMPONENTS Config CoreAddons DBusAddons Package KirigamiPlatform WindowSystem)
+find_package(KF6 6.7 REQUIRED COMPONENTS Config CoreAddons DBusAddons Notifications
+                                        Package KirigamiPlatform WindowSystem XmlGui)
 find_package(Plasma 6.7 REQUIRED)
 find_package(LayerShellQt 6.7 REQUIRED)
 set(QT_PACKAGE_NAME Qt6)
@@ -36,7 +37,6 @@ qt6_add_resources(RESOURCES qml/qml.qrc resources.qrc)
 
 add_executable(projecteur
   src/main.cc                  src/enum-helper.h
-  src/aboutdlg.cc              src/aboutdlg.h
   src/actiondelegate.cc        src/actiondelegate.h
   src/colorselector.cc         src/colorselector.h
   src/device.cc                src/device.h
@@ -64,6 +64,17 @@ add_executable(projecteur
   src/virtualdevice.cc         src/virtualdevice.h
   ${RESOURCES})
 
+set(PROJECTEUR_CONTROL_XML
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/org.projecteur.Projecteur.xml")
+qt_add_dbus_adaptor(PROJECTEUR_DBUS_ADAPTOR_SOURCES
+  "${PROJECTEUR_CONTROL_XML}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/projecteurcontrol.h"
+  ProjecteurControl
+  projecteurcontroladaptor
+  ProjecteurControlAdaptor
+)
+target_sources(projecteur PRIVATE ${PROJECTEUR_DBUS_ADAPTOR_SOURCES})
+
 kconfig_target_kcfg_file(projecteur
   FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/projecteurconfig.kcfg"
   CLASS_NAME ProjecteurConfig
@@ -77,7 +88,7 @@ target_include_directories(projecteur PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(projecteur
   PRIVATE Qt6::Core Qt6::DBus Qt6::Quick Qt6::Widgets
           KF6::ConfigCore KF6::ConfigGui KF6::CoreAddons KF6::DBusAddons
-          LayerShellQt::Interface
+          KF6::Notifications KF6::WindowSystem KF6::XmlGui LayerShellQt::Interface
 )
 
 target_compile_options(projecteur
@@ -120,7 +131,8 @@ add_translation_update_task("projecteur" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_
 # Add target with non-source files for convenience when using IDEs like QtCreator and others
 add_custom_target(non-sources SOURCES README.md LICENSE.md doc/CHANGELOG.md devices.conf
                                       src/extra-devices.cc.in src/projecteurconfig.kcfg
-                                      55-projecteur.rules.in
+                                      src/org.projecteur.Projecteur.xml
+                                      55-projecteur.rules.in projecteur.notifyrc
                                       cmake/templates/projecteur.desktop.in)
 
 # Install
@@ -205,6 +217,8 @@ install(FILES icons/projecteur-tray.svg DESTINATION share/icons/hicolor/48x48/ap
 install(FILES icons/projecteur-tray.svg DESTINATION share/icons/hicolor/64x64/apps/ RENAME projecteur.svg)
 install(FILES icons/projecteur-tray.svg DESTINATION share/icons/hicolor/128x128/apps/ RENAME projecteur.svg)
 install(FILES icons/projecteur-tray.svg DESTINATION share/icons/hicolor/256x256/apps/ RENAME projecteur.svg)
+install(FILES projecteur.notifyrc DESTINATION ${KDE_INSTALL_KNOTIFYRCDIR})
+install(FILES src/org.projecteur.Projecteur.xml DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR})
 
 # Set variables for file configurations
 get_target_property(VERSION_STRING projecteur VERSION_STRING)

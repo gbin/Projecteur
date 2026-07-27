@@ -2,6 +2,11 @@ if(NOT CMAKE_LIBRARY_OUTPUT_DIRECTORY)
   set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 endif()
 
+qt_add_dbus_interface(PROJECTEUR_DBUS_INTERFACE_SOURCES
+  "${CMAKE_SOURCE_DIR}/src/org.projecteur.Projecteur.xml"
+  projecteurcontrolinterface
+)
+
 plasma_add_applet(org.projecteur.Projecteur
   QML_SOURCES
     qml/main.qml
@@ -9,6 +14,11 @@ plasma_add_applet(org.projecteur.Projecteur
   CPP_SOURCES
     projecteurapplet.cc
     projecteurapplet.h
+    ${PROJECTEUR_DBUS_INTERFACE_SOURCES}
+)
+
+target_include_directories(org.projecteur.Projecteur
+  PRIVATE "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
 target_link_libraries(org.projecteur.Projecteur

@@ -117,6 +117,9 @@ deps: _require-arch
         kconfig
         kcoreaddons
         kdbusaddons
+        knotifications
+        kwindowsystem
+        kxmlgui
         layer-shell-qt
         libplasma
         libglvnd
