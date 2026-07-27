@@ -150,36 +150,6 @@ PlasmaExtras.Representation {
                 Layout.fillWidth: true
             }
 
-            PlasmaComponents3.ToolButton {
-                text: i18n("About Projecteur")
-                icon.name: "help-about-symbolic"
-                display: PlasmaComponents3.AbstractButton.IconOnly
-                onClicked: {
-                    root.plasmoidItem.expanded = false;
-                    root.backend.showAbout();
-                }
-
-                PlasmaComponents3.ToolTip {
-                    text: parent.text
-                }
-
-            }
-
-            PlasmaComponents3.ToolButton {
-                text: i18n("Quit Projecteur")
-                icon.name: "application-exit-symbolic"
-                display: PlasmaComponents3.AbstractButton.IconOnly
-                onClicked: {
-                    root.plasmoidItem.expanded = false;
-                    root.backend.quitProjecteur();
-                }
-
-                PlasmaComponents3.ToolTip {
-                    text: parent.text
-                }
-
-            }
-
         }
 
     }

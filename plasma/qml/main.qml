@@ -30,6 +30,12 @@ PlasmoidItem {
 
     Plasmoid.contextualActions: [
         PlasmaCore.Action {
+            text: i18n("About Projecteur")
+            icon.name: "help-about-symbolic"
+            enabled: backend && backend.serviceAvailable
+            onTriggered: backend.showAbout()
+        },
+        PlasmaCore.Action {
             text: i18n("Quit Projecteur")
             icon.name: "application-exit-symbolic"
             enabled: backend && backend.serviceAvailable
