@@ -383,6 +383,120 @@ const QList<Settings::SpotShape>& Settings::spotShapes()
 }
 
 // -------------------------------------------------------------------------------------------------
+Settings::SpotlightSettings Settings::spotlightSettings() const
+{
+  SpotlightSettings values{
+    {::settings::showSpotShade, m_showSpotShade},
+    {::settings::spotSize, m_spotSize},
+    {::settings::showCenterDot, m_showCenterDot},
+    {::settings::dotSize, m_dotSize},
+    {::settings::dotColor, m_dotColor},
+    {::settings::dotOpacity, m_dotOpacity},
+    {::settings::shadeColor, m_shadeColor},
+    {::settings::shadeOpacity, m_shadeOpacity},
+    {::settings::cursor, static_cast<int>(m_cursor)},
+    {::settings::spotShape, m_spotShape},
+    {::settings::spotRotation, m_spotRotation},
+    {::settings::showBorder, m_showBorder},
+    {::settings::borderColor, m_borderColor},
+    {::settings::borderSize, m_borderSize},
+    {::settings::borderOpacity, m_borderOpacity},
+    {::settings::zoomEnabled, m_zoomEnabled},
+    {::settings::zoomFactor, m_zoomFactor},
+    {::settings::multiScreenOverlay, m_multiScreenOverlayEnabled},
+  };
+
+  for (const auto& shape : spotShapes())
+  {
+    const auto propertyMap = m_shapeSettings.find(shape.name());
+    if (propertyMap == m_shapeSettings.cend()) { continue; }
+
+    for (const auto& setting : shape.shapeSettings()) {
+      values.insert(QString("Shape.%1/%2").arg(shape.name(), setting.settingsKey()),
+                    propertyMap->second->property(setting.settingsKey().toLocal8Bit()));
+    }
+  }
+  return values;
+}
+
+// -------------------------------------------------------------------------------------------------
+Settings::SpotlightSettings Settings::defaultSpotlightSettings()
+{
+  SpotlightSettings values{
+    {::settings::showSpotShade, ::settings::defaultValue::showSpotShade},
+    {::settings::spotSize, ::settings::defaultValue::spotSize},
+    {::settings::showCenterDot, ::settings::defaultValue::showCenterDot},
+    {::settings::dotSize, ::settings::defaultValue::dotSize},
+    {::settings::dotColor, QColor(::settings::defaultValue::dotColor)},
+    {::settings::dotOpacity, ::settings::defaultValue::dotOpacity},
+    {::settings::shadeColor, QColor(::settings::defaultValue::shadeColor)},
+    {::settings::shadeOpacity, ::settings::defaultValue::shadeOpacity},
+    {::settings::cursor, static_cast<int>(::settings::defaultValue::cursor)},
+    {::settings::spotShape, QString(::settings::defaultValue::spotShape)},
+    {::settings::spotRotation, ::settings::defaultValue::spotRotation},
+    {::settings::showBorder, ::settings::defaultValue::showBorder},
+    {::settings::borderColor, QColor(::settings::defaultValue::borderColor)},
+    {::settings::borderSize, ::settings::defaultValue::borderSize},
+    {::settings::borderOpacity, ::settings::defaultValue::borderOpacity},
+    {::settings::zoomEnabled, ::settings::defaultValue::zoomEnabled},
+    {::settings::zoomFactor, ::settings::defaultValue::zoomFactor},
+    {::settings::multiScreenOverlay, ::settings::defaultValue::multiScreenOverlay},
+  };
+
+  for (const auto& shape : spotShapes()) {
+    for (const auto& setting : shape.shapeSettings()) {
+      values.insert(QString("Shape.%1/%2").arg(shape.name(), setting.settingsKey()),
+                    setting.defaultValue());
+    }
+  }
+  return values;
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setSpotlightSettings(const SpotlightSettings& values)
+{
+  setShowSpotShade(values.value(::settings::showSpotShade, m_showSpotShade).toBool());
+  setSpotSize(values.value(::settings::spotSize, m_spotSize).toInt());
+  setShowCenterDot(values.value(::settings::showCenterDot, m_showCenterDot).toBool());
+  setDotSize(values.value(::settings::dotSize, m_dotSize).toInt());
+  setDotColor(values.value(::settings::dotColor, m_dotColor).value<QColor>());
+  setDotOpacity(values.value(::settings::dotOpacity, m_dotOpacity).toDouble());
+  setShadeColor(values.value(::settings::shadeColor, m_shadeColor).value<QColor>());
+  setShadeOpacity(values.value(::settings::shadeOpacity, m_shadeOpacity).toDouble());
+  setCursor(static_cast<Qt::CursorShape>(
+    values.value(::settings::cursor, static_cast<int>(m_cursor)).toInt()));
+  setSpotShape(values.value(::settings::spotShape, m_spotShape).toString());
+  setSpotRotation(values.value(::settings::spotRotation, m_spotRotation).toDouble());
+  setShowBorder(values.value(::settings::showBorder, m_showBorder).toBool());
+  setBorderColor(values.value(::settings::borderColor, m_borderColor).value<QColor>());
+  setBorderSize(values.value(::settings::borderSize, m_borderSize).toInt());
+  setBorderOpacity(values.value(::settings::borderOpacity, m_borderOpacity).toDouble());
+  setZoomEnabled(values.value(::settings::zoomEnabled, m_zoomEnabled).toBool());
+  setZoomFactor(values.value(::settings::zoomFactor, m_zoomFactor).toDouble());
+  setMultiScreenOverlayEnabled(
+    values.value(::settings::multiScreenOverlay, m_multiScreenOverlayEnabled).toBool());
+
+  for (const auto& shape : spotShapes())
+  {
+    auto* propertyMap = shapeSettings(shape.name());
+    if (!propertyMap) { continue; }
+
+    for (const auto& setting : shape.shapeSettings()) {
+      const auto key = QString("Shape.%1/%2").arg(shape.name(), setting.settingsKey());
+      propertyMap->setProperty(
+        setting.settingsKey().toLocal8Bit(),
+        values.value(key, propertyMap->property(setting.settingsKey().toLocal8Bit())));
+    }
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
+KCoreConfigSkeleton* Settings::configSkeleton() const
+{
+  return m_config.get();
+}
+
+// -------------------------------------------------------------------------------------------------
 void Settings::setDefaults()
 {
   setShowSpotShade(settings::defaultValue::showSpotShade);

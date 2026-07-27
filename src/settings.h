@@ -13,6 +13,7 @@
 
 struct DeviceId;
 class InputMapConfig;
+class KCoreConfigSkeleton;
 class PresetModel;
 class ProjecteurConfig;
 class QQmlPropertyMap;
@@ -148,6 +149,12 @@ public:
 
   static const QList<SpotShape>& spotShapes();
   QQmlPropertyMap* shapeSettings(const QString& shapeName);
+
+  using SpotlightSettings = QVariantMap;
+  SpotlightSettings spotlightSettings() const;
+  static SpotlightSettings defaultSpotlightSettings();
+  void setSpotlightSettings(const SpotlightSettings& values);
+  KCoreConfigSkeleton* configSkeleton() const;
 
   struct StringProperty
   {

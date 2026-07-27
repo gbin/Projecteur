@@ -159,7 +159,7 @@ and Hold Move actions for the same button.
 * C++17 compiler
 * CMake 3.20 or later
 * Qt 6.11 with Core, DBus, Gui, LinguistTools, Quick, and Widgets
-* KDE Plasma 6.7 Wayland, including Libplasma, KConfig, KCoreAddons,
+* KDE Plasma 6.7 Wayland, including Libplasma, KConfig, KConfigWidgets, KCoreAddons,
   KDBusAddons, KNotifications, KWindowSystem, and KXmlGui
 * LayerShellQt 6.7
 * Extra CMake Modules 6.7 or later

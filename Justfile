@@ -115,6 +115,7 @@ deps: _require-arch
         extra-cmake-modules
         git
         kconfig
+        kconfigwidgets
         kcoreaddons
         kdbusaddons
         knotifications

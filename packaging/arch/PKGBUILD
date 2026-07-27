@@ -14,6 +14,7 @@ depends=(
   'gcc-libs'
   'glibc'
   'kconfig>=6.7'
+  'kconfigwidgets>=6.7'
   'kcoreaddons>=6.7'
   'kdbusaddons>=6.7'
   'knotifications>=6.7'

@@ -15,6 +15,7 @@
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QGroupBox>
@@ -28,7 +29,6 @@
 #include <QQmlPropertyMap>
 #include <QSpinBox>
 #include <QStyle>
-#include <QTabWidget>
 
 #include <map>
 
@@ -52,39 +52,37 @@ namespace {
 // -------------------------------------------------------------------------------------------------
 PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
                                      Mode dialogMode, QWidget* parent)
-  : QDialog(parent)
+  : KConfigDialog(parent, QStringLiteral("preferences"), settings->configSkeleton())
+  , m_settings(settings)
   , m_presetComboStyle(std::make_unique<PresetComboCustomStyle>())
-  , m_closeMinimizeBtn(new QPushButton(this))
 {
+  setAttribute(Qt::WA_DeleteOnClose, false);
   setWindowTitle(QCoreApplication::applicationName() + " - " + tr("Preferences"));
   setWindowIcon(QIcon(":/icons/projecteur-tray.svg"));
+  setFaceType(KPageDialog::Tabbed);
 
   setDialogMode(dialogMode);
-  connect(m_closeMinimizeBtn, &QPushButton::clicked, this, [this](){
-    if (m_dialogMode == Mode::ClosableDialog) { this->close(); }
-    else { this->showMinimized(); }
-  });
 
   const auto settingsWidget = createSettingsTabWidget(settings);
   settingsWidget->setDisabled(settings->overlayDisabled());
 
-  const auto tabWidget = new QTabWidget(this);
-  tabWidget->addTab(settingsWidget, tr("Spotlight"));
-  m_deviceswidget = new DevicesWidget(settings, spotlight, this);
-  tabWidget->addTab(m_deviceswidget, tr("Devices"));
-  tabWidget->addTab(createLogTabWidget(), tr("Log"));
-
-  const auto overlayCheckBox = new QCheckBox(this);
+  const auto spotlightPage = new QWidget(this);
+  const auto spotlightLayout = new QVBoxLayout(spotlightPage);
+  const auto overlayCheckBox = new QCheckBox(tr("Enable spotlight overlay"), spotlightPage);
   overlayCheckBox->setChecked(!settings->overlayDisabled());
-  tabWidget->tabBar()->setTabButton(0, QTabBar::ButtonPosition::LeftSide, overlayCheckBox);
+  spotlightLayout->addWidget(overlayCheckBox);
+  spotlightLayout->addWidget(settingsWidget);
 
-  const auto btnHBox = new QHBoxLayout;
-  btnHBox->addStretch(1);
-  btnHBox->addWidget(m_closeMinimizeBtn);
+  addPage(spotlightPage, tr("Spotlight"), QStringLiteral("preferences-desktop-display"),
+          QString(), false);
+  m_deviceswidget = new DevicesWidget(settings, spotlight, this);
+  addPage(m_deviceswidget, tr("Devices"), QStringLiteral("input-mouse"), QString(), false);
+  addPage(createLogTabWidget(), tr("Log"), QStringLiteral("utilities-log-viewer"),
+          QString(), false);
 
-  const auto mainVBox = new QVBoxLayout(this);
-  mainVBox->addWidget(tabWidget);
-  mainVBox->addLayout(btnHBox);
+  if (auto* helpButton = buttonBox()->button(QDialogButtonBox::Help)) {
+    helpButton->hide();
+  }
 
   connect(overlayCheckBox, &QCheckBox::toggled, this, [settings](bool checked){
     settings->setOverlayDisabled(!checked);
@@ -95,6 +93,34 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
     overlayCheckBox->setChecked(!disabled);
     settingsWidget->setDisabled(disabled);
   });
+
+  const auto modified = [this]() { settingsModified(); };
+  connect(settings, &Settings::showSpotShadeChanged, this, modified);
+  connect(settings, &Settings::spotSizeChanged, this, modified);
+  connect(settings, &Settings::showCenterDotChanged, this, modified);
+  connect(settings, &Settings::dotSizeChanged, this, modified);
+  connect(settings, &Settings::dotColorChanged, this, modified);
+  connect(settings, &Settings::dotOpacityChanged, this, modified);
+  connect(settings, &Settings::shadeColorChanged, this, modified);
+  connect(settings, &Settings::shadeOpacityChanged, this, modified);
+  connect(settings, &Settings::cursorChanged, this, modified);
+  connect(settings, &Settings::spotShapeChanged, this, modified);
+  connect(settings, &Settings::spotRotationChanged, this, modified);
+  connect(settings, &Settings::showBorderChanged, this, modified);
+  connect(settings, &Settings::borderColorChanged, this, modified);
+  connect(settings, &Settings::borderSizeChanged, this, modified);
+  connect(settings, &Settings::borderOpacityChanged, this, modified);
+  connect(settings, &Settings::zoomEnabledChanged, this, modified);
+  connect(settings, &Settings::zoomFactorChanged, this, modified);
+  connect(settings, &Settings::multiScreenOverlayEnabledChanged, this, modified);
+  for (const auto& shape : Settings::spotShapes()) {
+    if (auto* shapeSettings = settings->shapeSettings(shape.name())) {
+      connect(shapeSettings, &QQmlPropertyMap::valueChanged, this, modified);
+    }
+  }
+
+  m_appliedSpotlightSettings = settings->spotlightSettings();
+  updateButtons();
 }
 
 QWidget* PreferencesDialog::createSettingsTabWidget(Settings* settings)
@@ -115,21 +141,12 @@ QWidget* PreferencesDialog::createSettingsTabWidget(Settings* settings)
 
   const auto presetSelector = createPresetSelector(settings);
 
-  const auto resetBtn = new IconButton(Font::Icon::gear_12, widget);
-  resetBtn->setToolTip(tr("Reset all settings to their default value."));
-  resetBtn->setSizePolicy(resetBtn->sizePolicy().horizontalPolicy(), QSizePolicy::Minimum);
-  connect(resetBtn, &QPushButton::clicked, settings, &Settings::setDefaults);
-
   const auto testBtn = new QPushButton(tr("&Show test..."), widget);
   connect(testBtn, &QPushButton::clicked, this, &PreferencesDialog::testButtonClicked);
 
   const auto hbox = new QHBoxLayout;
-  hbox->addWidget(resetBtn);
   hbox->addWidget(testBtn);
-
-  const auto invisibleBtn = new QPushButton(this);
-  invisibleBtn->setVisible(false);
-  invisibleBtn->setDefault(true);
+  hbox->addStretch(1);
 
   const auto mainVBox = new QVBoxLayout(widget);
   mainVBox->addLayout(mainHBox);
@@ -705,18 +722,88 @@ void PreferencesDialog::setDialogMode(Mode dialogMode)
   if (dialogMode == Mode::ClosableDialog)
   {
     setWindowFlags(Qt::Dialog);
-    m_closeMinimizeBtn->setText(tr("&Close"));
-    m_closeMinimizeBtn->setToolTip(tr("Close the preferences dialog."));
   }
   else if (dialogMode == Mode::MinimizeOnlyDialog)
   {
     setWindowFlags(Qt::Window);
     setWindowFlags(windowFlags() & ~Qt::WindowMaximizeButtonHint);
     setWindowFlags(windowFlags() & ~Qt::WindowCloseButtonHint);
-
-    m_closeMinimizeBtn->setText(tr("&Minimize"));
-    m_closeMinimizeBtn->setToolTip(tr("Minimize the preferences dialog."));
   }
+}
+
+// -------------------------------------------------------------------------------------------------
+void PreferencesDialog::settingsModified()
+{
+  if (isVisible()) {
+    updateButtons();
+  } else {
+    m_appliedSpotlightSettings = m_settings->spotlightSettings();
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
+void PreferencesDialog::restoreAppliedSettings()
+{
+  m_settings->setSpotlightSettings(m_appliedSpotlightSettings);
+  resetPresetCombo();
+  updateButtons();
+}
+
+// -------------------------------------------------------------------------------------------------
+void PreferencesDialog::updateSettings()
+{
+  KConfigDialog::updateSettings();
+  m_appliedSpotlightSettings = m_settings->spotlightSettings();
+}
+
+// -------------------------------------------------------------------------------------------------
+void PreferencesDialog::updateWidgets()
+{
+  KConfigDialog::updateWidgets();
+  restoreAppliedSettings();
+}
+
+// -------------------------------------------------------------------------------------------------
+void PreferencesDialog::updateWidgetsDefault()
+{
+  KConfigDialog::updateWidgetsDefault();
+  m_settings->setDefaults();
+  resetPresetCombo();
+}
+
+// -------------------------------------------------------------------------------------------------
+bool PreferencesDialog::hasChanged()
+{
+  return KConfigDialog::hasChanged()
+         || m_settings->spotlightSettings() != m_appliedSpotlightSettings;
+}
+
+// -------------------------------------------------------------------------------------------------
+bool PreferencesDialog::isDefault()
+{
+  return KConfigDialog::isDefault()
+         && m_settings->spotlightSettings() == Settings::defaultSpotlightSettings();
+}
+
+// -------------------------------------------------------------------------------------------------
+void PreferencesDialog::accept()
+{
+  if (m_dialogMode == Mode::MinimizeOnlyDialog) {
+    showMinimized();
+    return;
+  }
+  KConfigDialog::accept();
+}
+
+// -------------------------------------------------------------------------------------------------
+void PreferencesDialog::reject()
+{
+  restoreAppliedSettings();
+  if (m_dialogMode == Mode::MinimizeOnlyDialog) {
+    showMinimized();
+    return;
+  }
+  KConfigDialog::reject();
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -745,15 +832,18 @@ bool PreferencesDialog::event(QEvent* e)
   else if (e->type() == QEvent::WindowDeactivate) {
     setDialogActive(false);
   }
-  return QDialog::event(e);
+  return KConfigDialog::event(e);
 }
 
 // -------------------------------------------------------------------------------------------------
-void PreferencesDialog::closeEvent(QCloseEvent* /* ev */)
+void PreferencesDialog::closeEvent(QCloseEvent* e)
 {
   if (m_dialogMode == Mode::MinimizeOnlyDialog) {
     emit exitApplicationRequested();
+    return;
   }
+  restoreAppliedSettings();
+  KConfigDialog::closeEvent(e);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -767,7 +857,7 @@ void PreferencesDialog::keyPressEvent(QKeyEvent* e)
       return;
     }
   }
-  QDialog::keyPressEvent(e);
+  KConfigDialog::keyPressEvent(e);
 }
 
 // -------------------------------------------------------------------------------------------------

@@ -693,10 +693,6 @@ void ProjecteurApplication::showPreferences(bool show)
     showAndActivate(m_dialog.get());
   }
   else {
-    if (m_dialog->mode() == PreferencesDialog::Mode::MinimizeOnlyDialog) {
-      m_dialog->showMinimized();
-    } else {
-      m_dialog->hide();
-    }
+    m_dialog->reject();
   }
 }
