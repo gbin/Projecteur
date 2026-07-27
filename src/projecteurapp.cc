@@ -213,7 +213,13 @@ void ProjecteurApplication::setupSpotlight()
     {
       m_linuxDesktop->setShakeCursorEffectSuppressed(true);
 
-      if (!m_settings->multiScreenOverlayEnabled()) { setScreenForCursorPos(); }
+      QScreen* const cursorScreen = screenAtCursorPos();
+      if (!m_settings->multiScreenOverlayEnabled()) {
+        updateOverlayWindow(m_overlayWindows.first(), cursorScreen);
+      }
+      if (cursorScreen) {
+        setCurrentSpotScreen(quint64(cursorScreen));
+      }
 
       for (const auto window : m_overlayWindows)
       {

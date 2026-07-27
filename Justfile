@@ -22,6 +22,8 @@ build: _require-arch deps
 # Build an Arch Linux package from the current working tree.
 package: _require-arch deps
     #!/usr/bin/env bash
+    set -euo pipefail
+
     if (( EUID == 0 )); then
         echo "error: makepkg must be run as a regular user, not root." >&2
         exit 1
@@ -66,8 +68,19 @@ package: _require-arch deps
 # Build, package, and install Projecteur through pacman.
 install: build package
     #!/usr/bin/env bash
+    set -euo pipefail
+
     stage="{{ arch_dir }}"
     packages="{{ package_dir }}"
+    was_running=0
+
+    restart_projecteur() {
+        if (( was_running )); then
+            was_running=0
+            systemd-run --user --collect --quiet /usr/bin/projecteur
+        fi
+    }
+
     package_file="$(
         cd "$stage"
         PKGDEST="$packages" makepkg --packagelist | head -n 1
@@ -78,20 +91,43 @@ install: build package
         exit 1
     fi
 
+    if (( EUID != 0 )); then
+        if ! command -v sudo >/dev/null 2>&1; then
+            echo "error: installing the package requires root or sudo." >&2
+            exit 1
+        fi
+        # Authenticate before stopping a running Projecteur instance.
+        sudo -v
+    fi
+
+    # KWin authorizes screenshot access by resolving the running executable.
+    # Replacing that executable underneath a live Projecteur process makes all
+    # subsequent zoom captures fail until the process is restarted.
+    if [[ -x /usr/bin/projecteur ]] \
+        && /usr/bin/projecteur --command quit >/dev/null 2>&1; then
+        was_running=1
+        while /usr/bin/projecteur --command quit >/dev/null 2>&1; do
+            sleep 0.1
+        done
+    fi
+    trap restart_projecteur EXIT
+
     if (( EUID == 0 )); then
         pacman -U --noconfirm "$package_file"
-    elif command -v sudo >/dev/null 2>&1; then
-        sudo pacman -U --noconfirm "$package_file"
     else
-        echo "error: installing the package requires root or sudo." >&2
-        exit 1
+        sudo pacman -U --noconfirm "$package_file"
     fi
 
     /usr/bin/projecteur --version
 
+    restart_projecteur
+    trap - EXIT
+
 # Install the compiler and Projecteur build dependencies.
 deps: _require-arch
     #!/usr/bin/env bash
+    set -euo pipefail
+
     dependencies=(
         base-devel
         cmake
@@ -125,6 +161,8 @@ deps: _require-arch
 
 _require-arch:
     #!/usr/bin/env bash
+    set -euo pipefail
+
     if [[ ! -r /etc/os-release ]]; then
         echo "error: /etc/os-release is unavailable; this workflow requires Arch Linux." >&2
         exit 1

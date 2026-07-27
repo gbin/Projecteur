@@ -185,7 +185,9 @@ just install  # Build, package, and install the package with pacman
 
 `just package` packages the current working tree, including uncommitted files,
 through the checked-in `packaging/arch/PKGBUILD`. `just install` uses `sudo`
-only for dependency installation and the final `pacman -U`.
+only for dependency installation and the final `pacman -U`. If Projecteur is
+running, `just install` stops it before the upgrade and starts it again afterward
+so KWin can authorize zoom captures against the newly installed executable.
 
 Installing is required for zoom: KWin authorizes the screenshot interface by matching
 the running executable with the installed `projecteur.desktop` metadata. A binary run
