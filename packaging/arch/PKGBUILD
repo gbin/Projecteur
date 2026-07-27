@@ -13,13 +13,16 @@ license=('MIT')
 depends=(
   'gcc-libs'
   'glibc'
+  'kcoreaddons>=6.7'
   'layer-shell-qt>=6.7'
+  'libplasma>=6.7'
   'libglvnd'
   'qt6-base>=6.11'
   'qt6-declarative>=6.11'
 )
 makedepends=(
   'cmake>=3.20'
+  'extra-cmake-modules>=6.7'
   'qt6-tools>=6.11'
 )
 source=(

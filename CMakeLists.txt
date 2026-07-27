@@ -13,6 +13,10 @@ project(Projecteur LANGUAGES CXX)
 add_compile_options(-Wall -Wextra -Werror)
 #set(CMAKE_CXX_CLANG_TIDY clang-tidy-12)
 
+find_package(ECM 6.7 REQUIRED NO_MODULE)
+list(APPEND CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+include(KDEInstallDirs6)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 include(GitVersion)
 
@@ -21,6 +25,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui LinguistTools Quick Widgets)
+find_package(KF6 6.7 REQUIRED COMPONENTS Config CoreAddons Package KirigamiPlatform WindowSystem)
+find_package(Plasma 6.7 REQUIRED)
 find_package(LayerShellQt 6.7 REQUIRED)
 set(QT_PACKAGE_NAME Qt6)
 message(STATUS "Using Qt version: ${Qt6_VERSION}")
@@ -51,6 +57,7 @@ add_executable(projecteur
   src/nativekeyseqedit.cc      src/nativekeyseqedit.h
   src/preferencesdlg.cc        src/preferencesdlg.h
   src/projecteurapp.cc         src/projecteurapp.h
+  src/projecteurcontrol.cc     src/projecteurcontrol.h
   src/runguard.cc              src/runguard.h
   src/settings.cc              src/settings.h
   src/spotlight.cc             src/spotlight.h
@@ -71,6 +78,8 @@ target_compile_options(projecteur
 
 target_compile_definitions(projecteur PRIVATE
   CXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID} CXX_COMPILER_VERSION=${CMAKE_CXX_COMPILER_VERSION})
+
+add_subdirectory(plasma)
 
 # Set version project properties for builds not from a git repository (e.g. created with git archive)
 # If creating the version number via git information fails, the following target properties
