@@ -12,7 +12,11 @@
 
 #include <KActionCollection>
 #include <KColorButton>
+#include <KFileCustomDialog>
+#include <KFileFilter>
 #include <KGlobalAccel>
+#include <KLazyLocalizedString>
+#include <KLocalizedString>
 #include <KShortcutsEditor>
 
 #include <QCheckBox>
@@ -20,8 +24,10 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QDoubleSpinBox>
-#include <QFileDialog>
+#include <QFile>
+#include <QFileInfo>
 #include <QGroupBox>
 #include <QIcon>
 #include <QLabel>
@@ -33,6 +39,7 @@
 #include <QQmlPropertyMap>
 #include <QSpinBox>
 #include <QStyle>
+#include <QUrl>
 
 #include <map>
 
@@ -41,15 +48,15 @@ LOGGING_CATEGORY(preferences, "preferences")
 // -------------------------------------------------------------------------------------------------
 namespace {
   #define CURSOR_PATH ":/icons/cursors/"
-  static const std::map<const QString, const QPair<const QString, const Qt::CursorShape>> cursorMap {
-    { "", {"No Cursor", Qt::BlankCursor}},
-    { CURSOR_PATH "cursor-arrow.png", {"Arrow Cursor", Qt::ArrowCursor}},
-    { CURSOR_PATH "cursor-busy.png", {"Busy Cursor", Qt::BusyCursor}},
-    { CURSOR_PATH "cursor-cross.png", {"Cross Cursor", Qt::CrossCursor}},
-    { CURSOR_PATH "cursor-hand.png", {"Pointing Hand Cursor", Qt::PointingHandCursor}},
-    { CURSOR_PATH "cursor-openhand.png", {"Open Hand Cursor", Qt::OpenHandCursor}},
-    { CURSOR_PATH "cursor-uparrow.png", {"Up Arrow Cursor", Qt::UpArrowCursor}},
-    { CURSOR_PATH "cursor-whatsthis.png", {"What't This Cursor", Qt::WhatsThisCursor}},
+  static const std::map<const QString, const QPair<const KLazyLocalizedString, const Qt::CursorShape>> cursorMap {
+    { "", {kli18n("No Cursor"), Qt::BlankCursor}},
+    { CURSOR_PATH "cursor-arrow.png", {kli18n("Arrow Cursor"), Qt::ArrowCursor}},
+    { CURSOR_PATH "cursor-busy.png", {kli18n("Busy Cursor"), Qt::BusyCursor}},
+    { CURSOR_PATH "cursor-cross.png", {kli18n("Cross Cursor"), Qt::CrossCursor}},
+    { CURSOR_PATH "cursor-hand.png", {kli18n("Pointing Hand Cursor"), Qt::PointingHandCursor}},
+    { CURSOR_PATH "cursor-openhand.png", {kli18n("Open Hand Cursor"), Qt::OpenHandCursor}},
+    { CURSOR_PATH "cursor-uparrow.png", {kli18n("Up Arrow Cursor"), Qt::UpArrowCursor}},
+    { CURSOR_PATH "cursor-whatsthis.png", {kli18n("What's This Cursor"), Qt::WhatsThisCursor}},
   };
 } // end anonymous namespace
 
@@ -63,7 +70,7 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
   , m_presetComboStyle(std::make_unique<PresetComboCustomStyle>())
 {
   setAttribute(Qt::WA_DeleteOnClose, false);
-  setWindowTitle(QCoreApplication::applicationName() + " - " + tr("Preferences"));
+  setWindowTitle(QCoreApplication::applicationName() + " - " + i18n("Preferences"));
   setWindowIcon(QIcon(":/icons/projecteur-tray.svg"));
   setFaceType(KPageDialog::Tabbed);
 
@@ -74,21 +81,21 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
 
   const auto spotlightPage = new QWidget(this);
   const auto spotlightLayout = new QVBoxLayout(spotlightPage);
-  const auto overlayCheckBox = new QCheckBox(tr("Enable spotlight overlay"), spotlightPage);
+  const auto overlayCheckBox = new QCheckBox(i18n("Enable spotlight overlay"), spotlightPage);
   overlayCheckBox->setChecked(!settings->overlayDisabled());
   spotlightLayout->addWidget(overlayCheckBox);
   spotlightLayout->addWidget(settingsWidget);
 
-  addPage(spotlightPage, tr("Spotlight"), QStringLiteral("preferences-desktop-display"),
+  addPage(spotlightPage, i18n("Spotlight"), QStringLiteral("preferences-desktop-display"),
           QString(), false);
   m_deviceswidget = new DevicesWidget(settings, spotlight, this);
-  addPage(m_deviceswidget, tr("Devices"), QStringLiteral("input-mouse"), QString(), false);
+  addPage(m_deviceswidget, i18n("Devices"), QStringLiteral("input-mouse"), QString(), false);
   m_shortcutsEditor = new KShortcutsEditor(
     actionCollection, this, KShortcutsEditor::GlobalAction,
     KShortcutsEditor::LetterShortcutsDisallowed);
-  addPage(m_shortcutsEditor, tr("Shortcuts"), QStringLiteral("configure-shortcuts"),
+  addPage(m_shortcutsEditor, i18n("Shortcuts"), QStringLiteral("configure-shortcuts"),
           QString(), false);
-  addPage(createLogTabWidget(), tr("Log"), QStringLiteral("utilities-log-viewer"),
+  addPage(createLogTabWidget(), i18n("Log"), QStringLiteral("utilities-log-viewer"),
           QString(), false);
 
   if (auto* helpButton = buttonBox()->button(QDialogButtonBox::Help)) {
@@ -154,7 +161,7 @@ QWidget* PreferencesDialog::createSettingsTabWidget(Settings* settings)
 
   const auto presetSelector = createPresetSelector(settings);
 
-  const auto testBtn = new QPushButton(tr("&Show test..."), widget);
+  const auto testBtn = new QPushButton(i18n("&Show test..."), widget);
   connect(testBtn, &QPushButton::clicked, this, &PreferencesDialog::testButtonClicked);
 
   const auto hbox = new QHBoxLayout;
@@ -175,7 +182,7 @@ QWidget* PreferencesDialog::createPresetSelector(Settings* settings)
   const auto widget = new QFrame(this);
   widget->setFrameStyle(QFrame::StyledPanel | QFrame::Plain);
   const auto hbox = new QHBoxLayout(widget);
-  hbox->addWidget(new QLabel(tr("Presets"), widget));
+  hbox->addWidget(new QLabel(i18n("Presets"), widget));
 
   m_presetCombo = new QComboBox(widget);
   m_presetCombo->setModel(settings->presetModel());
@@ -185,10 +192,10 @@ QWidget* PreferencesDialog::createPresetSelector(Settings* settings)
   m_presetCombo->setInsertPolicy(QComboBox::NoInsert);
 
   const auto deleteBtn = new IconButton(Font::Icon::trash_can_1, widget);
-  deleteBtn->setToolTip(tr("Delete currently selected preset."));
+  deleteBtn->setToolTip(i18n("Delete currently selected preset."));
   deleteBtn->setEnabled(m_presetCombo->currentIndex() > 0);
   const auto newBtn = new IconButton(Font::Icon::plus_5, widget);
-  newBtn->setToolTip(tr("Create new preset from current spotlight settings."));
+  newBtn->setToolTip(i18n("Create new preset from current spotlight settings."));
 
   const std::vector<QWidget*> widgets{m_presetCombo, deleteBtn, newBtn};
   for (const auto w : widgets) {
@@ -240,7 +247,7 @@ QWidget* PreferencesDialog::createPresetSelector(Settings* settings)
       settings->savePreset(text);
     });
 
-    le->setText(tr("New Preset"));
+    le->setText(i18n("New Preset"));
     le->setFocus();
     le->selectAll();
   });
@@ -271,7 +278,7 @@ QWidget* PreferencesDialog::createPresetSelector(Settings* settings)
 // -------------------------------------------------------------------------------------------------
 QGroupBox* PreferencesDialog::createShapeGroupBox(Settings* settings)
 {
-  const auto shapeGroup = new QGroupBox(tr("Shape Settings"), this);
+  const auto shapeGroup = new QGroupBox(i18n("Shape Settings"), this);
 
   const auto spotSizeSpinBox = new QSpinBox(this);
   spotSizeSpinBox->setMaximum(settings->spotSizeRange().max);
@@ -279,14 +286,14 @@ QGroupBox* PreferencesDialog::createShapeGroupBox(Settings* settings)
   spotSizeSpinBox->setValue(settings->spotSize());
   const auto spotsizeHBox = new QHBoxLayout;
   spotsizeHBox->addWidget(spotSizeSpinBox);
-  spotsizeHBox->addWidget(new QLabel(QString("% ")+tr("of screen height")));
+  spotsizeHBox->addWidget(new QLabel(QString("% ")+i18n("of screen height")));
   connect(spotSizeSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
           settings, &Settings::setSpotSize);
   connect(settings, &Settings::spotSizeChanged, spotSizeSpinBox, &QSpinBox::setValue);
   connect(settings, &Settings::spotSizeChanged, this, &PreferencesDialog::resetPresetCombo);
 
   const auto spotGrid = new QGridLayout(shapeGroup);
-  spotGrid->addWidget(new QLabel(tr("Spot Size"), this), 0, 0);
+  spotGrid->addWidget(new QLabel(i18n("Spot Size"), this), 0, 0);
   spotGrid->addLayout(spotsizeHBox, 0, 1);
 
   // Spotlight shape setting
@@ -303,7 +310,7 @@ QGroupBox* PreferencesDialog::createShapeGroupBox(Settings* settings)
     resetPresetCombo();
   });
   emit settings->spotShapeChanged(settings->spotShape());
-  spotGrid->addWidget(new QLabel(tr("Shape"), this), 4, 0);
+  spotGrid->addWidget(new QLabel(i18n("Shape"), this), 4, 0);
   spotGrid->addWidget(shapeCombo, 4, 1);
 
   // Spotlight rotation setting
@@ -317,7 +324,7 @@ QGroupBox* PreferencesDialog::createShapeGroupBox(Settings* settings)
           settings, &Settings::setSpotRotation);
   connect(settings, &Settings::spotRotationChanged, shapeRotationSb, &QDoubleSpinBox::setValue);
   connect(settings, &Settings::spotRotationChanged, this, &PreferencesDialog::resetPresetCombo);
-  const auto shapeRotationLabel = new QLabel(tr("Rotation"), this);
+  const auto shapeRotationLabel = new QLabel(i18n("Rotation"), this);
   spotGrid->addWidget(shapeRotationLabel, 5, 0);
   spotGrid->addWidget(shapeRotationSb, 5, 1);
 
@@ -409,7 +416,7 @@ QGroupBox* PreferencesDialog::createShapeGroupBox(Settings* settings)
 // -------------------------------------------------------------------------------------------------
 QGroupBox* PreferencesDialog::createSpotGroupBox(Settings* settings)
 {
-  const auto spotGroup = new QGroupBox(tr("Show Spotlight Shade"), this);
+  const auto spotGroup = new QGroupBox(i18n("Show Spotlight Shade"), this);
   spotGroup->setCheckable(true);
   spotGroup->setChecked(settings->showSpotShade());
   connect(spotGroup, &QGroupBox::toggled, settings, &Settings::setShowSpotShade);
@@ -420,11 +427,11 @@ QGroupBox* PreferencesDialog::createSpotGroupBox(Settings* settings)
 
   // Shade color setting
   const auto shadeColor = new KColorButton(settings->shadeColor(), this);
-  shadeColor->setAccessibleName(tr("Shade Color"));
+  shadeColor->setAccessibleName(i18n("Shade Color"));
   connect(shadeColor, &KColorButton::changed, settings, &Settings::setShadeColor);
   connect(settings, &Settings::shadeColorChanged, shadeColor, &KColorButton::setColor);
   connect(settings, &Settings::shadeColorChanged, this, &PreferencesDialog::resetPresetCombo);
-  spotGrid->addWidget(new QLabel(tr("Shade Color"), this), 1, 0);
+  spotGrid->addWidget(new QLabel(i18n("Shade Color"), this), 1, 0);
   spotGrid->addWidget(shadeColor, 1, 1);
 
   // Spotlight shade opacity setting
@@ -438,7 +445,7 @@ QGroupBox* PreferencesDialog::createSpotGroupBox(Settings* settings)
           settings, &Settings::setShadeOpacity);
   connect(settings, &Settings::shadeOpacityChanged, shadeOpacitySb, &QDoubleSpinBox::setValue);
   connect(settings, &Settings::shadeOpacityChanged, this, &PreferencesDialog::resetPresetCombo);
-  spotGrid->addWidget(new QLabel(tr("Shade Opacity"), this), 2, 0);
+  spotGrid->addWidget(new QLabel(i18n("Shade Opacity"), this), 2, 0);
   spotGrid->addWidget(shadeOpacitySb, 2, 1);
 
   spotGrid->addWidget(new QWidget(this), 100, 0);
@@ -451,7 +458,7 @@ QGroupBox* PreferencesDialog::createSpotGroupBox(Settings* settings)
 // -------------------------------------------------------------------------------------------------
 QGroupBox* PreferencesDialog::createDotGroupBox(Settings* settings)
 {
-  const auto dotGroup = new QGroupBox(tr("Show Center Dot"), this);
+  const auto dotGroup = new QGroupBox(i18n("Show Center Dot"), this);
   dotGroup->setCheckable(true);
   dotGroup->setChecked(settings->showCenterDot());
   connect(dotGroup, &QGroupBox::toggled, settings, &Settings::setShowCenterDot);
@@ -464,22 +471,22 @@ QGroupBox* PreferencesDialog::createDotGroupBox(Settings* settings)
   dotSizeSpinBox->setValue(settings->dotSize());
   auto dotsizeHBox = new QHBoxLayout;
   dotsizeHBox->addWidget(dotSizeSpinBox);
-  dotsizeHBox->addWidget(new QLabel(tr("pixel")));
+  dotsizeHBox->addWidget(new QLabel(i18n("pixel")));
   connect(dotSizeSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
           settings, &Settings::setDotSize);
   connect(settings, &Settings::dotSizeChanged, dotSizeSpinBox, &QSpinBox::setValue);
   connect(settings, &Settings::dotSizeChanged, this, &PreferencesDialog::resetPresetCombo);
 
   const auto dotGrid = new QGridLayout(dotGroup);
-  dotGrid->addWidget(new QLabel(tr("Dot Size"), this), 0, 0);
+  dotGrid->addWidget(new QLabel(i18n("Dot Size"), this), 0, 0);
   dotGrid->addLayout(dotsizeHBox, 0, 1);
 
   const auto dotColor = new KColorButton(settings->dotColor(), this);
-  dotColor->setAccessibleName(tr("Dot Color"));
+  dotColor->setAccessibleName(i18n("Dot Color"));
   connect(dotColor, &KColorButton::changed, settings, &Settings::setDotColor);
   connect(settings, &Settings::dotColorChanged, dotColor, &KColorButton::setColor);
   connect(settings, &Settings::dotColorChanged, this, &PreferencesDialog::resetPresetCombo);
-  dotGrid->addWidget(new QLabel(tr("Dot Color"), this), 1, 0);
+  dotGrid->addWidget(new QLabel(i18n("Dot Color"), this), 1, 0);
   dotGrid->addWidget(dotColor, 1, 1);
 
 
@@ -494,7 +501,7 @@ QGroupBox* PreferencesDialog::createDotGroupBox(Settings* settings)
           settings, &Settings::setDotOpacity);
   connect(settings, &Settings::borderOpacityChanged, dotOpacitySb, &QDoubleSpinBox::setValue);
   connect(settings, &Settings::borderOpacityChanged, this, &PreferencesDialog::resetPresetCombo);
-  dotGrid->addWidget(new QLabel(tr("Dot Opacity"), this), 2, 0);
+  dotGrid->addWidget(new QLabel(i18n("Dot Opacity"), this), 2, 0);
   dotGrid->addWidget(dotOpacitySb, 2, 1);
 
   dotGrid->addWidget(new QWidget(this), 100, 0);
@@ -507,7 +514,7 @@ QGroupBox* PreferencesDialog::createDotGroupBox(Settings* settings)
 // -------------------------------------------------------------------------------------------------
 QGroupBox* PreferencesDialog::createBorderGroupBox(Settings* settings)
 {
-  const auto borderGroup = new QGroupBox(tr("Show Border"), this);
+  const auto borderGroup = new QGroupBox(i18n("Show Border"), this);
   borderGroup->setCheckable(true);
   borderGroup->setChecked(settings->showBorder());
   connect(borderGroup, &QGroupBox::toggled, settings, &Settings::setShowBorder);
@@ -520,22 +527,22 @@ QGroupBox* PreferencesDialog::createBorderGroupBox(Settings* settings)
   borderSizeSpinBox->setValue(settings->borderSize());
   auto bordersizeHBox = new QHBoxLayout;
   bordersizeHBox->addWidget(borderSizeSpinBox);
-  bordersizeHBox->addWidget(new QLabel(tr("% of spotsize")));
+  bordersizeHBox->addWidget(new QLabel(i18n("% of spotsize")));
   connect(borderSizeSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
           settings, &Settings::setBorderSize);
   connect(settings, &Settings::borderSizeChanged, borderSizeSpinBox, &QSpinBox::setValue);
   connect(settings, &Settings::borderSizeChanged, this, &PreferencesDialog::resetPresetCombo);
 
   const auto borderGrid = new QGridLayout(borderGroup);
-  borderGrid->addWidget(new QLabel(tr("Border Size"), this), 0, 0);
+  borderGrid->addWidget(new QLabel(i18n("Border Size"), this), 0, 0);
   borderGrid->addLayout(bordersizeHBox, 0, 1);
 
   const auto borderColor = new KColorButton(settings->borderColor(), this);
-  borderColor->setAccessibleName(tr("Border Color"));
+  borderColor->setAccessibleName(i18n("Border Color"));
   connect(borderColor, &KColorButton::changed, settings, &Settings::setBorderColor);
   connect(settings, &Settings::borderColorChanged, borderColor, &KColorButton::setColor);
   connect(settings, &Settings::borderColorChanged, this, &PreferencesDialog::resetPresetCombo);
-  borderGrid->addWidget(new QLabel(tr("Border Color"), this), 1, 0);
+  borderGrid->addWidget(new QLabel(i18n("Border Color"), this), 1, 0);
   borderGrid->addWidget(borderColor, 1, 1);
 
   // Spotlight border opacity setting
@@ -549,7 +556,7 @@ QGroupBox* PreferencesDialog::createBorderGroupBox(Settings* settings)
           settings, &Settings::setBorderOpacity);
   connect(settings, &Settings::borderOpacityChanged, borderOpacitySb, &QDoubleSpinBox::setValue);
   connect(settings, &Settings::borderOpacityChanged, this, &PreferencesDialog::resetPresetCombo);
-  borderGrid->addWidget(new QLabel(tr("Border Opacity"), this), 2, 0);
+  borderGrid->addWidget(new QLabel(i18n("Border Opacity"), this), 2, 0);
   borderGrid->addWidget(borderOpacitySb, 2, 1);
 
   borderGrid->addWidget(new QWidget(this), 100, 0);
@@ -562,7 +569,7 @@ QGroupBox* PreferencesDialog::createBorderGroupBox(Settings* settings)
 // -------------------------------------------------------------------------------------------------
 QGroupBox* PreferencesDialog::createZoomGroupBox(Settings* settings)
 {
-  const auto zoomGroup = new QGroupBox(tr("Enable Zoom"), this);
+  const auto zoomGroup = new QGroupBox(i18n("Enable Zoom"), this);
   zoomGroup->setCheckable(true);
   zoomGroup->setChecked(settings->zoomEnabled());
   connect(zoomGroup, &QGroupBox::toggled, settings, &Settings::setZoomEnabled);
@@ -582,7 +589,7 @@ QGroupBox* PreferencesDialog::createZoomGroupBox(Settings* settings)
           settings, &Settings::setZoomFactor);
   connect(settings, &Settings::zoomFactorChanged, zoomLevelSb, &QDoubleSpinBox::setValue);
   connect(settings, &Settings::zoomFactorChanged, this, &PreferencesDialog::resetPresetCombo);
-  zoomGrid->addWidget(new QLabel(tr("Zoom Level"), this), 0, 0);
+  zoomGrid->addWidget(new QLabel(i18n("Zoom Level"), this), 0, 0);
   zoomGrid->addWidget(zoomLevelSb, 0, 1);
   zoomGrid->setColumnStretch(1, 1);
   return zoomGroup;
@@ -591,13 +598,14 @@ QGroupBox* PreferencesDialog::createZoomGroupBox(Settings* settings)
 // -------------------------------------------------------------------------------------------------
 QGroupBox* PreferencesDialog::createCursorGroupBox(Settings* settings)
 {
-  const auto cursorGroup = new QGroupBox(tr("Cursor Settings"), this);
+  const auto cursorGroup = new QGroupBox(i18n("Cursor Settings"), this);
   cursorGroup->setCheckable(false);
   const auto grid = new QGridLayout(cursorGroup);
 
   const auto cursorCb = new QComboBox(this);
   for (const auto& item : cursorMap) {
-    cursorCb->addItem(QIcon(item.first), item.second.first, static_cast<int>(item.second.second));
+    cursorCb->addItem(
+      QIcon(item.first), item.second.first.toString(), static_cast<int>(item.second.second));
   }
   connect(settings, &Settings::cursorChanged, cursorCb, [cursorCb, this](int cursor){
     const int idx = cursorCb->findData(cursor);
@@ -610,7 +618,7 @@ QGroupBox* PreferencesDialog::createCursorGroupBox(Settings* settings)
     settings->setCursor(static_cast<Qt::CursorShape>(cursorCb->itemData(index).toInt()));
   });
 
-  grid->addWidget(new QLabel(tr("Cursor"), this), 0, 0);
+  grid->addWidget(new QLabel(i18n("Cursor"), this), 0, 0);
   grid->addWidget(cursorCb, 0, 1);
   grid->setColumnStretch(1, 1);
   return cursorGroup;
@@ -619,7 +627,7 @@ QGroupBox* PreferencesDialog::createCursorGroupBox(Settings* settings)
 // -------------------------------------------------------------------------------------------------
 QWidget* PreferencesDialog::createMultiScreenWidget(Settings* settings)
 {
-  const auto cb = new QCheckBox(tr("Enable multi-screen overlay"), this);
+  const auto cb = new QCheckBox(i18n("Enable multi-screen overlay"), this);
   cb->setChecked(settings->multiScreenOverlayEnabled());
   connect(cb, &QCheckBox::toggled, settings, &Settings::setMultiScreenOverlayEnabled);
   connect(settings, &Settings::multiScreenOverlayEnabledChanged, cb, &QCheckBox::setChecked);
@@ -654,13 +662,13 @@ QWidget* PreferencesDialog::createLogTabWidget()
   });
 
   const auto lvlHBox = new QHBoxLayout();
-  lvlHBox->addWidget(new QLabel(tr("Log Level"), widget));
+  lvlHBox->addWidget(new QLabel(i18n("Log Level"), widget));
   // Log level combo box
   const auto logLvlCombo = new QComboBox(widget);
-  logLvlCombo->addItem(tr("Debug"), static_cast<int>(logging::level::debug));
-  logLvlCombo->addItem(tr("Info"), static_cast<int>(logging::level::info));
-  logLvlCombo->addItem(tr("Warning"), static_cast<int>(logging::level::warning));
-  logLvlCombo->addItem(tr("Error"), static_cast<int>(logging::level::error));
+  logLvlCombo->addItem(i18n("Debug"), static_cast<int>(logging::level::debug));
+  logLvlCombo->addItem(i18n("Info"), static_cast<int>(logging::level::info));
+  logLvlCombo->addItem(i18n("Warning"), static_cast<int>(logging::level::warning));
+  logLvlCombo->addItem(i18n("Error"), static_cast<int>(logging::level::error));
   lvlHBox->addWidget(logLvlCombo);
 
   const int idx = logLvlCombo->findData(static_cast<int>(logging::currentLevel()));
@@ -669,12 +677,12 @@ QWidget* PreferencesDialog::createLogTabWidget()
   connect(logLvlCombo, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this,
   [logLvlCombo, te](int index) {
     const auto lvl = static_cast<logging::level>(logLvlCombo->itemData(index).toInt());
-    te->appendPlainText(tr("--- Setting new log level: %1").arg(logging::levelToString(lvl)));
+    te->appendPlainText(i18n("--- Setting new log level: %1", logging::levelToString(lvl)));
     logging::setCurrentLevel(lvl);
   });
 
-  const auto saveLogBtn = new QPushButton(tr("&Save log..."), this);
-  saveLogBtn->setToolTip(tr("Save log to file."));
+  const auto saveLogBtn = new QPushButton(i18n("&Save log..."), this);
+  saveLogBtn->setToolTip(i18n("Save log to file."));
   connect(saveLogBtn, &QPushButton::clicked, this, [this, te]()
   {
     static auto saveDir = QDir::homePath();
@@ -682,10 +690,18 @@ QWidget* PreferencesDialog::createLogTabWidget()
                              .arg(QDateTime::currentDateTime().toString("yyyy-MM-dd_hh-mm"));
 
     const auto defaultFile = QDir(saveDir).filePath(defaultName);
-    QString logFilter(tr("Log files (*.log *.txt)"));
-    const auto logFile = QFileDialog::getSaveFileName(this, tr("Save log file"),
-                                                      defaultFile, logFilter, &logFilter);
-    if (logFile.isEmpty())  { return; }
+    KFileCustomDialog saveDialog(QUrl::fromLocalFile(defaultFile), this);
+    saveDialog.setWindowTitle(i18n("Save Log File"));
+    saveDialog.setOperationMode(KFileWidget::Saving);
+    saveDialog.fileWidget()->setMode(KFile::File | KFile::LocalOnly);
+    saveDialog.fileWidget()->setConfirmOverwrite(true);
+    saveDialog.fileWidget()->setFilters({
+      KFileFilter(i18n("Log Files"), {QStringLiteral("*.log"), QStringLiteral("*.txt")}, {})
+    });
+    if (saveDialog.exec() != QDialog::Accepted) { return; }
+
+    const auto logFile = saveDialog.fileWidget()->selectedFile();
+    if (logFile.isEmpty()) { return; }
     saveDir = QFileInfo(logFile).path();
 
     QFile f(logFile);
@@ -699,14 +715,15 @@ QWidget* PreferencesDialog::createLogTabWidget()
               .arg(qVersion()).toLocal8Bit());
       f.write(QString("\n------------------------------------------------------------\n").toLocal8Bit());
       if (m_discardedLogCount > 0) {
-        f.write(tr("Discarded %1 previous log entries.").arg(m_discardedLogCount).toLocal8Bit());
+        f.write(i18np("Discarded one previous log entry.",
+                     "Discarded %1 previous log entries.", m_discardedLogCount).toLocal8Bit());
         f.write(QString("\n------------------------------------------------------------\n").toLocal8Bit());
       }
       f.write(te->toPlainText().toLocal8Bit());
-      logInfo(preferences) << tr("Log saved to: ") << logFile;
+      logInfo(preferences) << i18n("Log saved to: ") << logFile;
     }
     else {
-      logError(preferences) << tr("Could not open '%1' for writing.").arg(logFile);
+      logError(preferences) << i18n("Could not open '%1' for writing.", logFile);
     }
   });
 

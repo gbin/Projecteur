@@ -5,6 +5,8 @@
 
 #include "logging.h"
 
+#include <KLocalizedString>
+
 #include <fcntl.h>
 #include <linux/uinput.h>
 #include <linux/input-event-codes.h>
@@ -18,10 +20,6 @@ LOGGING_CATEGORY(virtualdevice, "virtualdevice")
 #ifndef KEY_MACRO1
 #define KEY_MACRO1 0x290
 #endif
-
-namespace  {
-  class VirtualDevice_ : public QObject {}; // for i18n and logging
-} // end anonymous namespace
 
 struct VirtualDevice::Token {};
 
@@ -40,7 +38,7 @@ VirtualDevice::~VirtualDevice()
     ioctl(m_uinpFd, UI_DEV_DESTROY);
     ::close(m_uinpFd);
     logDebug(virtualdevice)
-      << VirtualDevice_::tr("uinput Device Closed (%1; %2)").arg(m_userName, m_deviceName);
+      << i18n("uinput Device Closed (%1; %2)", m_userName, m_deviceName);
   }
 }
 
@@ -55,15 +53,15 @@ std::shared_ptr<VirtualDevice> VirtualDevice::create(Type deviceType,
 {
   const QFileInfo fi(location);
   if (!fi.exists()) {
-    logWarn(virtualdevice) << VirtualDevice_::tr("File not found: %1").arg(location);
-    logWarn(virtualdevice) << VirtualDevice_::tr("Please check if uinput kernel module is loaded");
+    logWarn(virtualdevice) << i18n("File not found: %1", location);
+    logWarn(virtualdevice) << i18n("Please check if uinput kernel module is loaded");
     return std::shared_ptr<VirtualDevice>();
   }
 
   const int fd = ::open(location, O_WRONLY | O_NDELAY);
   if (fd < 0) {
-    logWarn(virtualdevice) << VirtualDevice_::tr("Unable to open: %1").arg(location);
-    logWarn(virtualdevice) << VirtualDevice_::tr("Please check if current user has write access");
+    logWarn(virtualdevice) << i18n("Unable to open: %1", location);
+    logWarn(virtualdevice) << i18n("Please check if current user has write access");
     return std::shared_ptr<VirtualDevice>();
   }
 
@@ -111,16 +109,16 @@ std::shared_ptr<VirtualDevice> VirtualDevice::create(Type deviceType,
   if ((bytesWritten != sizeof(uinp)) || (ioctl(fd, UI_DEV_CREATE)))
   {
     ::close(fd);
-    logWarn(virtualdevice) << VirtualDevice_::tr("Unable to create Virtual (UINPUT) device.");
+    logWarn(virtualdevice) << i18n("Unable to create Virtual (UINPUT) device.");
     return std::unique_ptr<VirtualDevice>();
   }
 
   // Log the device name
   char sysfs_device_name[16]{};
   ioctl(fd, UI_GET_SYSNAME(sizeof(sysfs_device_name)), sysfs_device_name);
-  logInfo(virtualdevice) << VirtualDevice_::tr("Created uinput device: %1")
-                            .arg(QString("%1; /sys/devices/virtual/input/%2")
-                              .arg(name, sysfs_device_name));
+  logInfo(virtualdevice) << i18n("Created uinput device: %1",
+                                 QString("%1; /sys/devices/virtual/input/%2")
+                                   .arg(name, sysfs_device_name));
 
   return std::make_shared<VirtualDevice>(Token{}, fd, name, sysfs_device_name);
 }
@@ -133,7 +131,7 @@ void VirtualDevice::emitEvents(const struct input_event input_events[], size_t n
   if (const ssize_t sz = sizeof(input_event) * num) {
     const auto bytesWritten = write(m_uinpFd, input_events, sz);
     if (bytesWritten != sz) {
-      logError(virtualdevice) << VirtualDevice_::tr("Error while writing to virtual device.");
+      logError(virtualdevice) << i18n("Error while writing to virtual device.");
     }
   }
 }

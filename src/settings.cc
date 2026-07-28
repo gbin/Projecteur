@@ -13,6 +13,7 @@
 
 #include <KConfig>
 #include <KConfigGroup>
+#include <KLocalizedString>
 
 #include <QFileInfo>
 #include <QFont>
@@ -233,7 +234,7 @@ QString Settings::configFileName() const
 void Settings::save()
 {
   if (!m_config->save()) {
-    logWarning(lcSettings) << tr("Could not save settings to '%1'.").arg(configFileName());
+    logWarning(lcSettings) << i18n("Could not save settings to '%1'.", configFileName());
   }
 }
 
@@ -241,7 +242,7 @@ void Settings::save()
 void Settings::sync()
 {
   if (!m_config->config()->sync()) {
-    logWarning(lcSettings) << tr("Could not save settings to '%1'.").arg(configFileName());
+    logWarning(lcSettings) << i18n("Could not save settings to '%1'.", configFileName());
   }
 }
 
@@ -251,11 +252,11 @@ void Settings::init()
   const QFileInfo fi(configFileName());
 
   if (!fi.isReadable()) {
-    logDebug(lcSettings) << tr("Settings file '%1' does not exist yet.").arg(configFileName());
+    logDebug(lcSettings) << i18n("Settings file '%1' does not exist yet.", configFileName());
   }
 
   if (fi.exists() && !fi.isWritable()) {
-    logWarning(lcSettings) << tr("Settings file '%1' not writable.").arg(configFileName());
+    logWarning(lcSettings) << i18n("Settings file '%1' not writable.", configFileName());
   }
 
   shapeSettingsInitialize();
@@ -371,14 +372,14 @@ const Settings::SettingRange<int>& Settings::inputSequenceIntervalRange() { retu
 const QList<Settings::SpotShape>& Settings::spotShapes()
 {
   static const QList<SpotShape> shapes{
-    SpotShape(::settings::defaultValue::spotShape, "Circle", tr("Circle"), false),
-    SpotShape("spotshapes/Square.qml", "Square", tr("(Rounded) Square"), true,
-      {SpotShapeSetting(tr("Border-radius (%)"), "radius", 20, 0, 100, 0)} ),
-    SpotShape("spotshapes/Star.qml", "Star", tr("Star"), true,
-      {SpotShapeSetting(tr("Star points"), "points", 5, 3, 100, 0),
-       SpotShapeSetting(tr("Inner radius (%)"), "innerRadius", 50, 5, 100, 0)} ),
-    SpotShape("spotshapes/Ngon.qml", "Ngon", tr("N-gon"), true,
-      {SpotShapeSetting(tr("Sides"), "sides", 3, 3, 100, 0)} ) };
+    SpotShape(::settings::defaultValue::spotShape, "Circle", i18n("Circle"), false),
+    SpotShape("spotshapes/Square.qml", "Square", i18n("(Rounded) Square"), true,
+      {SpotShapeSetting(i18n("Border-radius (%)"), "radius", 20, 0, 100, 0)} ),
+    SpotShape("spotshapes/Star.qml", "Star", i18n("Star"), true,
+      {SpotShapeSetting(i18n("Star points"), "points", 5, 3, 100, 0),
+       SpotShapeSetting(i18n("Inner radius (%)"), "innerRadius", 50, 5, 100, 0)} ),
+    SpotShape("spotshapes/Ngon.qml", "Ngon", i18n("N-gon"), true,
+      {SpotShapeSetting(i18n("Sides"), "sides", 3, 3, 100, 0)} ) };
   return shapes;
 }
 
@@ -662,7 +663,7 @@ PresetModel* Settings::presetModel()
 // -------------------------------------------------------------------------------------------------
 void Settings::load(const QString& preset)
 {
-  logDebug(lcSettings) << tr("Loading values from config:") << configFileName()
+  logDebug(lcSettings) << i18n("Loading values from config:") << configFileName()
                        << (preset.size() ? QString("(%1)").arg(preset) : "");
 
   if (preset.isEmpty())
@@ -1081,7 +1082,7 @@ InputMapConfig Settings::getDeviceInputMapConfig(const DeviceId& dId)
   quint32 size = 0;
   stream >> version >> size;
   if (version != inputMapFormatVersion || size > 1024) {
-    logWarning(lcSettings) << tr("Ignoring unsupported device input mapping data.");
+    logWarning(lcSettings) << i18n("Ignoring unsupported device input mapping data.");
     return cfg;
   }
 
@@ -1091,7 +1092,7 @@ InputMapConfig Settings::getDeviceInputMapConfig(const DeviceId& dId)
     MappedAction mappedAction;
     stream >> sequence >> mappedAction;
     if (stream.status() != QDataStream::Ok || !mappedAction.action) {
-      logWarning(lcSettings) << tr("Ignoring invalid device input mapping data.");
+      logWarning(lcSettings) << i18n("Ignoring invalid device input mapping data.");
       return {};
     }
     if (mappedAction.action->type() == Action::Type::ScrollHorizontal) {
@@ -1181,7 +1182,7 @@ QVariant PresetModel::data(const QModelIndex& index, int role) const
   if (role == Qt::DisplayRole)
   {
     if (index.row() == 0) {
-      return tr("Current Settings");
+      return i18n("Current Settings");
     }
 
     return m_presets[index.row()-1];

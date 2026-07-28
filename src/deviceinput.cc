@@ -8,6 +8,8 @@
 #include "settings.h"
 #include "virtualdevice.h"
 
+#include <KLocalizedString>
+
 #include <algorithm>
 #include <list>
 #include <type_traits>
@@ -815,12 +817,12 @@ void InputMapper::addEvents(const input_event* input_events, size_t num)
   }
 
   if (input_events[num-1].type != EV_SYN) {
-    logWarning(input) << tr("Input mapper expects events separated by SYN event.");
+    logWarning(input) << i18n("Input mapper expects events separated by SYN event.");
     return;
   }
 
   if (num == 1) {
-    logWarning(input) << tr("Ignoring single SYN event received.");
+    logWarning(input) << i18n("Ignoring single SYN event received.");
     return;
   }
 
@@ -957,13 +959,13 @@ namespace SpecialKeys
 const std::map<Key, SpecialKeyEventSeqInfo>&  keyEventSequenceMap()
 {
   static const std::map<Key, SpecialKeyEventSeqInfo> keyMap {
-    {Key::NextHold, {InputMapper::tr("Next Hold"),
+    {Key::NextHold, {i18n("Next Hold"),
       KeyEventSequence{{{EV_KEY, to_integral(Key::NextHold), 1}}}}},
-    {Key::BackHold, {InputMapper::tr("Back Hold"),
+    {Key::BackHold, {i18n("Back Hold"),
       KeyEventSequence{{{EV_KEY, to_integral(Key::BackHold), 1}}}}},
-    {Key::NextHoldMove, {InputMapper::tr("Next Hold Move"),
+    {Key::NextHoldMove, {i18n("Next Hold Move"),
       makeSpecialKeyEventSequence(to_integral(Key::NextHoldMove)) }},
-    {Key::BackHoldMove, {InputMapper::tr("Back Hold Move"),
+    {Key::BackHoldMove, {i18n("Back Hold Move"),
       makeSpecialKeyEventSequence(to_integral(Key::BackHoldMove))}},
   };
   return keyMap;

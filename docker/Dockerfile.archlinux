@@ -14,8 +14,8 @@ RUN pacman --noconfirm -Sy && pacman --noconfirm -S \
   gcc \
   make \
   cmake \
+  gettext \
   git \
-  qt6-tools \
   qt6-base \
   qt6-declarative \
   extra-cmake-modules \
@@ -24,6 +24,8 @@ RUN pacman --noconfirm -Sy && pacman --noconfirm -S \
   kcoreaddons \
   kdbusaddons \
   kglobalaccel \
+  ki18n \
+  kio \
   knotifications \
   kwidgetsaddons \
   kwindowsystem \

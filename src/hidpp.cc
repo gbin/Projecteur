@@ -6,6 +6,7 @@
 #include "enum-helper.h"
 #include "logging.h"
 
+#include <KLocalizedString>
 #include <unistd.h>
 
 #include <memory>
@@ -419,8 +420,8 @@ void FeatureSet::getFeatureIndex(FeatureCode fc, std::function<void(MsgResult, u
     m_connection->sendRequest(std::move(featureIndexReqMsg),
     [cb=std::move(cb), fc](MsgResult result, Message&& msg)
     {
-      logDebug(hid) << tr("getFeatureIndex(%1) => %2, %3")
-                       .arg(to_integral(fc)).arg(toString(result)).arg(msg[4]);
+      logDebug(hid) << i18n("getFeatureIndex(%1) => %2, %3",
+                            to_integral(fc), toString(result), msg[4]);
       if (cb) { cb(result, (result != MsgResult::Ok) ? 0 : msg[4]); }
     });
   });
@@ -464,8 +465,8 @@ void FeatureSet::getFirmwareCount(std::function<void(MsgResult, uint8_t, uint8_t
     m_connection->sendRequest(std::move(fwCountReqMsg),
     [featureIndex, cb=std::move(cb)](MsgResult result, Message&& msg)
     {
-      logDebug(hid) << tr("getFirmwareCount() => %1, featureIndex = %2, count = %3")
-                       .arg(toString(result)).arg(featureIndex).arg(msg[4]);
+      logDebug(hid) << i18n("getFirmwareCount() => %1, featureIndex = %2, count = %3",
+                            toString(result), featureIndex, msg[4]);
       if (cb) { cb(result, featureIndex, (result != MsgResult::Ok) ? 0 : msg[4]); }
     });
   }));
@@ -512,9 +513,10 @@ void FeatureSet::getMainFirmwareInfo(uint8_t fwIndex, uint8_t max, uint8_t curre
   getFirmwareInfo(fwIndex, current, makeSafeCallback(
   [this, current, max, fwIndex, cb=std::move(cb)](MsgResult res, FirmwareInfo&& fi) mutable
   {
-    logDebug(hid) << tr("getFirmwareInfo(%1, %2, %3) => %4, fi.type = %5, fi.ver = %6, fi.pref = %7")
-                     .arg(fwIndex).arg(max).arg(current).arg(toString(res))
-                     .arg(to_integral(fi.firmwareType())).arg(fi.firmwareVersion()).arg(fi.firmwarePrefix());
+    logDebug(hid) << i18n(
+      "getFirmwareInfo(%1, %2, %3) => %4, fi.type = %5, fi.ver = %6, fi.pref = %7",
+      fwIndex, max, current, toString(res), to_integral(fi.firmwareType()),
+      fi.firmwareVersion(), fi.firmwarePrefix());
 
     if (res == MsgResult::Ok && fi.firmwareType() == FirmwareInfo::FirmwareType::MainApp)
     {
@@ -547,8 +549,8 @@ void FeatureSet::initFromDevice(DeviceId dId, std::function<void(State)> cb)
     getMainFirmwareInfo(makeSafeCallback(
     [this, dId, cb=std::move(cb)](MsgResult res, FirmwareInfo&& fi) mutable
     {
-      logDebug(hid) << tr("getMainFirmwareInfo() => %1, fi.type = %2").arg(toString(res))
-      .arg(to_integral(fi.firmwareType()));
+      logDebug(hid) << i18n("getMainFirmwareInfo() => %1, fi.type = %2",
+                            toString(res), to_integral(fi.firmwareType()));
 
       if (fi.firmwareType() == FirmwareInfo::FirmwareType::MainApp) {
         m_mainFirmwareInfo = std::move(fi);
@@ -558,8 +560,9 @@ void FeatureSet::initFromDevice(DeviceId dId, std::function<void(State)> cb)
       if (res == MsgResult::Ok && m_mainFirmwareInfo.isValid()
           && loadCachedFeatureSet(dId, m_mainFirmwareInfo, m_featureTable))
       {
-        logDebug(hid)
-          << tr("Loaded feature set with %1 entries from local cache").arg(m_featureTable.size());
+      logDebug(hid)
+          << i18np("Loaded feature set with one entry from local cache",
+                   "Loaded feature set with %1 entries from local cache", m_featureTable.size());
         setState(State::Initialized);
         if (cb) { cb(m_state); }
         return;
@@ -568,8 +571,8 @@ void FeatureSet::initFromDevice(DeviceId dId, std::function<void(State)> cb)
       getFeatureCount(makeSafeCallback(
       [this, dId, cb=std::move(cb)](MsgResult res, uint8_t featureIndex, uint8_t count) mutable
       {
-        logDebug(hid) << tr("getFeatureCount() => %1, featureIndex = %2, count = %3")
-                         .arg(toString(res)).arg(featureIndex).arg(count);
+        logDebug(hid) << i18n("getFeatureCount() => %1, featureIndex = %2, count = %3",
+                              toString(res), featureIndex, count);
 
         if (res != MsgResult::Ok)
         {

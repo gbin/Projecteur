@@ -119,12 +119,15 @@ deps: _require-arch
         base-devel
         cmake
         extra-cmake-modules
+        gettext
         git
         kconfig
         kconfigwidgets
         kcoreaddons
         kdbusaddons
         kglobalaccel
+        ki18n
+        kio
         knotifications
         kwidgetsaddons
         kwindowsystem
@@ -135,7 +138,6 @@ deps: _require-arch
         pacman-contrib
         qt6-base
         qt6-declarative
-        qt6-tools
     )
 
     mapfile -t missing < <(pacman -T "${dependencies[@]}" || true)

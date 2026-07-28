@@ -7,6 +7,8 @@ list(APPEND _PkgDeps_Projecteur_archlinux
   "kcoreaddons>=6.7"
   "kdbusaddons>=6.7"
   "kglobalaccel>=6.7"
+  "ki18n>=6.7"
+  "kio>=6.7"
   "knotifications>=6.7"
   "kwidgetsaddons>=6.7"
   "kwindowsystem>=6.7"
@@ -16,8 +18,8 @@ list(APPEND _PkgDeps_Projecteur_archlinux
 )
 
 list(APPEND _PkgDepsMake_Projecteur_archlinux
-  "fakeroot" "awk" "cmake>=3.20" "extra-cmake-modules>=6.7" "make" "lsb-release" "tar"
-  "pkg-config" "qt6-tools>=6.11"
+  "fakeroot" "awk" "cmake>=3.20" "extra-cmake-modules>=6.7" "gettext" "make" "lsb-release"
+  "tar" "pkg-config"
 )
 
 list(APPEND PkgDependencies_MAP_Projecteur

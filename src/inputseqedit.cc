@@ -8,6 +8,8 @@
 #include "inputmapconfig.h"
 #include "logging.h"
 
+#include <KLocalizedString>
+
 #include <QApplication>
 #include <QMenu>
 #include <QPaintEvent>
@@ -208,7 +210,7 @@ void InputSeqEdit::paintEvent(QPaintEvent* /* paintEvent */)
     const auto spacingX = QStaticText(" ").size().width();
     xPos += drawRecordingSymbol(xPos, p, option) + spacingX;
     if (m_recordedSequence.empty()) {
-      drawPlaceHolderText(xPos, p, option, tr("Press device button(s)..."));
+      drawPlaceHolderText(xPos, p, option, i18n("Press device button(s)..."));
     } else {
       drawKeyEventSequence(xPos, p, option, m_recordedSequence, m_deviceId, false);
     }
@@ -380,7 +382,7 @@ int InputSeqEdit::drawEmptyIndicator(int startX, QPainter& p, const QStyleOption
     p.setPen(option.palette.color(QPalette::Disabled, QPalette::Text));
   }
 
-  static const QStaticText textNone(InputSeqEdit::tr("None"));
+  static const QStaticText textNone(i18n("None"));
   const auto top = static_cast<int>((option.rect.height() - textNone.size().height()) / 2);
   p.drawStaticText(startX + option.rect.left(), option.rect.top() + top, textNone);
   p.restore();

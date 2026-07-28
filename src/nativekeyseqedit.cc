@@ -7,6 +7,8 @@
 #include "inputseqedit.h"
 #include "logging.h"
 
+#include <KLocalizedString>
+
 #include <linux/input.h>
 
 #include <QApplication>
@@ -112,7 +114,7 @@ void NativeKeySeqEdit::paintEvent(QPaintEvent* /* event */)
     const int spacingX = static_cast<int>(QStaticText(" ").size().width());
     xPos += drawRecordingSymbol(xPos, p, option) + spacingX;
     if (m_recordedQtKeys.empty()) {
-      xPos += drawPlaceHolderText(xPos, p, option, tr("Press shortcut..."));
+      xPos += drawPlaceHolderText(xPos, p, option, i18n("Press shortcut..."));
     } else {
       xPos += drawText(xPos, p, option, NativeKeySequence::toString(m_recordedQtKeys, m_recordedNativeModifiers));
       xPos += drawText(xPos, p, option, ", ...");

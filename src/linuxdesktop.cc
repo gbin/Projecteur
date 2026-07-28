@@ -5,6 +5,8 @@
 
 #include "logging.h"
 
+#include <KLocalizedString>
+
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QDBusUnixFileDescriptor>
@@ -34,7 +36,7 @@ namespace {
   {
     int pipeDescriptors[2] = {-1, -1};
     if (::pipe2(pipeDescriptors, O_CLOEXEC) != 0) {
-      logError(desktop) << LinuxDesktop::tr("Could not create a pipe for the KWin screenshot.");
+      logError(desktop) << i18n("Could not create a pipe for the KWin screenshot.");
       return {};
     }
 
@@ -42,7 +44,7 @@ namespace {
     if (!readPipe.open(pipeDescriptors[0], QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
       ::close(pipeDescriptors[0]);
       ::close(pipeDescriptors[1]);
-      logError(desktop) << LinuxDesktop::tr("Could not open the KWin screenshot pipe.");
+      logError(desktop) << i18n("Could not open the KWin screenshot pipe.");
       return {};
     }
 
@@ -62,10 +64,10 @@ namespace {
     }
 
     if (!reply.isValid()) {
-      auto message = LinuxDesktop::tr("Screenshot via KWin ScreenShot2 failed: %1")
-                       .arg(reply.error().message());
+      auto message = i18n("Screenshot via KWin ScreenShot2 failed: %1",
+                          reply.error().message());
       if (reply.error().name() == QStringLiteral("org.kde.KWin.ScreenShot2.Error.NoAuthorized")) {
-        message += LinuxDesktop::tr(
+        message += i18n(
           " Install Projecteur so KWin can associate the executable with its desktop metadata.");
       }
       logError(desktop) << message;
@@ -82,13 +84,13 @@ namespace {
     const quint64 expectedBytes = quint64(stride) * height;
     if (width == 0 || height == 0 || stride == 0
         || expectedBytes > quint64(std::numeric_limits<qsizetype>::max())) {
-      logError(desktop) << LinuxDesktop::tr("KWin returned invalid screenshot dimensions.");
+      logError(desktop) << i18n("KWin returned invalid screenshot dimensions.");
       return {};
     }
 
     const QByteArray pixels = readPipe.readAll();
     if (quint64(pixels.size()) < expectedBytes) {
-      logError(desktop) << LinuxDesktop::tr("KWin returned an incomplete screenshot.");
+      logError(desktop) << i18n("KWin returned an incomplete screenshot.");
       return {};
     }
 
@@ -96,7 +98,7 @@ namespace {
     const QImage image(reinterpret_cast<const uchar*>(pixels.constData()),
                        int(width), int(height), int(stride), format);
     if (image.isNull()) {
-      logError(desktop) << LinuxDesktop::tr("KWin returned an unsupported screenshot format.");
+      logError(desktop) << i18n("KWin returned an unsupported screenshot format.");
       return {};
     }
 
@@ -135,11 +137,11 @@ QPixmap LinuxDesktop::grabScreen(QScreen* screen) const
     return {};
   }
   if (!isWayland()) {
-    logWarning(desktop) << tr("Screen capture is only supported on Wayland.");
+    logWarning(desktop) << i18n("Screen capture is only supported on Wayland.");
     return {};
   }
   if (type() != LinuxDesktop::Type::KDE) {
-    logWarning(desktop) << tr("Screen capture is only supported on KDE Plasma.");
+    logWarning(desktop) << i18n("Screen capture is only supported on KDE Plasma.");
     return {};
   }
   return grabScreenKWin(screen);
@@ -154,7 +156,7 @@ void LinuxDesktop::setShakeCursorEffectSuppressed(bool suppressed)
 
   QDBusInterface interface(kwinService, kwinEffectsPath, kwinEffectsInterface);
   if (!interface.isValid()) {
-    logWarning(desktop) << tr("Could not access KWin's desktop effects interface.");
+    logWarning(desktop) << i18n("Could not access KWin's desktop effects interface.");
     return;
   }
 
@@ -163,8 +165,8 @@ void LinuxDesktop::setShakeCursorEffectSuppressed(bool suppressed)
     const QDBusReply<bool> loadedReply =
       interface.call(QStringLiteral("isEffectLoaded"), QString::fromLatin1(shakeCursorEffect));
     if (!loadedReply.isValid()) {
-      logWarning(desktop) << tr("Could not query KWin's Shake Cursor effect: %1")
-                             .arg(loadedReply.error().message());
+      logWarning(desktop) << i18n("Could not query KWin's Shake Cursor effect: %1",
+                                  loadedReply.error().message());
       return;
     }
     if (!loadedReply.value()) {
@@ -174,8 +176,8 @@ void LinuxDesktop::setShakeCursorEffectSuppressed(bool suppressed)
     const QDBusReply<void> unloadReply =
       interface.call(QStringLiteral("unloadEffect"), QString::fromLatin1(shakeCursorEffect));
     if (!unloadReply.isValid()) {
-      logWarning(desktop) << tr("Could not suppress KWin's Shake Cursor effect: %1")
-                             .arg(unloadReply.error().message());
+      logWarning(desktop) << i18n("Could not suppress KWin's Shake Cursor effect: %1",
+                                  unloadReply.error().message());
       return;
     }
 
@@ -187,9 +189,9 @@ void LinuxDesktop::setShakeCursorEffectSuppressed(bool suppressed)
     interface.call(QStringLiteral("loadEffect"), QString::fromLatin1(shakeCursorEffect));
   if (!loadReply.isValid() || !loadReply.value()) {
     const auto error = loadReply.isValid()
-                         ? tr("KWin refused to load the effect.")
+                         ? i18n("KWin refused to load the effect.")
                          : loadReply.error().message();
-    logWarning(desktop) << tr("Could not restore KWin's Shake Cursor effect: %1").arg(error);
+    logWarning(desktop) << i18n("Could not restore KWin's Shake Cursor effect: %1", error);
     return;
   }
 

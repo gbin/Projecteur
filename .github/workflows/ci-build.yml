@@ -16,9 +16,9 @@ jobs:
       - name: Install build dependencies
         run: >-
           pacman -Syu --noconfirm
-          base-devel cmake extra-cmake-modules git kconfig kconfigwidgets kcoreaddons kdbusaddons
-          kglobalaccel knotifications kwidgetsaddons kwindowsystem kxmlgui layer-shell-qt libplasma
-          qt6-base qt6-declarative qt6-tools
+          base-devel cmake extra-cmake-modules gettext git kconfig kconfigwidgets kcoreaddons kdbusaddons
+          kglobalaccel ki18n kio knotifications kwidgetsaddons kwindowsystem kxmlgui layer-shell-qt
+          libplasma qt6-base qt6-declarative
 
       - uses: actions/checkout@v4
         with:

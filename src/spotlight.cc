@@ -9,6 +9,8 @@
 #include "settings.h"
 #include "virtualdevice.h"
 
+#include <KLocalizedString>
+
 #include <QSocketNotifier>
 #include <QTimer>
 #include <QVarLengthArray>
@@ -96,7 +98,7 @@ Spotlight::Spotlight(QObject* parent, Options options, Settings* settings)
       VirtualDevice::Type::Keyboard, "Projecteur_virtual_keyboard");
   }
   else {
-    logInfo(device) << tr("Virtual device initialization was skipped.");
+    logInfo(device) << i18n("Virtual device initialization was skipped.");
   }
 
   m_connectionTimer->setSingleShot(true);
@@ -107,7 +109,7 @@ Spotlight::Spotlight(QObject* parent, Options options, Settings* settings)
   m_connectionTimer->setInterval(delayedConnectionTimerIntervalMs);
 
   connect(m_connectionTimer, &QTimer::timeout, this, [this]() {
-    logDebug(device) << tr("New connection check triggered");
+    logDebug(device) << i18n("New connection check triggered");
     connectDevices();
   });
 
@@ -189,8 +191,9 @@ int Spotlight::connectDevices()
       if (!scanSubDevice.deviceReadable
           || (requiresWriteAccess && !scanSubDevice.deviceWritable))
       {
-        logWarn(device) << tr("Sub-device not accessible: %1 (%2:%3) %4")
-          .arg(dc->deviceName(), hexId(dev.id.vendorId), hexId(dev.id.productId), scanSubDevice.deviceFile);
+        logWarn(device) << i18n("Sub-device not accessible: %1 (%2:%3) %4",
+                                dc->deviceName(), hexId(dev.id.vendorId),
+                                hexId(dev.id.productId), scanSubDevice.deviceFile);
         QTimer::singleShot(
           0, this,
           [this, name = dc->deviceName(), path = scanSubDevice.deviceFile]() {
@@ -330,15 +333,15 @@ int Spotlight::connectDevices()
       {
         QTimer::singleShot(0, this,
         [this, id = dev.id, devName = dc->deviceName(), anyConnectedBefore](){
-          logInfo(device) << tr("Connected device: %1 (%2:%3)")
-                             .arg(devName, hexId(id.vendorId), hexId(id.productId));
+          logInfo(device) << i18n("Connected device: %1 (%2:%3)",
+                                  devName, hexId(id.vendorId), hexId(id.productId));
           emit deviceConnected(id, devName);
           if (!anyConnectedBefore) { emit anySpotlightDeviceConnectedChanged(true); }
         });
       }
 
-      logDebug(device) << tr("Connected sub-device: %1 (%2:%3) %4")
-                          .arg(dc->deviceName(), hexId(dev.id.vendorId),
+      logDebug(device) << i18n("Connected sub-device: %1 (%2:%3) %4",
+                               dc->deviceName(), hexId(dev.id.vendorId),
                                hexId(dev.id.productId), scanSubDevice.deviceFile);
       emit subDeviceConnected(dev.id, dc->deviceName(), scanSubDevice.deviceFile);
     }
@@ -367,8 +370,8 @@ void Spotlight::removeDeviceConnection(const QString &devicePath)
 
     if (dc->subDeviceCount() == 0)
     {
-      logInfo(device) << tr("Disconnected device: %1 (%2:%3)")
-                         .arg(dc->deviceName(), hexId(dc_it->first.vendorId),
+      logInfo(device) << i18n("Disconnected device: %1 (%2:%3)",
+                              dc->deviceName(), hexId(dc_it->first.vendorId),
                               hexId(dc_it->first.productId));
       emit deviceDisconnected(dc_it->first, dc->deviceName());
       dc_it = m_deviceConnections.erase(dc_it);
@@ -456,7 +459,8 @@ void Spotlight::onEventDataAvailable(int fd, SubEventConnection& connection)
     }
     else if (buf.pos() >= buf.size())
     { // No idea if this will ever happen, but log it to make sure we get notified.
-      logWarning(device) << tr("Discarded %1 input events without EV_SYN.").arg(buf.size());
+      logWarning(device) << i18np("Discarded one input event without EV_SYN.",
+                                  "Discarded %1 input events without EV_SYN.", buf.size());
       connection.inputMapper()->resetState();
       buf.reset();
     }
@@ -586,7 +590,7 @@ bool Spotlight::setupDevEventInotify()
   {
     fd = inotify_init();
     if (fd == -1) {
-      logError(device) << tr("inotify_init() failed. Detection of new attached devices will not work.");
+      logError(device) << i18n("inotify_init() failed. Detection of new attached devices will not work.");
       return false;
     }
   }
@@ -594,7 +598,7 @@ bool Spotlight::setupDevEventInotify()
   const int wd = inotify_add_watch(fd, "/dev/input", IN_CREATE | IN_DELETE);
 
   if (wd < 0) {
-    logError(device) << tr("inotify_add_watch for /dev/input returned with failure.");
+    logError(device) << i18n("inotify_add_watch for /dev/input returned with failure.");
     return false;
   }
 

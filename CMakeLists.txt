@@ -24,14 +24,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui LinguistTools Quick Widgets)
-find_package(KF6 6.7 REQUIRED COMPONENTS Config ConfigWidgets CoreAddons DBusAddons GlobalAccel Notifications
-                                        Package KirigamiPlatform WidgetsAddons WindowSystem XmlGui)
+find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui Quick Widgets)
+find_package(KF6 6.7 REQUIRED COMPONENTS Config ConfigWidgets CoreAddons DBusAddons GlobalAccel I18n KIO
+                                        Notifications Package KirigamiPlatform WidgetsAddons WindowSystem XmlGui)
 find_package(Plasma 6.7 REQUIRED)
 find_package(LayerShellQt 6.7 REQUIRED)
-set(QT_PACKAGE_NAME Qt6)
 message(STATUS "Using Qt version: ${Qt6_VERSION}")
-include(Translation)
 
 qt6_add_resources(RESOURCES qml/qml.qrc resources.qrc)
 
@@ -87,7 +85,8 @@ target_include_directories(projecteur PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(projecteur
   PRIVATE Qt6::Core Qt6::DBus Qt6::Quick Qt6::Widgets
           KF6::ConfigCore KF6::ConfigGui KF6::ConfigWidgets KF6::CoreAddons KF6::DBusAddons
-          KF6::GlobalAccel KF6::Notifications KF6::WidgetsAddons KF6::WindowSystem KF6::XmlGui
+          KF6::GlobalAccel KF6::I18n KF6::KIOFileWidgets KF6::Notifications KF6::WidgetsAddons
+          KF6::WindowSystem KF6::XmlGui
           LayerShellQt::Interface
 )
 
@@ -122,11 +121,8 @@ string(REPLACE "-" "" PROJECTEUR_VERSION_STRING_ARCHLINUX "${PROJECTEUR_VERSION_
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version-string" "${PROJECTEUR_VERSION_STRING}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version-string.archlinux" "${PROJECTEUR_VERSION_STRING_ARCHLINUX}")
 
-# Translation
-list(APPEND languages de fr es)
-set(ts_directories "${CMAKE_CURRENT_SOURCE_DIR}/i18n")
-add_translations_target("projecteur" "${CMAKE_CURRENT_BINARY_DIR}" "${ts_directories}" "${languages}")
-add_translation_update_task("projecteur" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/i18n" "${languages}")
+# Install gettext catalogs supplied by KDE's translation infrastructure.
+ki18n_install(po)
 
 # Add target with non-source files for convenience when using IDEs like QtCreator and others
 add_custom_target(non-sources SOURCES README.md LICENSE.md doc/CHANGELOG.md devices.conf

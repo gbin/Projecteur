@@ -3,6 +3,8 @@
 
 #include "devicescan.h"
 
+#include <KLocalizedString>
+
 #include <array>
 
 #include <QDirIterator>
@@ -16,8 +18,6 @@ bool isExtraDeviceSupported(quint16 vendorId, quint16 productId);
 QString getExtraDeviceName(quint16 vendorId, quint16 productId);
 
 namespace {
-  class DeviceScan_ : public QObject {}; // for i18n and logging
-
   // -----------------------------------------------------------------------------------------------
   // List of supported devices
   const std::array<SupportedDevice, 4> supportedDefaultDevices {{
@@ -173,12 +173,13 @@ namespace DeviceScan {
     const QFileInfo dpInfo(hidDevicePath);
 
     if (!dpInfo.exists()) {
-      result.errorMessages.push_back(DeviceScan_::tr("HID device path '%1' does not exist.").arg(hidDevicePath));
+      result.errorMessages.push_back(i18n("HID device path '%1' does not exist.", hidDevicePath));
       return result;
     }
 
     if (!dpInfo.isExecutable()) {
-      result.errorMessages.push_back(DeviceScan_::tr("HID device path '%1': Cannot list files.").arg(hidDevicePath));
+      result.errorMessages.push_back(
+        i18n("HID device path '%1': Cannot list files.", hidDevicePath));
       return result;
     }
 

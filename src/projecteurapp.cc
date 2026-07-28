@@ -18,6 +18,8 @@
 #include <KActionCollection>
 #include <KDBusService>
 #include <KGlobalAccel>
+#include <KLocalizedString>
+#include <KMessageBox>
 #include <KNotification>
 #include <KWindowSystem>
 #include <LayerShellQt/Window>
@@ -25,7 +27,6 @@
 #include <QAction>
 #include <QFontDatabase>
 #include <QIcon>
-#include <QMessageBox>
 #include <QPointer>
 #include <QHash>
 #include <QSet>
@@ -70,7 +71,7 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
   if (!options.commands.isEmpty()) {
     const auto commands = options.commands.join(QStringLiteral("; "));
     logWarning(mainapp)
-      << tr("Cannot send commands '%1' - no running application instance found.").arg(commands);
+      << i18n("Cannot send commands '%1' - no running application instance found.", commands);
     m_startupExitCode = 43;
     m_dbusService->unregister();
     m_primaryInstance = false;
@@ -81,10 +82,10 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
 
   if (screens().empty())
   {
-    const auto title = tr("No Screens detected");
-    const auto text = tr("screens().size() returned a size < 1. Exiting.");
+    const auto title = i18n("No Screens detected");
+    const auto text = i18n("screens().size() returned a size < 1. Exiting.");
     logError(mainapp) << title << ";" << text;
-    QMessageBox::critical(nullptr, title, text);
+    KMessageBox::error(nullptr, text, title);
     QTimer::singleShot(0, this, [this](){ this->exit(2); });
     return;
   }
@@ -115,17 +116,17 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
     m_spotlight->setSpotActive(true);
   });
   connect(&*m_dialog, &PreferencesDialog::exitApplicationRequested, this, [this]() {
-    logDebug(mainapp) << tr("Exit request from preferences dialog.");
+    logDebug(mainapp) << i18n("Exit request from preferences dialog.");
     quit();
   });
 
   const QString desktopEnv = m_linuxDesktop->type() == LinuxDesktop::Type::KDE
                                ? QStringLiteral("KDE")
-                               : tr("Unknown");
+                               : i18n("Unknown");
 
-  logDebug(mainapp) << tr("Qt platform plugin: %1;").arg(QGuiApplication::platformName())
-                    << tr("Desktop Environment: %1;").arg(desktopEnv)
-                    << tr("Wayland: %1").arg(m_linuxDesktop->isWayland() ? "true" : "false");
+  logDebug(mainapp) << i18n("Qt platform plugin: %1;", QGuiApplication::platformName())
+                    << i18n("Desktop Environment: %1;", desktopEnv)
+                    << i18n("Wayland: %1", m_linuxDesktop->isWayland() ? "true" : "false");
 
   if (options.showPreferencesOnStart) {
     QTimer::singleShot(0, this, [this](){ showPreferences(true); });
@@ -143,15 +144,16 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
   // Create qml overlay window component
   m_windowQmlComponent = new QQmlComponent(m_qmlEngine, QUrl(QStringLiteral("qrc:/main.qml")), m_qmlEngine);
   if (m_windowQmlComponent->status() != QQmlComponent::Status::Ready) {
-    const auto title = tr("Overlay window error.");
-    const auto text = tr("Qml component has status '%1'. Exiting.").arg(m_windowQmlComponent->status());
+    const auto title = i18n("Overlay window error.");
+    const auto text = i18n("Qml component has status '%1'. Exiting.",
+                           static_cast<int>(m_windowQmlComponent->status()));
 
     logError(mainapp) << title << ";" << text;
     for (const auto& error : m_windowQmlComponent->errors()) {
       logError(mainapp) << error.toString();
     }
 
-    QMessageBox::critical(nullptr, title, text);
+    KMessageBox::error(nullptr, text, title);
     QTimer::singleShot(0, this, [this](){ this->exit(2); });
     return;
   }
@@ -262,7 +264,7 @@ void ProjecteurApplication::setupControlService(Options const& options)
   m_control = new ProjecteurControl(this, m_settings, m_spotlight, m_presentationTimer,
                                     !options.hideSysTrayIcon);
   if (!m_control->registerObject()) {
-    logError(mainapp) << tr("Could not register the Projecteur D-Bus control object.");
+    logError(mainapp) << i18n("Could not register the Projecteur D-Bus control object.");
   }
 }
 
@@ -270,7 +272,7 @@ void ProjecteurApplication::setupControlService(Options const& options)
 void ProjecteurApplication::setupGlobalShortcuts()
 {
   m_actionCollection = new KActionCollection(this);
-  m_actionCollection->setComponentDisplayName(tr("Projecteur"));
+  m_actionCollection->setComponentDisplayName(i18n("Projecteur"));
 
   const auto addAction =
     [this](const QString& id, const QString& text, const QString& iconName, auto callback)
@@ -279,12 +281,12 @@ void ProjecteurApplication::setupGlobalShortcuts()
       m_actionCollection->addAction(id, action);
       connect(action, &QAction::triggered, this, std::move(callback));
       if (!KGlobalAccel::setGlobalShortcut(action, QList<QKeySequence>{})) {
-        logWarning(mainapp) << tr("Could not register global shortcut action '%1'.").arg(id);
+        logWarning(mainapp) << i18n("Could not register global shortcut action '%1'.", id);
       }
     };
 
   addAction(
-    QStringLiteral("toggle_spotlight"), tr("Toggle Spotlight"),
+    QStringLiteral("toggle_spotlight"), i18n("Toggle Spotlight"),
     QStringLiteral("view-visible"),
     [this]() {
       if (!m_settings->overlayDisabled()) {
@@ -292,23 +294,23 @@ void ProjecteurApplication::setupGlobalShortcuts()
       }
     });
   addAction(
-    QStringLiteral("show_preferences"), tr("Show Preferences"),
+    QStringLiteral("show_preferences"), i18n("Show Preferences"),
     QStringLiteral("configure"),
     [this]() { m_control->ShowPreferences(); });
   addAction(
-    QStringLiteral("start_restart_timer"), tr("Start or Restart Presentation Timer"),
+    QStringLiteral("start_restart_timer"), i18n("Start or Restart Presentation Timer"),
     QStringLiteral("chronometer"),
     [this]() { m_control->RestartTimer(); });
   addAction(
-    QStringLiteral("reset_timer"), tr("Reset Presentation Timer"),
+    QStringLiteral("reset_timer"), i18n("Reset Presentation Timer"),
     QStringLiteral("edit-undo"),
     [this]() { m_control->ResetTimer(); });
   addAction(
-    QStringLiteral("next_preset"), tr("Next Spotlight Preset"),
+    QStringLiteral("next_preset"), i18n("Next Spotlight Preset"),
     QStringLiteral("go-next"),
     [this]() { m_control->loadNextPreset(); });
   addAction(
-    QStringLiteral("previous_preset"), tr("Previous Spotlight Preset"),
+    QStringLiteral("previous_preset"), i18n("Previous Spotlight Preset"),
     QStringLiteral("go-previous"),
     [this]() { m_control->loadPreviousPreset(); });
 }
@@ -321,8 +323,8 @@ void ProjecteurApplication::setupNotifications()
     if (state == PresentationTimer::State::Completed) {
       sendNotification(
         QStringLiteral("presentationTimerFinished"),
-        tr("Presentation timer finished"),
-        tr("The configured presentation time has elapsed."),
+        i18n("Presentation timer finished"),
+        i18n("The configured presentation time has elapsed."),
         QStringLiteral("chronometer"));
     }
   });
@@ -331,16 +333,16 @@ void ProjecteurApplication::setupNotifications()
           [this](const DeviceId&, const QString& name) {
     sendNotification(
       QStringLiteral("presenterConnected"),
-      tr("Presenter connected"),
-      tr("%1 is ready.").arg(name),
+      i18n("Presenter connected"),
+      i18n("%1 is ready.", name),
       QStringLiteral("input-mouse"));
   });
   connect(m_spotlight, &Spotlight::deviceDisconnected, this,
           [this](const DeviceId&, const QString& name) {
     sendNotification(
       QStringLiteral("presenterDisconnected"),
-      tr("Presenter disconnected"),
-      tr("%1 is no longer available.").arg(name),
+      i18n("Presenter disconnected"),
+      i18n("%1 is no longer available.", name),
       QStringLiteral("input-mouse"));
   });
 
@@ -351,9 +353,9 @@ void ProjecteurApplication::setupNotifications()
     inaccessiblePaths->insert(path);
     sendNotification(
       QStringLiteral("deviceAccessError"),
-      tr("Presenter access failed"),
-      tr("%1 cannot access %2. Check the installed udev rules and device permissions.")
-        .arg(name, path),
+      i18n("Presenter access failed"),
+      i18n("%1 cannot access %2. Check the installed udev rules and device permissions.",
+           name, path),
       QStringLiteral("dialog-warning"));
   });
   connect(m_spotlight, &Spotlight::subDeviceConnected, this,
@@ -375,14 +377,14 @@ void ProjecteurApplication::setupNotifications()
         || status == QStringLiteral("charging-error")) {
       warningKey = QStringLiteral("error:") + status;
       eventId = QStringLiteral("presenterBatteryError");
-      title = tr("Presenter battery problem");
-      text = tr("%1 reported a battery error: %2.").arg(name, status);
+      title = i18n("Presenter battery problem");
+      text = i18n("%1 reported a battery error: %2.", name, status);
       iconName = QStringLiteral("dialog-warning");
     } else if (level >= 0 && level <= 20 && status == QStringLiteral("discharging")) {
       warningKey = QStringLiteral("low");
       eventId = QStringLiteral("presenterBatteryLow");
-      title = tr("Presenter battery low");
-      text = tr("%1 has %2% battery remaining.").arg(name).arg(level);
+      title = i18n("Presenter battery low");
+      text = i18n("%1 has %2% battery remaining.", name, level);
       iconName = QStringLiteral("battery-low");
     }
 
@@ -646,7 +648,7 @@ void ProjecteurApplication::applyCommand(const QString& command)
 
   if (cmdKey == "quit")
   {
-    logDebug(cmdserver) << tr("Received quit command.");
+    logDebug(cmdserver) << i18n("Received quit command.");
     this->quit();
   }
   else if (cmdKey == "vibrate") // with args intensity (0-255), length (0-10)
@@ -675,9 +677,8 @@ void ProjecteurApplication::applyCommand(const QString& command)
       return std::uint8_t{0};
     }();
 
-    logDebug(cmdserver) << tr("Received command vibrate = intensity:%1, length:%2")
-                              .arg(intensity)
-                              .arg(length);
+    logDebug(cmdserver) << i18n("Received command vibrate = intensity:%1, length:%2",
+                                intensity, length);
 
     m_deviceCommandHelper->sendVibrateCommand(intensity, length);
   }
@@ -686,18 +687,17 @@ void ProjecteurApplication::applyCommand(const QString& command)
     bool ok = false;
     int const sizeAdjust = cmdValue.toInt(&ok);
     if (ok) {
-      logDebug(cmdserver) << tr("Received command spot.size.adjust = %1%2")
-                               .arg(sizeAdjust > 0 ? "+" : "")
-                               .arg(sizeAdjust);
+      logDebug(cmdserver) << i18n("Received command spot.size.adjust = %1%2",
+                                  sizeAdjust > 0 ? "+" : "", sizeAdjust);
       m_settings->setSpotSize(m_settings->spotSize() + sizeAdjust);
     } else {
-      logDebug(cmdserver) << tr("Received invalid value for command spot.size.adjust");
+      logDebug(cmdserver) << i18n("Received invalid value for command spot.size.adjust");
     }
   }
   else if (cmdKey == "spot")
   {
     if (cmdValue.isEmpty()) {
-      logDebug(cmdserver) << tr("Received empty command value for command spot");
+      logDebug(cmdserver) << i18n("Received empty command value for command spot");
     } else if (cmdValue.toLower() == "toggle") {
       m_spotlight->setSpotActive(!m_spotlight->spotActive());
     }
@@ -705,19 +705,19 @@ void ProjecteurApplication::applyCommand(const QString& command)
       const bool active = (cmdValue.toLower() == "on"
                             || cmdValue == "1"
                             || cmdValue.toLower() == "true");
-      logDebug(cmdserver) << tr("Received command spot = %1").arg(active);
+      logDebug(cmdserver) << i18n("Received command spot = %1", active);
       m_spotlight->setSpotActive(active);
     }
   }
   else if (cmdKey == "settings" || cmdKey == "preferences")
   {
     const bool show = !(cmdValue.toLower() == "hide" || cmdValue == "0");
-    logDebug(cmdserver) << tr("Received command settings = %1").arg(show);
+    logDebug(cmdserver) << i18n("Received command settings = %1", show);
     showPreferences(show);
   }
   else if (cmdKey == "preset")
   {
-    logDebug(cmdserver) << tr("Received command preset = %1").arg(cmdValue);
+    logDebug(cmdserver) << i18n("Received command preset = %1", cmdValue);
     if (!cmdValue.isEmpty()) { m_settings->loadPreset(cmdValue); }
   }
   else if (cmdValue.size())
@@ -728,12 +728,12 @@ void ProjecteurApplication::applyCommand(const QString& command)
       return (pair.first == cmdKey);
     });
     if (it != m_settings->stringProperties().cend()) {
-      logDebug(cmdserver) << tr("Received command '%1'='%2'").arg(cmdKey, cmdValue);
+      logDebug(cmdserver) << i18n("Received command '%1'='%2'", cmdKey, cmdValue);
       it->second.setFunction(cmdValue);
     }
     else {
       // string property not found...
-      logWarning(cmdserver) << tr("Received unknown command key (%1)").arg(cmdKey);
+      logWarning(cmdserver) << i18n("Received unknown command key (%1)", cmdKey);
     }
   }
 }

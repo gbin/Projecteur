@@ -213,9 +213,10 @@ and Hold Move actions for the same button.
 
 * C++17 compiler
 * CMake 3.20 or later
-* Qt 6.11 with Core, DBus, Gui, LinguistTools, Quick, and Widgets
+* Qt 6.11 with Core, DBus, Gui, Quick, and Widgets
 * KDE Plasma 6.7 Wayland, including Libplasma, KConfig, KConfigWidgets, KCoreAddons,
-  KDBusAddons, KGlobalAccel, KNotifications, KWidgetsAddons, KWindowSystem, and KXmlGui
+  KDBusAddons, KGlobalAccel, KI18n, KIO, KNotifications, KWidgetsAddons, KWindowSystem,
+  and KXmlGui
 * LayerShellQt 6.7
 * Extra CMake Modules 6.7 or later
 
@@ -228,6 +229,12 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
 cmake --build build
 sudo cmake --install build
 ```
+
+### Translations
+
+Projecteur uses KDE's KI18n/gettext translation system. Run `Messages.sh` through the standard
+KDE translation tooling to extract `projecteur.pot`; translated catalogs placed under
+`po/<locale>/projecteur.po` are compiled and installed automatically.
 
 ### Arch Linux
 
