@@ -18,6 +18,11 @@ Window {
     color: "transparent"
 
     readonly property double diagonal: Math.sqrt(Math.pow(Math.max(width, height),2)*2)
+    readonly property real deviceScale: screen ? screen.devicePixelRatio : 1.0
+
+    function snapToDevicePixel(value) {
+        return Math.round(value * deviceScale) / deviceScale
+    }
 
     Item {
         id: rotationItem
@@ -38,20 +43,35 @@ Window {
 
             Utils.Image {
                 id: desktopImage
-                smooth: rotation == 0 ? false : true
+                smooth: rotation != 0 || mainWindow.deviceScale != 1.0
                 rotation: -rotationItem.rotation
                 readonly property real xOffset: Math.floor(parent.width/2.0 + ((rotationItem.width-mainWindow.width)/2))
                 readonly property real yOffset: Math.floor(parent.height/2.0 + ((rotationItem.height-mainWindow.height)/2))
-                x: -ma.mouseX + xOffset
-                y: -ma.mouseY + yOffset
+                readonly property real rawX: -ma.mouseX + xOffset
+                readonly property real rawY: -ma.mouseY + yOffset
+                readonly property real sampleScaleX: desktopTexture.textureSize.width / parent.width
+                readonly property real sampleScaleY: desktopTexture.textureSize.height / parent.height
+                x: rotation == 0 ? Math.round(rawX * sampleScaleX) / sampleScaleX : rawX
+                y: rotation == 0 ? Math.round(rawY * sampleScaleY) / sampleScaleY : rawY
                 width: mainWindow.width; height: mainWindow.height
             }
+        }
+
+        ShaderEffectSource {
+            id: desktopTexture
+            anchors.fill: centerRect
+            visible: false
+            sourceItem: desktopItem
+            smooth: true
+            textureSize: Qt.size(
+                Math.max(1, Math.round(desktopItem.width)),
+                Math.max(1, Math.round(desktopItem.height)))
         }
 
         MultiEffect {
             visible: Settings.zoomEnabled && mainWindow.spotOnCurrentWindow
             anchors.fill: centerRect
-            source: desktopItem
+            source: desktopTexture
             maskEnabled: true
             maskSource: spotShapeLoader
             enabled: false
@@ -90,8 +110,8 @@ Window {
             opacity: Settings.shadeOpacity
             height: spotSize > 50 ? Math.min(spotSize, mainWindow.height) : 50
             width: height
-            x: ma.posX - width/2
-            y: ma.posY - height/2
+            x: mainWindow.snapToDevicePixel(ma.posX - width/2)
+            y: mainWindow.snapToDevicePixel(ma.posY - height/2)
             color: Settings.shadeColor
             visible: false
             enabled: false
