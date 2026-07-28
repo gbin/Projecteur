@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QPixmap>
 
+class KWinScreencast;
 class QScreen;
 
 class LinuxDesktop : public QObject
@@ -21,10 +22,12 @@ public:
   Type type() const { return m_type; };
 
   QPixmap grabScreen(QScreen* screen) const;
+  QObject* streamScreen(QScreen* screen, QObject* parent = nullptr);
   void setShakeCursorEffectSuppressed(bool suppressed);
 
 private:
   bool m_wayland = false;
   Type m_type = Type::Other;
   bool m_shakeCursorEffectSuppressed = false;
+  KWinScreencast* m_screencast = nullptr;
 };

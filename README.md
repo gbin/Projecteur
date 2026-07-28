@@ -60,7 +60,6 @@ So here it is: a Linux application for the Logitech Spotlight.
     - [Troubleshooting](#troubleshooting)
       - [Opaque Spotlight / No Transparency](#opaque-spotlight--no-transparency)
       - [Missing System Tray](#missing-system-tray)
-      - [Zoom is not updated while spotlight is shown](#zoom-is-not-updated-while-spotlight-is-shown)
       - [Wayland](#wayland)
       - [Wayland Zoom](#wayland-zoom)
       - [Device shows as not connected](#device-shows-as-not-connected)
@@ -146,7 +145,7 @@ such as the Logitech Spotlight 2 provide configurable haptic feedback.
 
 This port targets KDE Plasma 6.7 on Wayland with Qt 6.11. X11 and Qt 5 are not
 supported. The spotlight overlay and device features are Wayland-native; zoom uses
-KWin's restricted `org.kde.KWin.ScreenShot2` interface.
+KWin's restricted screencast protocol and KPipeWire.
 
 If you build the application yourself, install both the generated desktop entry and
 udev rules (see [pre-requisites](#pre-requisites)).
@@ -253,10 +252,10 @@ only for dependency installation and the final `pacman -U`. It stops a running
 Projecteur instance, compiles, packages and installs the current tree, then
 restarts `plasma-plasmashell.service` and Projecteur.
 
-Installing is required for zoom: KWin authorizes the screenshot interface by matching
-the running executable with the installed `org.projecteur.Projecteur.desktop` metadata. A binary run
-directly from the build directory can use the normal spotlight, but KWin will reject
-its zoom capture request.
+Installing is required for zoom: KWin authorizes the screencast and screenshot
+interfaces by matching the running executable with the installed
+`org.projecteur.Projecteur.desktop` metadata. A binary run directly from the build
+directory can use the normal spotlight, but KWin will reject its zoom capture request.
 
 ## Installation/Running
 
@@ -410,16 +409,6 @@ See [Command Line Interface](#command-line-interface). There is also a command
 line option (`-m`) to prevent the preferences dialog from hiding, allowing it
 only to minimize - behaving more like a regular application window.
 
-#### Zoom is not updated while spotlight is shown
-
-Zoom does not update while spotlight is shown due to how the zoom currently works. A screenshot is
-taken shortly before the overlay window is shown, and then a magnified section is shown wherever
-the mouse/spotlight is.
-If the zoom would be updated while the overlay window is shown, the overlay window it self would
-show up in the magnified section. That is a general problem that other magnifier tools also face,
-although they get around the problem by showing the magnified content rectangle always in the
-same position on the screen.
-
 #### Wayland
 
 Wayland is the only supported windowing platform in this port. Do not force
@@ -427,9 +416,11 @@ Wayland is the only supported windowing platform in this port. Do not force
 
 #### Wayland Zoom
 
-Zoom is implemented for KDE Plasma through KWin's `ScreenShot2` DBus interface. The
-installed desktop entry declares the required restricted interface. If the log says
-the process is not authorized to take a screenshot, install Projecteur instead of
+Zoom is implemented for KDE Plasma through KWin's private screencast protocol and
+KPipeWire. KWin omits Projecteur's own windows from the stream, preventing recursive
+overlay capture while allowing videos and other changing content to remain live.
+`ScreenShot2` remains as a fallback when streaming is unavailable. The installed
+desktop entry declares both restricted interfaces; install Projecteur instead of
 running it from an arbitrary build path.
 
 #### Device shows as not connected

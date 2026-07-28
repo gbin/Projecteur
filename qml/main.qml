@@ -2,6 +2,7 @@
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Window
+import org.kde.pipewire as KPipeWire
 
 import Projecteur.Utils 1.0 as Utils
 
@@ -10,6 +11,7 @@ Window {
     property var screenId: -1
     readonly property bool spotOnCurrentWindow: ProjecteurApp.currentSpotScreen === screenId
     property alias desktopPixmap: desktopImage.pixmap
+    property var desktopStream: null
 
     width: 300; height: 200
 
@@ -41,9 +43,8 @@ Window {
             scale: Settings.zoomFactor
             width: centerRect.width / scale; height: centerRect.height / scale
 
-            Utils.Image {
-                id: desktopImage
-                smooth: rotation != 0 || mainWindow.deviceScale != 1.0
+            Item {
+                id: desktopSource
                 rotation: -rotationItem.rotation
                 readonly property real xOffset: Math.floor(parent.width/2.0 + ((rotationItem.width-mainWindow.width)/2))
                 readonly property real yOffset: Math.floor(parent.height/2.0 + ((rotationItem.height-mainWindow.height)/2))
@@ -54,14 +55,54 @@ Window {
                 x: rotation == 0 ? Math.round(rawX * sampleScaleX) / sampleScaleX : rawX
                 y: rotation == 0 ? Math.round(rawY * sampleScaleY) / sampleScaleY : rawY
                 width: mainWindow.width; height: mainWindow.height
+
+                Utils.Image {
+                    id: desktopImage
+                    anchors.fill: parent
+                    smooth: desktopSource.rotation != 0 || mainWindow.deviceScale != 1.0
+                    visible: !desktopStreamItem.ready
+                }
+
+                ShaderEffectSource {
+                    anchors.fill: parent
+                    sourceItem: desktopStreamItem
+                    sourceRect: Qt.rect(0, 0,
+                                        desktopStreamItem.width,
+                                        desktopStreamItem.height)
+                    live: true
+                    smooth: true
+                    visible: desktopStreamItem.ready
+                }
             }
+        }
+
+        KPipeWire.PipeWireSourceItem {
+            id: desktopStreamItem
+            visible: true
+            enabled: false
+            width: mainWindow.width
+            height: mainWindow.height
+            nodeId: mainWindow.desktopStream
+                    ? mainWindow.desktopStream.nodeId : 0
+            allowDmaBuf: true
         }
 
         ShaderEffectSource {
             id: desktopTexture
+            readonly property bool useDirectStream: desktopStreamItem.ready
             anchors.fill: centerRect
             visible: false
-            sourceItem: desktopItem
+            sourceItem: useDirectStream ? desktopStreamItem : desktopItem
+            hideSource: useDirectStream
+            sourceRect: useDirectStream
+                ? Qt.rect(
+                    mainWindow.snapToDevicePixel(
+                        centerRect.x + centerRect.width / 2 - desktopItem.width / 2),
+                    mainWindow.snapToDevicePixel(
+                        centerRect.y + centerRect.height / 2 - desktopItem.height / 2),
+                    desktopItem.width,
+                    desktopItem.height)
+                : Qt.rect(0, 0, desktopItem.width, desktopItem.height)
             smooth: true
             textureSize: Qt.size(
                 Math.max(1, Math.round(desktopItem.width)),

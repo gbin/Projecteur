@@ -8,7 +8,7 @@ endif()
 
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 
-project(Projecteur LANGUAGES CXX)
+project(Projecteur LANGUAGES C CXX)
 
 add_compile_options(-Wall -Wextra -Werror)
 #set(CMAKE_CXX_CLANG_TIDY clang-tidy-12)
@@ -17,6 +17,7 @@ find_package(ECM 6.7 REQUIRED NO_MODULE)
 list(APPEND CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
 include(KDEInstallDirs6)
 include(ECMQtDeclareLoggingCategory)
+find_package(QtWaylandScanner REQUIRED)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 include(GitVersion)
@@ -25,9 +26,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui Quick Widgets)
+find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui Quick WaylandClient Widgets)
 find_package(KF6 6.7 REQUIRED COMPONENTS Config ConfigWidgets CoreAddons DBusAddons GlobalAccel I18n
                                         Notifications Package KirigamiPlatform WidgetsAddons WindowSystem XmlGui)
+find_package(KPipeWire 6.7 REQUIRED)
 find_package(Plasma 6.7 REQUIRED)
 find_package(LayerShellQt 6.7 REQUIRED)
 message(STATUS "Using Qt version: ${Qt6_VERSION}")
@@ -46,6 +48,7 @@ add_executable(projecteur
   src/deviceswidget.cc         src/deviceswidget.h
   src/hidpp.cc                 src/hidpp.h
   src/linuxdesktop.cc          src/linuxdesktop.h
+  src/kwinscreencast.cc        src/kwinscreencast.h
   src/iconwidgets.cc           src/iconwidgets.h
   src/imageitem.cc             src/imageitem.h
   src/inputmapconfig.cc        src/inputmapconfig.h
@@ -60,6 +63,11 @@ add_executable(projecteur
   src/spotshapes.cc            src/spotshapes.h
   src/virtualdevice.cc         src/virtualdevice.h
   ${RESOURCES})
+
+ecm_add_qtwayland_client_protocol(projecteur
+  PROTOCOL "${CMAKE_CURRENT_SOURCE_DIR}/protocols/zkde-screencast-unstable-v1.xml"
+  BASENAME zkde-screencast-unstable-v1
+)
 
 ecm_qt_declare_logging_category(projecteur
   HEADER projecteur_main_debug.h
@@ -155,7 +163,8 @@ kconfig_target_kcfg_file(projecteur
 target_include_directories(projecteur PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
 
 target_link_libraries(projecteur
-  PRIVATE Qt6::Core Qt6::DBus Qt6::Quick Qt6::Widgets
+  PRIVATE Qt6::Core Qt6::DBus Qt6::Quick Qt6::WaylandClient Qt6::Widgets
+          K::KPipeWire
           KF6::ConfigCore KF6::ConfigGui KF6::ConfigWidgets KF6::CoreAddons KF6::DBusAddons
           KF6::GlobalAccel KF6::I18n KF6::Notifications KF6::WidgetsAddons
           KF6::WindowSystem KF6::XmlGui

@@ -221,7 +221,15 @@ void ProjecteurApplication::setupSpotlight()
         if (window->screen())
         {
           if (m_settings->zoomEnabled()) {
-            window->setProperty("desktopPixmap", m_linuxDesktop->grabScreen(window->screen()));
+            auto* stream = window->property("desktopStream").value<QObject*>();
+            if (!stream) {
+              stream = m_linuxDesktop->streamScreen(window->screen(), window);
+              window->setProperty("desktopStream", QVariant::fromValue(stream));
+            }
+            if (!stream) {
+              window->setProperty("desktopPixmap",
+                                  m_linuxDesktop->grabScreen(window->screen()));
+            }
           }
 
           const auto screenGeometry = window->screen()->geometry();
@@ -246,6 +254,11 @@ void ProjecteurApplication::setupSpotlight()
         QTimer::singleShot(200, window, [this, window]() {
           if (!m_spotlight->spotActive()) {
             window->hide();
+            auto* const stream = window->property("desktopStream").value<QObject*>();
+            window->setProperty("desktopStream", QVariant::fromValue<QObject*>(nullptr));
+            if (stream) {
+              stream->deleteLater();
+            }
           }
         });
       }

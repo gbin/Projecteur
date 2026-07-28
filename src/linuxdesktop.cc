@@ -3,6 +3,7 @@
 
 #include "linuxdesktop.h"
 
+#include "kwinscreencast.h"
 #include "projecteur_desktop_debug.h"
 
 #include <KLocalizedString>
@@ -122,6 +123,9 @@ LinuxDesktop::LinuxDesktop(QObject* parent)
 
   m_wayland = QGuiApplication::platformName().startsWith(QStringLiteral("wayland"),
                                                          Qt::CaseInsensitive);
+  if (m_wayland && m_type == LinuxDesktop::Type::KDE) {
+    m_screencast = new KWinScreencast(this);
+  }
 }
 
 LinuxDesktop::~LinuxDesktop()
@@ -143,6 +147,11 @@ QPixmap LinuxDesktop::grabScreen(QScreen* screen) const
     return {};
   }
   return grabScreenKWin(screen);
+}
+
+QObject* LinuxDesktop::streamScreen(QScreen* screen, QObject* parent)
+{
+  return m_screencast ? m_screencast->streamScreen(screen, parent) : nullptr;
 }
 
 void LinuxDesktop::setShakeCursorEffectSuppressed(bool suppressed)
