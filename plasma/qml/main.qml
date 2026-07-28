@@ -1,6 +1,8 @@
 // This file is part of Projecteur - https://github.com/jahnf/projecteur
 // - See LICENSE.md and README.md
 
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasmoid
@@ -72,6 +74,11 @@ PlasmoidItem {
         return i18np("%1 connected presenter", "%1 connected presenters", backend.connectedDevices.length);
     }
     Plasmoid.onActivated: root.expanded = !root.expanded
+
+    compactRepresentation: CompactRepresentation {
+        backend: root.backend
+        plasmoidItem: root
+    }
 
     Plasmoid.contextualActions: [
         PlasmaCore.Action {

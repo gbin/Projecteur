@@ -9,6 +9,7 @@ qt_add_dbus_interface(PROJECTEUR_DBUS_INTERFACE_SOURCES
 
 plasma_add_applet(org.projecteur.Projecteur
   QML_SOURCES
+    qml/CompactRepresentation.qml
     qml/main.qml
     qml/FullRepresentation.qml
   CPP_SOURCES
