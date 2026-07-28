@@ -11,6 +11,10 @@
 #include "logging.h"
 #include "settings.h"
 
+#include <KActionCollection>
+#include <KGlobalAccel>
+#include <KShortcutsEditor>
+
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -51,9 +55,11 @@ namespace {
 
 // -------------------------------------------------------------------------------------------------
 PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
+                                     KActionCollection* actionCollection,
                                      Mode dialogMode, QWidget* parent)
   : KConfigDialog(parent, QStringLiteral("preferences"), settings->configSkeleton())
   , m_settings(settings)
+  , m_actionCollection(actionCollection)
   , m_presetComboStyle(std::make_unique<PresetComboCustomStyle>())
 {
   setAttribute(Qt::WA_DeleteOnClose, false);
@@ -77,6 +83,11 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
           QString(), false);
   m_deviceswidget = new DevicesWidget(settings, spotlight, this);
   addPage(m_deviceswidget, tr("Devices"), QStringLiteral("input-mouse"), QString(), false);
+  m_shortcutsEditor = new KShortcutsEditor(
+    actionCollection, this, KShortcutsEditor::GlobalAction,
+    KShortcutsEditor::LetterShortcutsDisallowed);
+  addPage(m_shortcutsEditor, tr("Shortcuts"), QStringLiteral("configure-shortcuts"),
+          QString(), false);
   addPage(createLogTabWidget(), tr("Log"), QStringLiteral("utilities-log-viewer"),
           QString(), false);
 
@@ -118,6 +129,8 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
       connect(shapeSettings, &QQmlPropertyMap::valueChanged, this, modified);
     }
   }
+  connect(m_shortcutsEditor, &KShortcutsEditor::keyChange,
+          this, &PreferencesDialog::updateButtons);
 
   m_appliedSpotlightSettings = settings->spotlightSettings();
   updateButtons();
@@ -744,15 +757,29 @@ void PreferencesDialog::settingsModified()
 // -------------------------------------------------------------------------------------------------
 void PreferencesDialog::restoreAppliedSettings()
 {
+  m_shortcutsEditor->undo();
   m_settings->setSpotlightSettings(m_appliedSpotlightSettings);
   resetPresetCombo();
   updateButtons();
 }
 
 // -------------------------------------------------------------------------------------------------
+bool PreferencesDialog::shortcutsAreDefault() const
+{
+  for (const auto* action : m_actionCollection->actions()) {
+    if (KGlobalAccel::self()->shortcut(action)
+        != KGlobalAccel::self()->defaultShortcut(action)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// -------------------------------------------------------------------------------------------------
 void PreferencesDialog::updateSettings()
 {
   KConfigDialog::updateSettings();
+  m_shortcutsEditor->save();
   m_appliedSpotlightSettings = m_settings->spotlightSettings();
 }
 
@@ -768,6 +795,7 @@ void PreferencesDialog::updateWidgetsDefault()
 {
   KConfigDialog::updateWidgetsDefault();
   m_settings->setDefaults();
+  m_shortcutsEditor->allDefault();
   resetPresetCombo();
 }
 
@@ -775,20 +803,24 @@ void PreferencesDialog::updateWidgetsDefault()
 bool PreferencesDialog::hasChanged()
 {
   return KConfigDialog::hasChanged()
-         || m_settings->spotlightSettings() != m_appliedSpotlightSettings;
+         || m_settings->spotlightSettings() != m_appliedSpotlightSettings
+         || m_shortcutsEditor->isModified();
 }
 
 // -------------------------------------------------------------------------------------------------
 bool PreferencesDialog::isDefault()
 {
   return KConfigDialog::isDefault()
-         && m_settings->spotlightSettings() == Settings::defaultSpotlightSettings();
+         && m_settings->spotlightSettings() == Settings::defaultSpotlightSettings()
+         && shortcutsAreDefault();
 }
 
 // -------------------------------------------------------------------------------------------------
 void PreferencesDialog::accept()
 {
   if (m_dialogMode == Mode::MinimizeOnlyDialog) {
+    updateSettings();
+    updateButtons();
     showMinimized();
     return;
   }

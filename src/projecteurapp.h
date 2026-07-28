@@ -12,6 +12,7 @@
 
 class DeviceCommandHelper;
 class KAboutApplicationDialog;
+class KActionCollection;
 class KDBusService;
 class LinuxDesktop;
 class PreferencesDialog;
@@ -80,12 +81,14 @@ private:
   void setCurrentCursorPos(const QPoint& pos);
 
   void setupControlService(Options const& options);
+  void setupGlobalShortcuts();
   void setupNotifications();
   void setupSpotlight();
 
 private:
   std::unique_ptr<PreferencesDialog> m_dialog;
   QPointer<KAboutApplicationDialog> m_aboutDialog;
+  KActionCollection* m_actionCollection = nullptr;
   KDBusService* m_dbusService = nullptr;
   ProjecteurControl* m_control = nullptr;
   Settings* m_settings = nullptr;

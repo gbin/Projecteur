@@ -84,6 +84,7 @@ So here it is: a Linux application for the Logitech Spotlight.
   presentation timer settings, a live remaining-minutes badge, and quick controls
 * Native KDE Plasma notifications for presenter status, battery level, access
   errors, and presentation timers
+* Native KDE global shortcuts, configurable in Projecteur or Plasma System Settings
 * Usable without a presenter device (e.g. for online presentations)
 
 ### Screenshots
@@ -101,6 +102,14 @@ Projecteur uses native KDE controls for configuring the spotlight shape, shade,
 zoom, cursor, border, multi-screen behavior, and presets.
 
 [<img src="doc/screenshot-settings.png" alt="KDE-styled Projecteur preferences" title="KDE-styled Projecteur preferences" width="600" />](./doc/screenshot-settings.png)
+
+#### Plasma global shortcuts
+
+Projecteur's actions integrate with Plasma's global shortcut settings, where
+shortcuts can be assigned for the spotlight, preferences, presentation timer,
+and spotlight presets.
+
+[<img src="doc/screenshot-global-shortcuts.png" alt="Projecteur actions in Plasma's global shortcut settings" title="Projecteur global shortcuts in KDE Plasma" width="1000" />](./doc/screenshot-global-shortcuts.png)
 
 #### Plasma system tray applet
 
@@ -206,7 +215,7 @@ and Hold Move actions for the same button.
 * CMake 3.20 or later
 * Qt 6.11 with Core, DBus, Gui, LinguistTools, Quick, and Widgets
 * KDE Plasma 6.7 Wayland, including Libplasma, KConfig, KConfigWidgets, KCoreAddons,
-  KDBusAddons, KNotifications, KWindowSystem, and KXmlGui
+  KDBusAddons, KGlobalAccel, KNotifications, KWindowSystem, and KXmlGui
 * LayerShellQt 6.7
 * Extra CMake Modules 6.7 or later
 
@@ -332,23 +341,22 @@ projecteur -c border.color=#ff0000
 projecteur -c vibrate=128,0
 ```
 
-While _Projecteur_ does not provide global keyboard shortcuts, command line options
-can but utilized for that. For instance, if you like to use _Projecteur_ as a tool while sharing
-your screen in a video call without additional presenter hardware, you can assign global
-shortcuts in your window manager (e.g. GNOME) to run the commands `projecteur -c spot=on`
-and `projecteur -c spot=off` or `projecteur -c spot=toggle`, and therefore
-turning the spot on and off with a keyboard shortcut.
+Projecteur registers native KDE global actions for toggling the spotlight, showing
+preferences, controlling the presentation timer, and cycling presets. No key
+combinations are assigned by default. Configure them on the **Shortcuts** page in
+Projecteur Preferences or under Plasma System Settings → Keyboard → Shortcuts →
+Projecteur.
+
+The command line interface remains available for scripts and non-interactive use.
 
 A complete list the properties that can be set via the command line, can be
 listed with the `--help-all` command line option.
 
 ### Using Projecteur without a device
 
-You can use _Projecteur_ for your online presentations and video conferences without a presenter
-device. For this you can assign a global keyboard shortcut in your window manager
-(e.g. KDE, GNOME...) to run the command `projecteur -c spot=toggle`. You will then be able to
-turn the digital spot on and off with the assigned keyboard shortcut while sharing
-your screen in an online presentation or call.
+You can use _Projecteur_ for online presentations and video conferences without a
+presenter device. Assign a key combination to **Toggle Spotlight** on the Shortcuts
+page in Projecteur Preferences, then use it while sharing your screen.
 
 ### Device Support
 

@@ -12,6 +12,8 @@
 
 class QComboBox;
 class QGroupBox;
+class KActionCollection;
+class KShortcutsEditor;
 class Settings;
 class Spotlight;
 class DevicesWidget;
@@ -36,6 +38,7 @@ public:
   };
 
   explicit PreferencesDialog(Settings* settings, Spotlight* spotlight,
+                             KActionCollection* actionCollection,
                              Mode = Mode::ClosableDialog, QWidget* parent = nullptr);
   virtual ~PreferencesDialog() override = default;
 
@@ -69,6 +72,7 @@ private:
   void setDialogMode(Mode dialogMode);
   void settingsModified();
   void restoreAppliedSettings();
+  bool shortcutsAreDefault() const;
   void resetPresetCombo();
 
   QWidget* createSettingsTabWidget(Settings* settings);
@@ -84,10 +88,12 @@ private:
 
 private:
   Settings* const m_settings;
+  KActionCollection* const m_actionCollection;
   QVariantMap m_appliedSpotlightSettings;
   std::unique_ptr<PresetComboCustomStyle> m_presetComboStyle;
   QComboBox* m_presetCombo = nullptr;
   DevicesWidget* m_deviceswidget = nullptr;
+  KShortcutsEditor* m_shortcutsEditor = nullptr;
   bool m_active = false;
   Mode m_dialogMode = Mode::ClosableDialog;
   quint32 m_discardedLogCount = 0;

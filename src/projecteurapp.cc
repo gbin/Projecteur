@@ -15,11 +15,14 @@
 
 #include <KAboutApplicationDialog>
 #include <KAboutData>
+#include <KActionCollection>
 #include <KDBusService>
+#include <KGlobalAccel>
 #include <KNotification>
 #include <KWindowSystem>
 #include <LayerShellQt/Window>
 
+#include <QAction>
 #include <QFontDatabase>
 #include <QIcon>
 #include <QMessageBox>
@@ -33,6 +36,8 @@
 #include <QScreen>
 #include <QTimer>
 #include <QWindow>
+
+#include <utility>
 
 LOGGING_CATEGORY(mainapp, "mainapp")
 LOGGING_CATEGORY(cmdserver, "cmdserver")
@@ -98,7 +103,10 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
     new PresentationTimer(m_settings, m_spotlight, m_deviceCommandHelper, this);
 
   m_settings->setOverlayDisabled(options.disableOverlay);
-  m_dialog = std::make_unique<PreferencesDialog>(m_settings, m_spotlight,
+  setupControlService(options);
+  setupGlobalShortcuts();
+
+  m_dialog = std::make_unique<PreferencesDialog>(m_settings, m_spotlight, m_actionCollection,
                                                   options.dialogMinimizeOnly
                                                   ? PreferencesDialog::Mode::MinimizeOnlyDialog
                                                   : PreferencesDialog::Mode::ClosableDialog);
@@ -164,8 +172,6 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
   connect(this, &ProjecteurApplication::screenAdded, this, [this](){ setupScreenOverlays(); });
   connect(this, &ProjecteurApplication::screenRemoved, this, [this](){ setupScreenOverlays(); });
 
-  // Expose application state and actions to the native Plasma system tray applet.
-  setupControlService(options);
   setupNotifications();
 
   connect(this, &ProjecteurApplication::aboutToQuit, this, [this](){
@@ -258,6 +264,53 @@ void ProjecteurApplication::setupControlService(Options const& options)
   if (!m_control->registerObject()) {
     logError(mainapp) << tr("Could not register the Projecteur D-Bus control object.");
   }
+}
+
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::setupGlobalShortcuts()
+{
+  m_actionCollection = new KActionCollection(this);
+  m_actionCollection->setComponentDisplayName(tr("Projecteur"));
+
+  const auto addAction =
+    [this](const QString& id, const QString& text, const QString& iconName, auto callback)
+    {
+      auto* action = new QAction(QIcon::fromTheme(iconName), text, m_actionCollection);
+      m_actionCollection->addAction(id, action);
+      connect(action, &QAction::triggered, this, std::move(callback));
+      if (!KGlobalAccel::setGlobalShortcut(action, QList<QKeySequence>{})) {
+        logWarning(mainapp) << tr("Could not register global shortcut action '%1'.").arg(id);
+      }
+    };
+
+  addAction(
+    QStringLiteral("toggle_spotlight"), tr("Toggle Spotlight"),
+    QStringLiteral("view-visible"),
+    [this]() {
+      if (!m_settings->overlayDisabled()) {
+        m_control->SetSpotlightActive(!m_control->spotlightActive());
+      }
+    });
+  addAction(
+    QStringLiteral("show_preferences"), tr("Show Preferences"),
+    QStringLiteral("configure"),
+    [this]() { m_control->ShowPreferences(); });
+  addAction(
+    QStringLiteral("start_restart_timer"), tr("Start or Restart Presentation Timer"),
+    QStringLiteral("chronometer"),
+    [this]() { m_control->RestartTimer(); });
+  addAction(
+    QStringLiteral("reset_timer"), tr("Reset Presentation Timer"),
+    QStringLiteral("edit-undo"),
+    [this]() { m_control->ResetTimer(); });
+  addAction(
+    QStringLiteral("next_preset"), tr("Next Spotlight Preset"),
+    QStringLiteral("go-next"),
+    [this]() { m_control->loadNextPreset(); });
+  addAction(
+    QStringLiteral("previous_preset"), tr("Previous Spotlight Preset"),
+    QStringLiteral("go-previous"),
+    [this]() { m_control->loadPreviousPreset(); });
 }
 
 // -------------------------------------------------------------------------------------------------

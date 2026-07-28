@@ -124,6 +124,7 @@ deps: _require-arch
         kconfigwidgets
         kcoreaddons
         kdbusaddons
+        kglobalaccel
         knotifications
         kwindowsystem
         kxmlgui

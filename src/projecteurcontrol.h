@@ -57,6 +57,8 @@ public:
   QString timerState() const;
   int timerDurationSeconds() const;
   int timerRemainingSeconds() const;
+  void loadNextPreset();
+  void loadPreviousPreset();
 
 public slots:
   void SetOverlayEnabled(bool enabled);
@@ -87,6 +89,7 @@ signals:
   void batteryStateChanged(const QString& deviceName, int level, const QString& status);
 
 private:
+  void loadRelativePreset(int offset);
   void clearCurrentPreset();
   void emitBatteryPropertiesChanged();
   void requestBatteryUpdates();

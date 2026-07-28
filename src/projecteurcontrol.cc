@@ -310,6 +310,16 @@ void ProjecteurControl::SetTimerDurationSeconds(int seconds)
   m_presentationTimer->setDurationSeconds(seconds);
 }
 
+void ProjecteurControl::loadNextPreset()
+{
+  loadRelativePreset(1);
+}
+
+void ProjecteurControl::loadPreviousPreset()
+{
+  loadRelativePreset(-1);
+}
+
 void ProjecteurControl::ShowPreferences()
 {
   m_application->showPreferences(true);
@@ -328,6 +338,23 @@ void ProjecteurControl::ApplyCommands(const QStringList& commands)
 void ProjecteurControl::Quit()
 {
   QCoreApplication::quit();
+}
+
+void ProjecteurControl::loadRelativePreset(int offset)
+{
+  const auto presetNames = presets();
+  if (presetNames.isEmpty()) { return; }
+
+  const auto currentIndex = presetNames.indexOf(m_currentPreset);
+  qsizetype targetIndex = 0;
+  if (offset < 0) {
+    targetIndex = currentIndex <= 0 ? presetNames.size() - 1 : currentIndex - 1;
+  } else {
+    targetIndex = currentIndex < 0 || currentIndex == presetNames.size() - 1
+                    ? 0
+                    : currentIndex + 1;
+  }
+  LoadPreset(presetNames.at(targetIndex));
 }
 
 void ProjecteurControl::clearCurrentPreset()

@@ -25,7 +25,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui LinguistTools Quick Widgets)
-find_package(KF6 6.7 REQUIRED COMPONENTS Config ConfigWidgets CoreAddons DBusAddons Notifications
+find_package(KF6 6.7 REQUIRED COMPONENTS Config ConfigWidgets CoreAddons DBusAddons GlobalAccel Notifications
                                         Package KirigamiPlatform WindowSystem XmlGui)
 find_package(Plasma 6.7 REQUIRED)
 find_package(LayerShellQt 6.7 REQUIRED)
@@ -88,7 +88,8 @@ target_include_directories(projecteur PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(projecteur
   PRIVATE Qt6::Core Qt6::DBus Qt6::Quick Qt6::Widgets
           KF6::ConfigCore KF6::ConfigGui KF6::ConfigWidgets KF6::CoreAddons KF6::DBusAddons
-          KF6::Notifications KF6::WindowSystem KF6::XmlGui LayerShellQt::Interface
+          KF6::GlobalAccel KF6::Notifications KF6::WindowSystem KF6::XmlGui
+          LayerShellQt::Interface
 )
 
 target_compile_options(projecteur
