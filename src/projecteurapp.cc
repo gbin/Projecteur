@@ -222,9 +222,19 @@ void ProjecteurApplication::setupSpotlight()
         {
           if (m_settings->zoomEnabled()) {
             auto* stream = window->property("desktopStream").value<QObject*>();
+            const auto streamScreenId =
+              window->property("desktopStreamScreenId").toULongLong();
+            const auto currentScreenId = quint64(window->screen());
+            if (stream && streamScreenId != currentScreenId) {
+              window->setProperty("desktopStream",
+                                  QVariant::fromValue<QObject*>(nullptr));
+              stream->deleteLater();
+              stream = nullptr;
+            }
             if (!stream) {
               stream = m_linuxDesktop->streamScreen(window->screen(), window);
               window->setProperty("desktopStream", QVariant::fromValue(stream));
+              window->setProperty("desktopStreamScreenId", currentScreenId);
             }
             if (!stream) {
               window->setProperty("desktopPixmap",
@@ -254,11 +264,6 @@ void ProjecteurApplication::setupSpotlight()
         QTimer::singleShot(200, window, [this, window]() {
           if (!m_spotlight->spotActive()) {
             window->hide();
-            auto* const stream = window->property("desktopStream").value<QObject*>();
-            window->setProperty("desktopStream", QVariant::fromValue<QObject*>(nullptr));
-            if (stream) {
-              stream->deleteLater();
-            }
           }
         });
       }

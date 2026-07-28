@@ -83,7 +83,7 @@ Window {
 
         KPipeWire.PipeWireSourceItem {
             id: desktopStreamItem
-            visible: true
+            visible: mainWindow.visible
             enabled: false
             width: mainWindow.width
             height: mainWindow.height

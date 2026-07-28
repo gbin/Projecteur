@@ -11,6 +11,7 @@
 #include "settings.h"
 #include "virtualdevice.h"
 
+#include <QElapsedTimer>
 #include <QSocketNotifier>
 #include <QTimer>
 #include <QVarLengthArray>
@@ -24,8 +25,16 @@
 namespace {
   const auto hexId = formatHexId;
 
-  // See details on workaround in onEventDataAvailable
-  bool workaroundLogitechFirstMoveEvent = true;
+  QElapsedTimer lastLogitechSlideNavigation;
+
+  bool isLogitechSpotlight(const DeviceId& id)
+  {
+    return id.vendorId == 0x46d
+      && (id.productId == 0xc53e
+          || id.productId == 0xb503
+          || id.productId == 0xc548
+          || id.productId == 0xb506);
+  }
 
 } // end anonymous namespace
 
@@ -84,7 +93,6 @@ Spotlight::Spotlight(QObject* parent, Options options, Settings* settings)
 
   connect(m_activeTimer, &QTimer::timeout, this, [this](){
     setSpotActive(false);
-    workaroundLogitechFirstMoveEvent = true;
   });
 
   if (m_options.enableUInput) {
@@ -396,10 +404,17 @@ void Spotlight::onEventDataAvailable(int fd, SubEventConnection& connection)
     }
     ++buf;
 
-    if (ev.type == EV_KEY && ev.value == 1
-        && (ev.code == KEY_RIGHT || ev.code == KEY_LEFT
-            || ev.code == KEY_PAGEDOWN || ev.code == KEY_PAGEUP)) {
-      emit slideNavigationPressed();
+    const bool isSlideNavigationKey =
+      ev.type == EV_KEY
+      && (ev.code == KEY_RIGHT || ev.code == KEY_LEFT
+          || ev.code == KEY_PAGEDOWN || ev.code == KEY_PAGEUP);
+    if (isSlideNavigationKey) {
+      if (isLogitechSpotlight(connection.deviceId())) {
+        lastLogitechSlideNavigation.restart();
+      }
+      if (ev.value == 1) {
+        emit slideNavigationPressed();
+      }
     }
 
     if (ev.type == EV_SYN)
@@ -415,22 +430,15 @@ void Spotlight::onEventDataAvailable(int fd, SubEventConnection& connection)
         // move events via hid++ notifications. It seems that just when releasing the
         // next or back button sometimes a mouse move event 'leaks' through here as
         // relative input event causing the spotlight to be activated.
-        // The workaround skips a first input move event from the logitech spotlight device.
-        const bool isLogitechSpotlight = connection.deviceId().vendorId == 0x46d
-          && (connection.deviceId().productId == 0xc53e
-              || connection.deviceId().productId == 0xb503
-              || connection.deviceId().productId == 0xc548
-              || connection.deviceId().productId == 0xb506);
-        const bool logitechIsFirst = isLogitechSpotlight && workaroundLogitechFirstMoveEvent;
+        // Suppress only moves immediately adjacent to slide navigation; skipping the
+        // first move after every idle period makes genuine activation feel delayed.
+        constexpr qint64 leakedMoveSuppressionMs = 250;
+        const bool suppressLeakedMove =
+          isLogitechSpotlight(connection.deviceId())
+          && lastLogitechSlideNavigation.isValid()
+          && lastLogitechSlideNavigation.elapsed() < leakedMoveSuppressionMs;
 
-        if (isLogitechSpotlight)
-        {
-          workaroundLogitechFirstMoveEvent = false;
-          if(!logitechIsFirst) {
-            if (!spotActive()) { setSpotActive(true); }
-          }
-        }
-        else if (!m_activeTimer->isActive()) {
+        if (!suppressLeakedMove && !spotActive()) {
           setSpotActive(true);
         }
 
