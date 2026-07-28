@@ -88,22 +88,50 @@ So here it is: a Linux application for the Logitech Spotlight.
 
 ### Screenshots
 
-[<img src="doc/screenshot-settings.png" alt="KDE-styled Projecteur preferences" title="KDE-styled Projecteur preferences" height="300" />](./doc/screenshot-settings.png)
-[<img src="doc/screenshot-spot.png" alt="Circular Projecteur spotlight demonstrating zoom, shade, and a green border" title="Configurable spotlight shape, zoom, shade, and border" height="300" />](./doc/screenshot-spot.png)
-[<img src="doc/screenshot-traymenu.png" alt="Projecteur Plasma tray popup" height="300" />](./doc/screenshot-traymenu.png)
-[<img src="doc/screenshot-notification.png" alt="Projecteur presenter connected notification in KDE Plasma" height="129" />](./doc/screenshot-notification.png)
+#### Spotlight overlay
 
-**KDE Plasma system tray applet integration**
+The configurable overlay combines different spotlight shapes with shading, zoom,
+and an optional border. This example uses a circular zoom area with a green border.
 
-[<img src="doc/screenshot-plasma-applet.png" alt="Projecteur system tray applet showing one connected presenter in KDE Plasma" title="KDE Plasma system tray applet integration" height="153" />](./doc/screenshot-plasma-applet.png)
+[<img src="doc/screenshot-spot.png" alt="Circular Projecteur spotlight demonstrating zoom, shade, and a green border" title="Configurable spotlight shape, zoom, shade, and border" width="900" />](./doc/screenshot-spot.png)
 
-**Presentation timer in the Plasma applet**
+#### KDE-styled preferences
 
-[<img src="doc/screenshot-applet-presentation-timer.png" alt="First-class presentation timer settings in the Projecteur Plasma applet" title="Presentation timer in the Projecteur Plasma applet" width="800" />](./doc/screenshot-applet-presentation-timer.png)
+Projecteur uses native KDE controls for configuring the spotlight shape, shade,
+zoom, cursor, border, multi-screen behavior, and presets.
 
-**Presentation timer countdown on the panel icon**
+[<img src="doc/screenshot-settings.png" alt="KDE-styled Projecteur preferences" title="KDE-styled Projecteur preferences" width="600" />](./doc/screenshot-settings.png)
 
-[<img src="doc/screenshot-applet-timer-countdown.png" alt="Projecteur panel icon and tooltip showing 14 minutes remaining" title="Live presentation timer countdown on the Projecteur panel icon" height="178" />](./doc/screenshot-applet-timer-countdown.png)
+#### Plasma system tray applet
+
+The native Plasma applet shows connected presenters and provides quick access to
+the spotlight, presets, timer, test action, and preferences.
+
+[<img src="doc/screenshot-traymenu.png" alt="Projecteur Plasma applet with a connected Logitech Spotlight 2 and quick controls" title="Projecteur Plasma system tray applet" width="500" />](./doc/screenshot-traymenu.png)
+
+The panel icon also provides connected-presenter status at a glance.
+
+[<img src="doc/screenshot-plasma-applet.png" alt="Projecteur system tray applet showing one connected presenter in KDE Plasma" title="Connected presenter status in the Plasma panel" width="268" />](./doc/screenshot-plasma-applet.png)
+
+#### KDE Plasma notifications
+
+Presenter connections, battery status, device-access errors, and timer completion
+use KDE Plasma's native notification system.
+
+[<img src="doc/screenshot-notification.png" alt="Projecteur presenter connected notification in KDE Plasma" title="Native Projecteur notification in KDE Plasma" width="420" />](./doc/screenshot-notification.png)
+
+#### Presentation timer
+
+The presentation timer is a first-class applet setting. It can start immediately
+or on the next presenter button press.
+
+[<img src="doc/screenshot-applet-presentation-timer.png" alt="First-class presentation timer settings in the Projecteur Plasma applet" title="Presentation timer in the Projecteur Plasma applet" width="900" />](./doc/screenshot-applet-presentation-timer.png)
+
+While the timer runs, the panel icon displays the remaining minutes and its
+tooltip shows the precise countdown. When time expires, compatible presenters
+such as the Logitech Spotlight 2 provide configurable haptic feedback.
+
+[<img src="doc/screenshot-applet-timer-countdown.png" alt="Projecteur panel icon and tooltip showing 14 minutes remaining" title="Live presentation timer countdown on the Projecteur panel icon" width="372" />](./doc/screenshot-applet-timer-countdown.png)
 
 ## Supported Environments
 
