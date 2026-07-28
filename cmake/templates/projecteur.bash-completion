@@ -15,7 +15,7 @@ _projecteur()
   fi
 
   local options="-h --help --help-all --version -v --cfg --device-scan -m --minimize-only"
-  options="${options} --log-level -l --show-dialog --disable-uinput -D -c"
+  options="${options} --show-dialog --disable-uinput -D -c"
 
   case "$prev" in
     "-c")
@@ -88,12 +88,6 @@ _projecteur()
     "-D")
       # TODO: Auto completion for devices (vendorId:productId)
       COMPREPLY=( $(compgen -W "0123:4567" -- $cur) )
-      ;;
-    "-l")
-      COMPREPLY=( $(compgen -W "dbg inf wrn err" -- $cur) )
-      ;;
-    "--log-level")
-      COMPREPLY=( $(compgen -W "dbg inf wrn err" -- $cur) )
       ;;
     "--cfg")
       # Auto completion for files

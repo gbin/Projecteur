@@ -4,7 +4,6 @@
 #include "projecteurapp.h"
 #include "projecteur-GitVersion.h"
 
-#include "logging.h"
 #include "settings.h"
 
 #include <KAboutData>
@@ -221,8 +220,8 @@ namespace {
         return subDevice.deviceWritable;
       });
 
-      print() << "     " << "vendorId:  " << logging::hexId(device.id.vendorId);
-      print() << "     " << "productId: " << logging::hexId(device.id.productId);
+      print() << "     " << "vendorId:  " << formatHexId(device.id.vendorId);
+      print() << "     " << "productId: " << formatHexId(device.id.productId);
       print() << "     " << "phys:      " << device.id.phys;
       print() << "     " << "busType:   " << toString(device.id.busType);
       print() << "     " << "devices:   " << subDeviceList.join(", ");
@@ -259,7 +258,6 @@ namespace {
     const QCommandLineOption cfgFileOption_ = {QStringList{ "cfg" }, i18n("Set custom config file."), "file"};
     const QCommandLineOption commandOption_ = {QStringList{ "c", "command"}, i18n("Send command/property to a running instance."), "cmd"};
     const QCommandLineOption deviceInfoOption_ = {QStringList{ "d", "device-scan"}, i18n("Print device-scan results.")};
-    const QCommandLineOption logLvlOption_ = {QStringList{ "l", "log-level" }, i18n("Set log level (dbg,inf,wrn,err)."), "lvl"};
     const QCommandLineOption disableUInputOption_ = {QStringList{ "disable-uinput" }, i18n("Disable uinput support.")};
     const QCommandLineOption showDlgOnStartOption_ = {QStringList{ "show-dialog" }, i18n("Show preferences dialog on start.")};
     const QCommandLineOption hideSysTrayOption_ = {QStringList{ "hide-systray-icon"}, i18n("Hide the system tray icon.")};
@@ -275,7 +273,7 @@ namespace {
     {
       parser.setApplicationDescription(i18n("Wayland application for the Logitech Spotlight device."));
       parser.addOptions({versionOption_, helpOption_, fullHelpOption_, commandOption_,
-                        cfgFileOption_, fullVersionOption_, deviceInfoOption_, logLvlOption_,
+                        cfgFileOption_, fullVersionOption_, deviceInfoOption_,
                         disableUInputOption_, showDlgOnStartOption_, dialogMinOnlyOption_,
                         disableOverlayOption_, additionalDeviceOption_, hideSysTrayOption_});
     }
@@ -296,8 +294,6 @@ namespace {
     auto commandOptionValues() const { return parser.values(commandOption_); }
     bool cfgFileOptionSet() const { return parser.isSet(cfgFileOption_); }
     auto cfgFileOptionValue() const { return parser.value(cfgFileOption_); }
-    bool logLvlOptionSet() const { return parser.isSet(logLvlOption_); }
-    auto logLvlOptionValue() const { return parser.value(logLvlOption_); }
     bool hideSysTrayOptionSet() const { return parser.isSet(hideSysTrayOption_); }
 
     // ---------------------------------------------------------------------------------------------
@@ -340,7 +336,6 @@ namespace {
       print() << "  -v, --version          " << versionOption_.description();
       print() << "  --cfg FILE             " << cfgFileOption_.description();
       print() << "  -d, --device-scan      " << deviceInfoOption_.description();
-      print() << "  -l, --log-level LEVEL  " << logLvlOption_.description();
       print() << "  -D DEVICE              " << additionalDeviceOption_.description();
       if (fullHelp) {
         print() << "  --disable-uinput       " << disableUInputOption_.description();
@@ -459,15 +454,6 @@ int main(int argc, char *argv[])
     options.disableOverlay = parser.disableOverlayOptionSet();
     options.hideSysTrayIcon = parser.hideSysTrayOptionSet();
 
-    if (parser.logLvlOptionSet()) {
-      const auto lvl = logging::levelFromName(parser.logLvlOptionValue());
-      if (lvl != logging::level::unknown) {
-        logging::setCurrentLevel(lvl);
-      } else {
-        error() << i18n("Cannot set log level, unknown level: '%1'",
-                        parser.logLvlOptionValue());
-      }
-    }
   }
 
   ProjecteurApplication app(argc, argv, options);

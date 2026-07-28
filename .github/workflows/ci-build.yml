@@ -17,7 +17,7 @@ jobs:
         run: >-
           pacman -Syu --noconfirm
           base-devel cmake extra-cmake-modules gettext git kconfig kconfigwidgets kcoreaddons kdbusaddons
-          kglobalaccel ki18n kio knotifications kwidgetsaddons kwindowsystem kxmlgui layer-shell-qt
+          kglobalaccel ki18n knotifications kwidgetsaddons kwindowsystem kxmlgui layer-shell-qt
           libplasma qt6-base qt6-declarative
 
       - uses: actions/checkout@v4

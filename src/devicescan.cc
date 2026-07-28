@@ -167,7 +167,7 @@ namespace DeviceScan {
   // -----------------------------------------------------------------------------------------------
   ScanResult getDevices(const std::vector<SupportedDevice>& additionalDevices)
   {
-    constexpr char hidDevicePath[] = "/sys/bus/hid/devices";
+    const QString hidDevicePath = QStringLiteral("/sys/bus/hid/devices");
 
     ScanResult result;
     const QFileInfo dpInfo(hidDevicePath);

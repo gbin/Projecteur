@@ -5,11 +5,11 @@
 
 #include "device-hidpp.h"
 #include "deviceinput.h"
-#include "logging.h"
+#include "projecteur_device_debug.h"
+#include "projecteur_hid_debug.h"
+#include "projecteur_input_debug.h"
 #include "settings.h"
 #include "virtualdevice.h"
-
-#include <KLocalizedString>
 
 #include <QSocketNotifier>
 #include <QTimer>
@@ -21,12 +21,8 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-DECLARE_LOGGING_CATEGORY(device)
-DECLARE_LOGGING_CATEGORY(hid)
-DECLARE_LOGGING_CATEGORY(input)
-
 namespace {
-  const auto hexId = logging::hexId;
+  const auto hexId = formatHexId;
 
   // See details on workaround in onEventDataAvailable
   bool workaroundLogitechFirstMoveEvent = true;
@@ -98,7 +94,7 @@ Spotlight::Spotlight(QObject* parent, Options options, Settings* settings)
       VirtualDevice::Type::Keyboard, "Projecteur_virtual_keyboard");
   }
   else {
-    logInfo(device) << i18n("Virtual device initialization was skipped.");
+    qCInfo(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Virtual device initialization was skipped.");
   }
 
   m_connectionTimer->setSingleShot(true);
@@ -109,7 +105,7 @@ Spotlight::Spotlight(QObject* parent, Options options, Settings* settings)
   m_connectionTimer->setInterval(delayedConnectionTimerIntervalMs);
 
   connect(m_connectionTimer, &QTimer::timeout, this, [this]() {
-    logDebug(device) << i18n("New connection check triggered");
+    qCDebug(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("New connection check triggered");
     connectDevices();
   });
 
@@ -191,9 +187,7 @@ int Spotlight::connectDevices()
       if (!scanSubDevice.deviceReadable
           || (requiresWriteAccess && !scanSubDevice.deviceWritable))
       {
-        logWarn(device) << i18n("Sub-device not accessible: %1 (%2:%3) %4",
-                                dc->deviceName(), hexId(dev.id.vendorId),
-                                hexId(dev.id.productId), scanSubDevice.deviceFile);
+        qCWarning(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Sub-device not accessible: %1 (%2:%3) %4").arg(dc->deviceName()).arg(hexId(dev.id.vendorId)).arg(hexId(dev.id.productId)).arg(scanSubDevice.deviceFile);
         QTimer::singleShot(
           0, this,
           [this, name = dc->deviceName(), path = scanSubDevice.deviceFile]() {
@@ -333,16 +327,13 @@ int Spotlight::connectDevices()
       {
         QTimer::singleShot(0, this,
         [this, id = dev.id, devName = dc->deviceName(), anyConnectedBefore](){
-          logInfo(device) << i18n("Connected device: %1 (%2:%3)",
-                                  devName, hexId(id.vendorId), hexId(id.productId));
+          qCInfo(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Connected device: %1 (%2:%3)").arg(devName).arg(hexId(id.vendorId)).arg(hexId(id.productId));
           emit deviceConnected(id, devName);
           if (!anyConnectedBefore) { emit anySpotlightDeviceConnectedChanged(true); }
         });
       }
 
-      logDebug(device) << i18n("Connected sub-device: %1 (%2:%3) %4",
-                               dc->deviceName(), hexId(dev.id.vendorId),
-                               hexId(dev.id.productId), scanSubDevice.deviceFile);
+      qCDebug(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Connected sub-device: %1 (%2:%3) %4").arg(dc->deviceName()).arg(hexId(dev.id.vendorId)).arg(hexId(dev.id.productId)).arg(scanSubDevice.deviceFile);
       emit subDeviceConnected(dev.id, dc->deviceName(), scanSubDevice.deviceFile);
     }
 
@@ -370,9 +361,7 @@ void Spotlight::removeDeviceConnection(const QString &devicePath)
 
     if (dc->subDeviceCount() == 0)
     {
-      logInfo(device) << i18n("Disconnected device: %1 (%2:%3)",
-                              dc->deviceName(), hexId(dc_it->first.vendorId),
-                              hexId(dc_it->first.productId));
+      qCInfo(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Disconnected device: %1 (%2:%3)").arg(dc->deviceName()).arg(hexId(dc_it->first.vendorId)).arg(hexId(dc_it->first.productId));
       emit deviceDisconnected(dc_it->first, dc->deviceName());
       dc_it = m_deviceConnections.erase(dc_it);
     }
@@ -459,8 +448,8 @@ void Spotlight::onEventDataAvailable(int fd, SubEventConnection& connection)
     }
     else if (buf.pos() >= buf.size())
     { // No idea if this will ever happen, but log it to make sure we get notified.
-      logWarning(device) << i18np("Discarded one input event without EV_SYN.",
-                                  "Discarded %1 input events without EV_SYN.", buf.size());
+      qCWarning(PROJECTEUR_DEVICE_LOG).noquote() << "Discarded" << buf.size()
+                                      << "input events without EV_SYN.";
       connection.inputMapper()->resetState();
       buf.reset();
     }
@@ -590,7 +579,7 @@ bool Spotlight::setupDevEventInotify()
   {
     fd = inotify_init();
     if (fd == -1) {
-      logError(device) << i18n("inotify_init() failed. Detection of new attached devices will not work.");
+      qCCritical(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("inotify_init() failed. Detection of new attached devices will not work.");
       return false;
     }
   }
@@ -598,7 +587,7 @@ bool Spotlight::setupDevEventInotify()
   const int wd = inotify_add_watch(fd, "/dev/input", IN_CREATE | IN_DELETE);
 
   if (wd < 0) {
-    logError(device) << i18n("inotify_add_watch for /dev/input returned with failure.");
+    qCCritical(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("inotify_add_watch for /dev/input returned with failure.");
     return false;
   }
 

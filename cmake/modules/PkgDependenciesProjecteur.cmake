@@ -8,7 +8,6 @@ list(APPEND _PkgDeps_Projecteur_archlinux
   "kdbusaddons>=6.7"
   "kglobalaccel>=6.7"
   "ki18n>=6.7"
-  "kio>=6.7"
   "knotifications>=6.7"
   "kwidgetsaddons>=6.7"
   "kwindowsystem>=6.7"

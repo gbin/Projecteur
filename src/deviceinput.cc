@@ -4,7 +4,7 @@
 #include "deviceinput.h"
 
 #include "enum-helper.h"
-#include "logging.h"
+#include "projecteur_input_debug.h"
 #include "settings.h"
 #include "virtualdevice.h"
 
@@ -17,8 +17,6 @@
 #include <QTimer>
 
 #include <linux/input.h>
-
-LOGGING_CATEGORY(input, "input")
 
 namespace  {
   const auto registeredMetaTypes_ = qRegisterMetaType<KeyEventSequence>()
@@ -621,13 +619,13 @@ void InputMapper::Impl::execAction(const std::shared_ptr<Action>& action, Device
 {
   if (!action || action->empty()) { return; }
 
-  logDebug(input) << "Input map execAction, type =" << toString(action->type())
+  qCDebug(PROJECTEUR_INPUT_LOG).noquote() << "Input map execAction, type =" << toString(action->type())
                   << ", partial_hit =" << (r == DeviceKeyMap::Result::PartialHit);
 
   if (action->type() == Action::Type::KeySequence)
   {
     const auto keySequenceAction = static_cast<KeySequenceAction*>(action.get());
-    logDebug(input) << "Emitting Key Sequence:" << keySequenceAction->keySequence.toString();
+    qCDebug(PROJECTEUR_INPUT_LOG).noquote() << "Emitting Key Sequence:" << keySequenceAction->keySequence.toString();
     emitNativeKeySequence(keySequenceAction->keySequence);
   }
   else
@@ -817,12 +815,12 @@ void InputMapper::addEvents(const input_event* input_events, size_t num)
   }
 
   if (input_events[num-1].type != EV_SYN) {
-    logWarning(input) << i18n("Input mapper expects events separated by SYN event.");
+    qCWarning(PROJECTEUR_INPUT_LOG).noquote() << QStringLiteral("Input mapper expects events separated by SYN event.");
     return;
   }
 
   if (num == 1) {
-    logWarning(input) << i18n("Ignoring single SYN event received.");
+    qCWarning(PROJECTEUR_INPUT_LOG).noquote() << QStringLiteral("Ignoring single SYN event received.");
     return;
   }
 
@@ -839,7 +837,7 @@ void InputMapper::addEvents(const input_event* input_events, size_t num)
 
   if (impl->m_recordingMode)
   {
-    logDebug(input) << "Recorded device event:" << KeyEvent{input_events, input_events + num - 1};
+    qCDebug(PROJECTEUR_INPUT_LOG).noquote() << "Recorded device event:" << KeyEvent{input_events, input_events + num - 1};
     impl->record(input_events, num-1); // exclude closing syn event for recording
     return;
   }

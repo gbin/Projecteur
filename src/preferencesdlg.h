@@ -84,7 +84,6 @@ private:
   QWidget* createMultiScreenWidget(Settings* settings);
   QGroupBox* createZoomGroupBox(Settings* settings);
   QWidget* createPresetSelector(Settings* settings);
-  QWidget* createLogTabWidget();
 
 private:
   Settings* const m_settings;
@@ -96,5 +95,4 @@ private:
   KShortcutsEditor* m_shortcutsEditor = nullptr;
   bool m_active = false;
   Mode m_dialogMode = Mode::ClosableDialog;
-  quint32 m_discardedLogCount = 0;
 };

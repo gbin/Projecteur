@@ -5,7 +5,6 @@
 
 #include "actiondelegate.h"
 #include "inputseqedit.h"
-#include "logging.h"
 
 #include <KLocalizedString>
 

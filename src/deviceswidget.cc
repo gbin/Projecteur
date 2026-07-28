@@ -7,7 +7,6 @@
 #include "deviceinput.h"
 #include "iconwidgets.h"
 #include "inputmapconfig.h"
-#include "logging.h"
 #include "settings.h"
 #include "spotlight.h"
 
@@ -27,11 +26,9 @@
 #include <QTextList>
 #include <QTimer>
 
-DECLARE_LOGGING_CATEGORY(preferences)
-
 // -------------------------------------------------------------------------------------------------
 namespace {
-  const auto hexId = logging::hexId;
+  const auto hexId = formatHexId;
 
   QString descriptionString(const QString& name, const DeviceId& id) {
     return QString("%1 (%2:%3) [%4]").arg(name, hexId(id.vendorId), hexId(id.productId), id.phys);

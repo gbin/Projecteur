@@ -6,9 +6,10 @@
 #include "device-command-helper.h"
 #include "imageitem.h"
 #include "linuxdesktop.h"
-#include "logging.h"
 #include "preferencesdlg.h"
 #include "presentationtimer.h"
+#include "projecteur_command_debug.h"
+#include "projecteur_main_debug.h"
 #include "projecteurcontrol.h"
 #include "settings.h"
 #include "spotlight.h"
@@ -40,9 +41,6 @@
 
 #include <utility>
 
-LOGGING_CATEGORY(mainapp, "mainapp")
-LOGGING_CATEGORY(cmdserver, "cmdserver")
-
 namespace {
 constexpr auto notificationComponent = "projecteur";
 
@@ -70,8 +68,8 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
 
   if (!options.commands.isEmpty()) {
     const auto commands = options.commands.join(QStringLiteral("; "));
-    logWarning(mainapp)
-      << i18n("Cannot send commands '%1' - no running application instance found.", commands);
+    qCWarning(PROJECTEUR_MAIN_LOG).noquote()
+      << QStringLiteral("Cannot send commands '%1' - no running application instance found.").arg(commands);
     m_startupExitCode = 43;
     m_dbusService->unregister();
     m_primaryInstance = false;
@@ -84,7 +82,8 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
   {
     const auto title = i18n("No Screens detected");
     const auto text = i18n("screens().size() returned a size < 1. Exiting.");
-    logError(mainapp) << title << ";" << text;
+    qCCritical(PROJECTEUR_MAIN_LOG).noquote()
+      << "No screens detected; screens().size() returned a size below one. Exiting.";
     KMessageBox::error(nullptr, text, title);
     QTimer::singleShot(0, this, [this](){ this->exit(2); });
     return;
@@ -116,17 +115,17 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
     m_spotlight->setSpotActive(true);
   });
   connect(&*m_dialog, &PreferencesDialog::exitApplicationRequested, this, [this]() {
-    logDebug(mainapp) << i18n("Exit request from preferences dialog.");
+    qCDebug(PROJECTEUR_MAIN_LOG).noquote() << QStringLiteral("Exit request from preferences dialog.");
     quit();
   });
 
   const QString desktopEnv = m_linuxDesktop->type() == LinuxDesktop::Type::KDE
                                ? QStringLiteral("KDE")
-                               : i18n("Unknown");
+                               : QStringLiteral("Unknown");
 
-  logDebug(mainapp) << i18n("Qt platform plugin: %1;", QGuiApplication::platformName())
-                    << i18n("Desktop Environment: %1;", desktopEnv)
-                    << i18n("Wayland: %1", m_linuxDesktop->isWayland() ? "true" : "false");
+  qCDebug(PROJECTEUR_MAIN_LOG).noquote() << QStringLiteral("Qt platform plugin: %1;").arg(QGuiApplication::platformName())
+                    << QStringLiteral("Desktop Environment: %1;").arg(desktopEnv)
+                    << QStringLiteral("Wayland: %1").arg(m_linuxDesktop->isWayland() ? "true" : "false");
 
   if (options.showPreferencesOnStart) {
     QTimer::singleShot(0, this, [this](){ showPreferences(true); });
@@ -148,9 +147,11 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
     const auto text = i18n("Qml component has status '%1'. Exiting.",
                            static_cast<int>(m_windowQmlComponent->status()));
 
-    logError(mainapp) << title << ";" << text;
+    qCCritical(PROJECTEUR_MAIN_LOG).noquote()
+      << "Overlay QML component has unexpected status:"
+      << static_cast<int>(m_windowQmlComponent->status());
     for (const auto& error : m_windowQmlComponent->errors()) {
-      logError(mainapp) << error.toString();
+      qCCritical(PROJECTEUR_MAIN_LOG).noquote() << error.toString();
     }
 
     KMessageBox::error(nullptr, text, title);
@@ -264,7 +265,7 @@ void ProjecteurApplication::setupControlService(Options const& options)
   m_control = new ProjecteurControl(this, m_settings, m_spotlight, m_presentationTimer,
                                     !options.hideSysTrayIcon);
   if (!m_control->registerObject()) {
-    logError(mainapp) << i18n("Could not register the Projecteur D-Bus control object.");
+    qCCritical(PROJECTEUR_MAIN_LOG).noquote() << QStringLiteral("Could not register the Projecteur D-Bus control object.");
   }
 }
 
@@ -281,7 +282,7 @@ void ProjecteurApplication::setupGlobalShortcuts()
       m_actionCollection->addAction(id, action);
       connect(action, &QAction::triggered, this, std::move(callback));
       if (!KGlobalAccel::setGlobalShortcut(action, QList<QKeySequence>{})) {
-        logWarning(mainapp) << i18n("Could not register global shortcut action '%1'.", id);
+        qCWarning(PROJECTEUR_MAIN_LOG).noquote() << QStringLiteral("Could not register global shortcut action '%1'.").arg(id);
       }
     };
 
@@ -648,7 +649,7 @@ void ProjecteurApplication::applyCommand(const QString& command)
 
   if (cmdKey == "quit")
   {
-    logDebug(cmdserver) << i18n("Received quit command.");
+    qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received quit command.");
     this->quit();
   }
   else if (cmdKey == "vibrate") // with args intensity (0-255), length (0-10)
@@ -677,8 +678,7 @@ void ProjecteurApplication::applyCommand(const QString& command)
       return std::uint8_t{0};
     }();
 
-    logDebug(cmdserver) << i18n("Received command vibrate = intensity:%1, length:%2",
-                                intensity, length);
+    qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command vibrate = intensity:%1, length:%2").arg(intensity).arg(length);
 
     m_deviceCommandHelper->sendVibrateCommand(intensity, length);
   }
@@ -687,17 +687,16 @@ void ProjecteurApplication::applyCommand(const QString& command)
     bool ok = false;
     int const sizeAdjust = cmdValue.toInt(&ok);
     if (ok) {
-      logDebug(cmdserver) << i18n("Received command spot.size.adjust = %1%2",
-                                  sizeAdjust > 0 ? "+" : "", sizeAdjust);
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command spot.size.adjust = %1%2").arg(sizeAdjust > 0 ? "+" : "").arg(sizeAdjust);
       m_settings->setSpotSize(m_settings->spotSize() + sizeAdjust);
     } else {
-      logDebug(cmdserver) << i18n("Received invalid value for command spot.size.adjust");
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received invalid value for command spot.size.adjust");
     }
   }
   else if (cmdKey == "spot")
   {
     if (cmdValue.isEmpty()) {
-      logDebug(cmdserver) << i18n("Received empty command value for command spot");
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received empty command value for command spot");
     } else if (cmdValue.toLower() == "toggle") {
       m_spotlight->setSpotActive(!m_spotlight->spotActive());
     }
@@ -705,19 +704,19 @@ void ProjecteurApplication::applyCommand(const QString& command)
       const bool active = (cmdValue.toLower() == "on"
                             || cmdValue == "1"
                             || cmdValue.toLower() == "true");
-      logDebug(cmdserver) << i18n("Received command spot = %1", active);
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command spot = %1").arg(active);
       m_spotlight->setSpotActive(active);
     }
   }
   else if (cmdKey == "settings" || cmdKey == "preferences")
   {
     const bool show = !(cmdValue.toLower() == "hide" || cmdValue == "0");
-    logDebug(cmdserver) << i18n("Received command settings = %1", show);
+    qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command settings = %1").arg(show);
     showPreferences(show);
   }
   else if (cmdKey == "preset")
   {
-    logDebug(cmdserver) << i18n("Received command preset = %1", cmdValue);
+    qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command preset = %1").arg(cmdValue);
     if (!cmdValue.isEmpty()) { m_settings->loadPreset(cmdValue); }
   }
   else if (cmdValue.size())
@@ -728,12 +727,12 @@ void ProjecteurApplication::applyCommand(const QString& command)
       return (pair.first == cmdKey);
     });
     if (it != m_settings->stringProperties().cend()) {
-      logDebug(cmdserver) << i18n("Received command '%1'='%2'", cmdKey, cmdValue);
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command '%1'='%2'").arg(cmdKey).arg(cmdValue);
       it->second.setFunction(cmdValue);
     }
     else {
       // string property not found...
-      logWarning(cmdserver) << i18n("Received unknown command key (%1)", cmdKey);
+      qCWarning(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received unknown command key (%1)").arg(cmdKey);
     }
   }
 }

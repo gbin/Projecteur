@@ -6,7 +6,6 @@
 #include "device-key-lookup.h"
 #include "deviceinput.h"
 #include "inputmapconfig.h"
-#include "logging.h"
 
 #include <KLocalizedString>
 

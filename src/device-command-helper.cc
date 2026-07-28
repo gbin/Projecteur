@@ -57,8 +57,6 @@ bool DeviceCommandHelper::sendVibrateCommand(const DeviceId& deviceId, uint8_t i
     {
       hidppConnection->sendVibrateCommand(intensity, length,
       [](HidppConnectionInterface::MsgResult, HIDPP::Message&&) {
-          // logDebug(hid) << i18n("Vibrate command returned: %1 (%2)")
-          //        .arg(toString(result)).arg(msg.hex());
       });
       commandSent = true;
     }

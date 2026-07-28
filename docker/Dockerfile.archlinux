@@ -25,7 +25,6 @@ RUN pacman --noconfirm -Sy && pacman --noconfirm -S \
   kdbusaddons \
   kglobalaccel \
   ki18n \
-  kio \
   knotifications \
   kwidgetsaddons \
   kwindowsystem \

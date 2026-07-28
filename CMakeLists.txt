@@ -16,6 +16,7 @@ add_compile_options(-Wall -Wextra -Werror)
 find_package(ECM 6.7 REQUIRED NO_MODULE)
 list(APPEND CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
 include(KDEInstallDirs6)
+include(ECMQtDeclareLoggingCategory)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 include(GitVersion)
@@ -25,7 +26,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui Quick Widgets)
-find_package(KF6 6.7 REQUIRED COMPONENTS Config ConfigWidgets CoreAddons DBusAddons GlobalAccel I18n KIO
+find_package(KF6 6.7 REQUIRED COMPONENTS Config ConfigWidgets CoreAddons DBusAddons GlobalAccel I18n
                                         Notifications Package KirigamiPlatform WidgetsAddons WindowSystem XmlGui)
 find_package(Plasma 6.7 REQUIRED)
 find_package(LayerShellQt 6.7 REQUIRED)
@@ -49,7 +50,6 @@ add_executable(projecteur
   src/imageitem.cc             src/imageitem.h
   src/inputmapconfig.cc        src/inputmapconfig.h
   src/inputseqedit.cc          src/inputseqedit.h
-  src/logging.cc               src/logging.h
   src/nativekeyseqedit.cc      src/nativekeyseqedit.h
   src/preferencesdlg.cc        src/preferencesdlg.h
   src/presentationtimer.cc     src/presentationtimer.h
@@ -60,6 +60,78 @@ add_executable(projecteur
   src/spotshapes.cc            src/spotshapes.h
   src/virtualdevice.cc         src/virtualdevice.h
   ${RESOURCES})
+
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_main_debug.h
+  IDENTIFIER PROJECTEUR_MAIN_LOG
+  CATEGORY_NAME projecteur.mainapp
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur application"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_command_debug.h
+  IDENTIFIER PROJECTEUR_COMMAND_LOG
+  CATEGORY_NAME projecteur.cmdserver
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur command service"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_desktop_debug.h
+  IDENTIFIER PROJECTEUR_DESKTOP_LOG
+  CATEGORY_NAME projecteur.desktop
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur desktop integration"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_device_debug.h
+  IDENTIFIER PROJECTEUR_DEVICE_LOG
+  CATEGORY_NAME projecteur.device
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur device handling"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_hid_debug.h
+  IDENTIFIER PROJECTEUR_HID_LOG
+  CATEGORY_NAME projecteur.hid
+  OLD_CATEGORY_NAMES projecteur.HID
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur HID++ protocol"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_input_debug.h
+  IDENTIFIER PROJECTEUR_INPUT_LOG
+  CATEGORY_NAME projecteur.input
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur input mapping"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_settings_debug.h
+  IDENTIFIER PROJECTEUR_SETTINGS_LOG
+  CATEGORY_NAME projecteur.settings
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur settings"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_virtual_device_debug.h
+  IDENTIFIER PROJECTEUR_VIRTUAL_DEVICE_LOG
+  CATEGORY_NAME projecteur.virtualdevice
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur virtual input devices"
+  EXPORT Projecteur
+)
+ecm_qt_install_logging_categories(
+  EXPORT Projecteur
+  FILE projecteur.categories
+  DESTINATION "${KDE_INSTALL_LOGGINGCATEGORIESDIR}"
+  SORT
+)
 
 set(PROJECTEUR_CONTROL_XML
   "${CMAKE_CURRENT_SOURCE_DIR}/src/org.projecteur.Projecteur.xml")
@@ -85,7 +157,7 @@ target_include_directories(projecteur PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(projecteur
   PRIVATE Qt6::Core Qt6::DBus Qt6::Quick Qt6::Widgets
           KF6::ConfigCore KF6::ConfigGui KF6::ConfigWidgets KF6::CoreAddons KF6::DBusAddons
-          KF6::GlobalAccel KF6::I18n KF6::KIOFileWidgets KF6::Notifications KF6::WidgetsAddons
+          KF6::GlobalAccel KF6::I18n KF6::Notifications KF6::WidgetsAddons
           KF6::WindowSystem KF6::XmlGui
           LayerShellQt::Interface
 )

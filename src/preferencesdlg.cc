@@ -3,17 +3,12 @@
 
 #include "preferencesdlg.h"
 
-#include "projecteur-GitVersion.h"  // auto generated version information
-
 #include "deviceswidget.h"
 #include "iconwidgets.h"
-#include "logging.h"
 #include "settings.h"
 
 #include <KActionCollection>
 #include <KColorButton>
-#include <KFileCustomDialog>
-#include <KFileFilter>
 #include <KGlobalAccel>
 #include <KLazyLocalizedString>
 #include <KLocalizedString>
@@ -22,28 +17,21 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
-#include <QDateTime>
 #include <QDialogButtonBox>
-#include <QDir>
 #include <QDoubleSpinBox>
-#include <QFile>
-#include <QFileInfo>
 #include <QGroupBox>
 #include <QIcon>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
 #include <QPainter>
-#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QQmlPropertyMap>
 #include <QSpinBox>
 #include <QStyle>
-#include <QUrl>
 
 #include <map>
-
-LOGGING_CATEGORY(preferences, "preferences")
 
 // -------------------------------------------------------------------------------------------------
 namespace {
@@ -94,8 +82,6 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
     actionCollection, this, KShortcutsEditor::GlobalAction,
     KShortcutsEditor::LetterShortcutsDisallowed);
   addPage(m_shortcutsEditor, i18n("Shortcuts"), QStringLiteral("configure-shortcuts"),
-          QString(), false);
-  addPage(createLogTabWidget(), i18n("Log"), QStringLiteral("utilities-log-viewer"),
           QString(), false);
 
   if (auto* helpButton = buttonBox()->button(QDialogButtonBox::Help)) {
@@ -635,109 +621,6 @@ QWidget* PreferencesDialog::createMultiScreenWidget(Settings* settings)
   return cb;
 }
 
-// -------------------------------------------------------------------------------------------------
-QWidget* PreferencesDialog::createLogTabWidget()
-{
-  const auto widget = new QWidget(this);
-  const auto mainVBox = new QVBoxLayout(widget);
-
-  const auto te = new QPlainTextEdit(widget);
-  te->setReadOnly(true);
-  te->setWordWrapMode(QTextOption::NoWrap);
-  te->setMaximumBlockCount(1000);
-  te->setFont([te]()
-  {
-    auto font = te->font();
-    font.setPointSize(font.pointSize() - 1);
-    return font;
-  }());
-  logging::registerTextEdit(te);
-
-  // Count discarded logs
-  connect(te, &QPlainTextEdit::blockCountChanged, this,
-  [maxBlockCount=te->maximumBlockCount(), this](int newBlockCount) {
-    if (newBlockCount > maxBlockCount) {
-      m_discardedLogCount += (newBlockCount-maxBlockCount);
-    }
-  });
-
-  const auto lvlHBox = new QHBoxLayout();
-  lvlHBox->addWidget(new QLabel(i18n("Log Level"), widget));
-  // Log level combo box
-  const auto logLvlCombo = new QComboBox(widget);
-  logLvlCombo->addItem(i18n("Debug"), static_cast<int>(logging::level::debug));
-  logLvlCombo->addItem(i18n("Info"), static_cast<int>(logging::level::info));
-  logLvlCombo->addItem(i18n("Warning"), static_cast<int>(logging::level::warning));
-  logLvlCombo->addItem(i18n("Error"), static_cast<int>(logging::level::error));
-  lvlHBox->addWidget(logLvlCombo);
-
-  const int idx = logLvlCombo->findData(static_cast<int>(logging::currentLevel()));
-  logLvlCombo->setCurrentIndex((idx == -1) ? 0 : idx);
-
-  connect(logLvlCombo, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this,
-  [logLvlCombo, te](int index) {
-    const auto lvl = static_cast<logging::level>(logLvlCombo->itemData(index).toInt());
-    te->appendPlainText(i18n("--- Setting new log level: %1", logging::levelToString(lvl)));
-    logging::setCurrentLevel(lvl);
-  });
-
-  const auto saveLogBtn = new QPushButton(i18n("&Save log..."), this);
-  saveLogBtn->setToolTip(i18n("Save log to file."));
-  connect(saveLogBtn, &QPushButton::clicked, this, [this, te]()
-  {
-    static auto saveDir = QDir::homePath();
-    const auto defaultName = QString("projecteur_%1.log")
-                             .arg(QDateTime::currentDateTime().toString("yyyy-MM-dd_hh-mm"));
-
-    const auto defaultFile = QDir(saveDir).filePath(defaultName);
-    KFileCustomDialog saveDialog(QUrl::fromLocalFile(defaultFile), this);
-    saveDialog.setWindowTitle(i18n("Save Log File"));
-    saveDialog.setOperationMode(KFileWidget::Saving);
-    saveDialog.fileWidget()->setMode(KFile::File | KFile::LocalOnly);
-    saveDialog.fileWidget()->setConfirmOverwrite(true);
-    saveDialog.fileWidget()->setFilters({
-      KFileFilter(i18n("Log Files"), {QStringLiteral("*.log"), QStringLiteral("*.txt")}, {})
-    });
-    if (saveDialog.exec() != QDialog::Accepted) { return; }
-
-    const auto logFile = saveDialog.fileWidget()->selectedFile();
-    if (logFile.isEmpty()) { return; }
-    saveDir = QFileInfo(logFile).path();
-
-    QFile f(logFile);
-    if (f.open(QIODevice::WriteOnly))
-    {
-      f.write(QString("%1 %2\n").arg(QCoreApplication::applicationName())
-              .arg(projecteur::version_string()).toLocal8Bit());
-      f.write(QString(" - git-branch: %1, git-hash: %2\n").arg(projecteur::version_branch())
-              .arg(projecteur::version_shorthash()).toLocal8Bit());
-      f.write(QString(" - qt-version: (build: %1, runtime: %2)\n").arg(QT_VERSION_STR)
-              .arg(qVersion()).toLocal8Bit());
-      f.write(QString("\n------------------------------------------------------------\n").toLocal8Bit());
-      if (m_discardedLogCount > 0) {
-        f.write(i18np("Discarded one previous log entry.",
-                     "Discarded %1 previous log entries.", m_discardedLogCount).toLocal8Bit());
-        f.write(QString("\n------------------------------------------------------------\n").toLocal8Bit());
-      }
-      f.write(te->toPlainText().toLocal8Bit());
-      logInfo(preferences) << i18n("Log saved to: ") << logFile;
-    }
-    else {
-      logError(preferences) << i18n("Could not open '%1' for writing.", logFile);
-    }
-  });
-
-  lvlHBox->addWidget(saveLogBtn);
-  lvlHBox->setStretch(0, 0);
-  lvlHBox->setStretch(1, 1);
-  lvlHBox->setStretch(2, 1);
-
-  mainVBox->addLayout(lvlHBox);
-  mainVBox->addWidget(te);
-  return widget;
-}
-
-// -------------------------------------------------------------------------------------------------
 void PreferencesDialog::setMode(Mode dialogMode)
 {
   if (m_dialogMode == dialogMode) {

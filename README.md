@@ -215,7 +215,7 @@ and Hold Move actions for the same button.
 * CMake 3.20 or later
 * Qt 6.11 with Core, DBus, Gui, Quick, and Widgets
 * KDE Plasma 6.7 Wayland, including Libplasma, KConfig, KConfigWidgets, KCoreAddons,
-  KDBusAddons, KGlobalAccel, KI18n, KIO, KNotifications, KWidgetsAddons, KWindowSystem,
+  KDBusAddons, KGlobalAccel, KI18n, KNotifications, KWidgetsAddons, KWindowSystem,
   and KXmlGui
 * LayerShellQt 6.7
 * Extra CMake Modules 6.7 or later
@@ -313,7 +313,6 @@ Usage: projecteur [OPTION]...
   -f, --fullversion       Print extended version info.
   --cfg FILE              Set custom config file.
   -d, --device-scan       Print device-scan results.
-  -l, --log-level LEVEL   Set log level (dbg,inf,wrn,err), default is 'inf'.
   --show-dialog           Show preferences dialog on start.
   -m, --minimize-only     Only allow minimizing the preferences dialog.
   -D DEVICE               Additional accepted device; DEVICE=vendorId:productId

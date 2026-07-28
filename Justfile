@@ -127,7 +127,6 @@ deps: _require-arch
         kdbusaddons
         kglobalaccel
         ki18n
-        kio
         knotifications
         kwidgetsaddons
         kwindowsystem

@@ -5,7 +5,6 @@
 
 #include "inputmapconfig.h"
 #include "inputseqedit.h"
-#include "logging.h"
 
 #include <KLocalizedString>
 

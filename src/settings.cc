@@ -5,8 +5,8 @@
 
 #include "device.h"
 #include "deviceinput.h"
-#include "logging.h"
 #include "projecteurconfig.h"
+#include "projecteur_settings_debug.h"
 
 #include <algorithm>
 #include <utility>
@@ -20,8 +20,6 @@
 #include <QGuiApplication>
 #include <QPalette>
 #include <QQmlPropertyMap>
-
-LOGGING_CATEGORY(lcSettings, "settings")
 
 namespace {
   // -----------------------------------------------------------------------------------------------
@@ -106,7 +104,7 @@ namespace {
   // -----------------------------------------------------------------------------------------------
   QString settingsKey(const DeviceId& dId, const QString& key) {
     return QString("Device_%1_%2/%3")
-      .arg(logging::hexId(dId.vendorId), logging::hexId(dId.productId), key);
+      .arg(formatHexId(dId.vendorId), formatHexId(dId.productId), key);
   }
 
   struct ConfigEntry {
@@ -234,7 +232,7 @@ QString Settings::configFileName() const
 void Settings::save()
 {
   if (!m_config->save()) {
-    logWarning(lcSettings) << i18n("Could not save settings to '%1'.", configFileName());
+    qCWarning(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Could not save settings to '%1'.").arg(configFileName());
   }
 }
 
@@ -242,7 +240,7 @@ void Settings::save()
 void Settings::sync()
 {
   if (!m_config->config()->sync()) {
-    logWarning(lcSettings) << i18n("Could not save settings to '%1'.", configFileName());
+    qCWarning(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Could not save settings to '%1'.").arg(configFileName());
   }
 }
 
@@ -252,11 +250,11 @@ void Settings::init()
   const QFileInfo fi(configFileName());
 
   if (!fi.isReadable()) {
-    logDebug(lcSettings) << i18n("Settings file '%1' does not exist yet.", configFileName());
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Settings file '%1' does not exist yet.").arg(configFileName());
   }
 
   if (fi.exists() && !fi.isWritable()) {
-    logWarning(lcSettings) << i18n("Settings file '%1' not writable.", configFileName());
+    qCWarning(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Settings file '%1' not writable.").arg(configFileName());
   }
 
   shapeSettingsInitialize();
@@ -559,7 +557,7 @@ void Settings::shapeSettingsLoad(const QString& preset)
 
         if (settingDefinition.defaultValue().metaType().id() == QMetaType::Int // Currently only int shape settings supported
             && settingDefinition.defaultValue() != loadedValue) {
-          logDebug(lcSettings) << QString("spot.shape.%1.%2 = ").arg(shape.name().toLower(), key) << loadedValue.toInt();
+          qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << QString("spot.shape.%1.%2 = ").arg(shape.name().toLower(), key) << loadedValue.toInt();
         }
 
         if (propertyMap->property(key.toLocal8Bit()).isValid()) {
@@ -619,7 +617,7 @@ void Settings::shapeSettingsInitialize()
             if (newValue != setValue) {
               pm->setProperty(key.toLocal8Bit(), newValue);
             }
-            logDebug(lcSettings) << QString("spot.shape.%1.%2 = ").arg(shape.name().toLower(), it->settingsKey())
+            qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << QString("spot.shape.%1.%2 = ").arg(shape.name().toLower(), it->settingsKey())
                                  << setValue;
             writeValue(QString("Shape.%1/%2").arg(shape.name()).arg(key), newValue);
           }
@@ -663,7 +661,7 @@ PresetModel* Settings::presetModel()
 // -------------------------------------------------------------------------------------------------
 void Settings::load(const QString& preset)
 {
-  logDebug(lcSettings) << i18n("Loading values from config:") << configFileName()
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Loading values from config:") << configFileName()
                        << (preset.size() ? QString("(%1)").arg(preset) : "");
 
   if (preset.isEmpty())
@@ -749,7 +747,7 @@ void Settings::setShowSpotShade(bool show)
   m_showSpotShade = show;
   m_config->setShowSpotShade(m_showSpotShade);
   save();
-  logDebug(lcSettings) << "shade =" << m_showSpotShade;
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "shade =" << m_showSpotShade;
   emit showSpotShadeChanged(m_showSpotShade);
 }
 
@@ -761,7 +759,7 @@ void Settings::setSpotSize(int size)
   m_spotSize = qMin(qMax(::settings::ranges::spotSize.min, size), ::settings::ranges::spotSize.max);
   m_config->setSpotSize(m_spotSize);
   save();
-  logDebug(lcSettings) << "spot.size =" << m_spotSize;
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "spot.size =" << m_spotSize;
   emit spotSizeChanged(m_spotSize);
 }
 
@@ -773,7 +771,7 @@ void Settings::setShowCenterDot(bool show)
   m_showCenterDot = show;
   m_config->setShowCenterDot(m_showCenterDot);
   save();
-  logDebug(lcSettings) << "dot =" << m_showCenterDot;
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "dot =" << m_showCenterDot;
   emit showCenterDotChanged(m_showCenterDot);
 }
 
@@ -785,7 +783,7 @@ void Settings::setDotSize(int size)
   m_dotSize = qMin(qMax(::settings::ranges::dotSize.min, size), ::settings::ranges::dotSize.max);
   m_config->setDotSize(m_dotSize);
   save();
-  logDebug(lcSettings) << "dot.size =" << m_dotSize;
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "dot.size =" << m_dotSize;
   emit dotSizeChanged(m_dotSize);
 }
 
@@ -797,7 +795,7 @@ void Settings::setDotColor(const QColor& color)
   m_dotColor = color;
   m_config->setDotColor(m_dotColor);
   save();
-  logDebug(lcSettings) << "dot.color =" << m_dotColor.name();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "dot.color =" << m_dotColor.name();
   emit dotColorChanged(m_dotColor);
 }
 
@@ -809,7 +807,7 @@ void Settings::setDotOpacity(double opacity)
     m_dotOpacity = qMin(qMax(::settings::ranges::dotOpacity.min, opacity), ::settings::ranges::dotOpacity.max);
     m_config->setDotOpacity(m_dotOpacity);
     save();
-    logDebug(lcSettings) << "dot.opacity = " << m_dotOpacity;
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "dot.opacity = " << m_dotOpacity;
     emit dotOpacityChanged(m_dotOpacity);
   }
 }
@@ -822,7 +820,7 @@ void Settings::setShadeColor(const QColor& color)
   m_shadeColor = color;
   m_config->setShadeColor(m_shadeColor);
   save();
-  logDebug(lcSettings) << "shade.color =" << m_shadeColor.name();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "shade.color =" << m_shadeColor.name();
   emit shadeColorChanged(m_shadeColor);
 }
 
@@ -834,7 +832,7 @@ void Settings::setShadeOpacity(double opacity)
     m_shadeOpacity = qMin(qMax(::settings::ranges::shadeOpacity.min, opacity), ::settings::ranges::shadeOpacity.max);
     m_config->setShadeOpacity(m_shadeOpacity);
     save();
-    logDebug(lcSettings) << "shade.opacity = " << m_shadeOpacity;
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "shade.opacity = " << m_shadeOpacity;
     emit shadeOpacityChanged(m_shadeOpacity);
   }
 }
@@ -847,7 +845,7 @@ void Settings::setCursor(Qt::CursorShape cursor)
   m_cursor = qMin(qMax(static_cast<Qt::CursorShape>(0), cursor), Qt::LastCursor);
   m_config->setCursor(static_cast<int>(m_cursor));
   save();
-  logDebug(lcSettings) << "cursor = " << m_cursor;
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "cursor = " << m_cursor;
   emit cursorChanged(m_cursor);
 }
 
@@ -865,7 +863,7 @@ void Settings::setSpotShape(const QString& spotShapeQmlComponent)
     m_spotShape = it->qmlComponent();
     m_config->setSpotShape(m_spotShape);
     save();
-    logDebug(lcSettings) << "spot.shape = " << m_spotShape;
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "spot.shape = " << m_spotShape;
     emit spotShapeChanged(m_spotShape);
     setSpotRotationAllowed(it->allowRotation());
   }
@@ -879,7 +877,7 @@ void Settings::setSpotRotation(double rotation)
     m_spotRotation = qMin(qMax(::settings::ranges::spotRotation.min, rotation), ::settings::ranges::spotRotation.max);
     m_config->setSpotRotation(m_spotRotation);
     save();
-    logDebug(lcSettings) << "spot.rotation = " << m_spotRotation;
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "spot.rotation = " << m_spotRotation;
     emit spotRotationChanged(m_spotRotation);
   }
 }
@@ -936,7 +934,7 @@ void Settings::setShowBorder(bool show)
   m_showBorder = show;
   m_config->setShowBorder(m_showBorder);
   save();
-  logDebug(lcSettings) << "border = " << m_showBorder;
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "border = " << m_showBorder;
   emit showBorderChanged(m_showBorder);
 }
 
@@ -948,7 +946,7 @@ void Settings::setBorderColor(const QColor& color)
   m_borderColor = color;
   m_config->setBorderColor(m_borderColor);
   save();
-  logDebug(lcSettings) << "border.color = " << m_borderColor.name();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "border.color = " << m_borderColor.name();
   emit borderColorChanged(m_borderColor);
 }
 
@@ -960,7 +958,7 @@ void Settings::setBorderSize(int size)
   m_borderSize = qMin(qMax(::settings::ranges::borderSize.min, size), ::settings::ranges::borderSize.max);
   m_config->setBorderSize(m_borderSize);
   save();
-  logDebug(lcSettings) << "border.size = " << m_borderSize;
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "border.size = " << m_borderSize;
   emit borderSizeChanged(m_borderSize);
 }
 
@@ -972,7 +970,7 @@ void Settings::setBorderOpacity(double opacity)
     m_borderOpacity = qMin(qMax(::settings::ranges::borderOpacity.min, opacity), ::settings::ranges::borderOpacity.max);
     m_config->setBorderOpacity(m_borderOpacity);
     save();
-    logDebug(lcSettings) << "border.opacity = " << m_borderOpacity;
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "border.opacity = " << m_borderOpacity;
     emit borderOpacityChanged(m_borderOpacity);
   }
 }
@@ -985,7 +983,7 @@ void Settings::setZoomEnabled(bool enabled)
   m_zoomEnabled = enabled;
   m_config->setZoomEnabled(m_zoomEnabled);
   save();
-  logDebug(lcSettings) << "zoom = " << m_zoomEnabled;
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "zoom = " << m_zoomEnabled;
   emit zoomEnabledChanged(m_zoomEnabled);
 }
 
@@ -997,7 +995,7 @@ void Settings::setZoomFactor(double factor)
     m_zoomFactor = qMin(qMax(::settings::ranges::zoomFactor.min, factor), ::settings::ranges::zoomFactor.max);
     m_config->setZoomFactor(m_zoomFactor);
     save();
-    logDebug(lcSettings) << "zoom.factor = " << m_zoomFactor;
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "zoom.factor = " << m_zoomFactor;
     emit zoomFactorChanged(m_zoomFactor);
   }
 }
@@ -1009,7 +1007,7 @@ void Settings::setMultiScreenOverlayEnabled(bool enabled)
     m_multiScreenOverlayEnabled = enabled;
     m_config->setMultiScreenOverlay(m_multiScreenOverlayEnabled);
     save();
-    logDebug(lcSettings) << "multi-screen-overlay = " << m_multiScreenOverlayEnabled;
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "multi-screen-overlay = " << m_multiScreenOverlayEnabled;
     emit multiScreenOverlayEnabledChanged(m_multiScreenOverlayEnabled);
 }
 
@@ -1082,7 +1080,7 @@ InputMapConfig Settings::getDeviceInputMapConfig(const DeviceId& dId)
   quint32 size = 0;
   stream >> version >> size;
   if (version != inputMapFormatVersion || size > 1024) {
-    logWarning(lcSettings) << i18n("Ignoring unsupported device input mapping data.");
+    qCWarning(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Ignoring unsupported device input mapping data.");
     return cfg;
   }
 
@@ -1092,7 +1090,7 @@ InputMapConfig Settings::getDeviceInputMapConfig(const DeviceId& dId)
     MappedAction mappedAction;
     stream >> sequence >> mappedAction;
     if (stream.status() != QDataStream::Ok || !mappedAction.action) {
-      logWarning(lcSettings) << i18n("Ignoring invalid device input mapping data.");
+      qCWarning(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Ignoring invalid device input mapping data.");
       return {};
     }
     if (mappedAction.action->type() == Action::Type::ScrollHorizontal) {
