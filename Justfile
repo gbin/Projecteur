@@ -97,6 +97,12 @@ install: _stop-projecteur build package
     fi
 
     systemctl --user restart plasma-plasmashell.service
+    dbus-send --session --print-reply=literal \
+        --dest=org.freedesktop.DBus \
+        /org/freedesktop/DBus \
+        org.freedesktop.DBus.StartServiceByName \
+        string:org.projecteur.Projecteur \
+        uint32:0 >/dev/null
 
 _stop-projecteur:
     #!/usr/bin/env bash

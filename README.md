@@ -78,14 +78,32 @@ So here it is: a Linux application for the Logitech Spotlight.
   * Map any button on the device to (almost) any keyboard combination.
   * Switch between (cycle through) custom spotlight presets.
   * Audio Volume / Horizontal and Vertical Scrolling (Logitech Spotlight).
-* Vibration (Timer) Support for the Logitech Spotlight and Spotlight 2
+* Vibration support for compatible presenters, including the Logitech Spotlight
+  and Spotlight 2; the presentation timer triggers haptic feedback on completion
+* Native KDE Plasma system tray applet with presenter status, first-class
+  presentation timer settings, a live remaining-minutes badge, and quick controls
+* Native KDE Plasma notifications for presenter status, battery level, access
+  errors, and presentation timers
 * Usable without a presenter device (e.g. for online presentations)
 
 ### Screenshots
 
-[<img src="doc/screenshot-settings.png" alt="Projecteur preferences" height="300" />](./doc/screenshot-settings.png)
-[<img src="doc/screenshot-spot.png" alt="Projecteur spotlight overlay" height="300" />](./doc/screenshot-spot.png)
+[<img src="doc/screenshot-settings.png" alt="KDE-styled Projecteur preferences" title="KDE-styled Projecteur preferences" height="300" />](./doc/screenshot-settings.png)
+[<img src="doc/screenshot-spot.png" alt="Circular Projecteur spotlight demonstrating zoom, shade, and a green border" title="Configurable spotlight shape, zoom, shade, and border" height="300" />](./doc/screenshot-spot.png)
 [<img src="doc/screenshot-traymenu.png" alt="Projecteur Plasma tray popup" height="300" />](./doc/screenshot-traymenu.png)
+[<img src="doc/screenshot-notification.png" alt="Projecteur presenter connected notification in KDE Plasma" height="129" />](./doc/screenshot-notification.png)
+
+**KDE Plasma system tray applet integration**
+
+[<img src="doc/screenshot-plasma-applet.png" alt="Projecteur system tray applet showing one connected presenter in KDE Plasma" title="KDE Plasma system tray applet integration" height="153" />](./doc/screenshot-plasma-applet.png)
+
+**Presentation timer in the Plasma applet**
+
+[<img src="doc/screenshot-applet-presentation-timer.png" alt="First-class presentation timer settings in the Projecteur Plasma applet" title="Presentation timer in the Projecteur Plasma applet" width="800" />](./doc/screenshot-applet-presentation-timer.png)
+
+**Presentation timer countdown on the panel icon**
+
+[<img src="doc/screenshot-applet-timer-countdown.png" alt="Projecteur panel icon and tooltip showing 14 minutes remaining" title="Live presentation timer countdown on the Projecteur panel icon" height="178" />](./doc/screenshot-applet-timer-countdown.png)
 
 ## Supported Environments
 
@@ -189,7 +207,7 @@ just install  # Build, package, and install the package with pacman
 through the checked-in `packaging/arch/PKGBUILD`. `just install` uses `sudo`
 only for dependency installation and the final `pacman -U`. It stops a running
 Projecteur instance, compiles, packages and installs the current tree, then
-restarts `plasma-plasmashell.service`.
+restarts `plasma-plasmashell.service` and Projecteur.
 
 Installing is required for zoom: KWin authorizes the screenshot interface by matching
 the running executable with the installed `org.projecteur.Projecteur.desktop` metadata. A binary run
@@ -221,9 +239,13 @@ file in this repository: `55-projecteur.rules.in`
 
 Projecteur provides a native Plasma system tray popup while the application is
 running. It shows connected presenters and offers quick access to the overlay,
-presets, spotlight test, preferences, about dialog, and quit action. Plasma owns
-the popup placement and closes it when the icon is clicked again or focus moves
-elsewhere.
+presets, spotlight test, and first-class presentation timer controls, as well as
+the preferences, about, and quit actions. Plasma owns the popup placement and
+closes it when the icon is clicked again or focus moves elsewhere.
+
+While the presentation timer is running, the panel icon shows how many minutes
+remain. When the timer finishes, Projecteur triggers configurable haptic feedback
+on compatible presenter devices such as the Logitech Spotlight 2.
 
 If the system tray icon is missing, see the
 [Troubleshooting](#missing-system-tray) section.
