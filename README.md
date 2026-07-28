@@ -140,7 +140,7 @@ While the timer runs, the panel icon displays the remaining minutes and its
 tooltip shows the precise countdown. When time expires, compatible presenters
 such as the Logitech Spotlight 2 provide configurable haptic feedback.
 
-[<img src="doc/screenshot-applet-timer-countdown.png" alt="Projecteur panel icon and tooltip showing 14 minutes remaining" title="Live presentation timer countdown on the Projecteur panel icon" width="372" />](./doc/screenshot-applet-timer-countdown.png)
+[<img src="doc/screenshot-applet-timer-countdown.png" alt="Projecteur panel icon with a highlighted five-minute badge and tooltip showing 04:27 remaining" title="Live presentation timer countdown on the Projecteur panel icon" width="375" />](./doc/screenshot-applet-timer-countdown.png)
 
 ## Supported Environments
 
