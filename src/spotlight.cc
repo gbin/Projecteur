@@ -540,7 +540,6 @@ void Spotlight::registerForNotifications(SubHidppConnection* connection)
       const int adjustedY = getReducedParam(y);
 
       if (adjustedX == 0 && adjustedY == 0) { return; }
-
       static const auto scrollHAction = GlobalActions::scrollHorizontal();
       scrollHAction->param = -adjustedX;
 

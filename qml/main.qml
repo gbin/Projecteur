@@ -34,12 +34,6 @@ Window {
         rotation: Settings.spotRotationAllowed ? Settings.spotRotation : 0
 
         opacity: ProjecteurApp.overlayVisible ? 1.0 : 0.0
-        Behavior on opacity {
-            PropertyAnimation {
-                duration: ProjecteurApp.overlayVisible ? 0 : 180
-                easing.type: Easing.OutQuad
-            }
-        }
 
         Item {
             id: desktopItem

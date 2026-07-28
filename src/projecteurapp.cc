@@ -277,7 +277,6 @@ void ProjecteurApplication::setupSpotlight()
   });
 }
 
-// -------------------------------------------------------------------------------------------------
 void ProjecteurApplication::setupControlService(Options const& options)
 {
   m_control = new ProjecteurControl(this, m_settings, m_spotlight, m_presentationTimer,
