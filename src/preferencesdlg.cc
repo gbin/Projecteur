@@ -5,13 +5,13 @@
 
 #include "projecteur-GitVersion.h"  // auto generated version information
 
-#include "colorselector.h"
 #include "deviceswidget.h"
 #include "iconwidgets.h"
 #include "logging.h"
 #include "settings.h"
 
 #include <KActionCollection>
+#include <KColorButton>
 #include <KGlobalAccel>
 #include <KShortcutsEditor>
 
@@ -419,9 +419,10 @@ QGroupBox* PreferencesDialog::createSpotGroupBox(Settings* settings)
   const auto spotGrid = new QGridLayout(spotGroup);
 
   // Shade color setting
-  const auto shadeColor = new ColorSelector(tr("Select Shade Color"), settings->shadeColor(), this);
-  connect(shadeColor, &ColorSelector::colorChanged, settings, &Settings::setShadeColor);
-  connect(settings, &Settings::shadeColorChanged, shadeColor, &ColorSelector::setColor);
+  const auto shadeColor = new KColorButton(settings->shadeColor(), this);
+  shadeColor->setAccessibleName(tr("Shade Color"));
+  connect(shadeColor, &KColorButton::changed, settings, &Settings::setShadeColor);
+  connect(settings, &Settings::shadeColorChanged, shadeColor, &KColorButton::setColor);
   connect(settings, &Settings::shadeColorChanged, this, &PreferencesDialog::resetPresetCombo);
   spotGrid->addWidget(new QLabel(tr("Shade Color"), this), 1, 0);
   spotGrid->addWidget(shadeColor, 1, 1);
@@ -473,9 +474,10 @@ QGroupBox* PreferencesDialog::createDotGroupBox(Settings* settings)
   dotGrid->addWidget(new QLabel(tr("Dot Size"), this), 0, 0);
   dotGrid->addLayout(dotsizeHBox, 0, 1);
 
-  const auto dotColor = new ColorSelector(tr("Select Dot Color"), settings->dotColor(), this);
-  connect(dotColor, &ColorSelector::colorChanged, settings, &Settings::setDotColor);
-  connect(settings, &Settings::dotColorChanged, dotColor, &ColorSelector::setColor);
+  const auto dotColor = new KColorButton(settings->dotColor(), this);
+  dotColor->setAccessibleName(tr("Dot Color"));
+  connect(dotColor, &KColorButton::changed, settings, &Settings::setDotColor);
+  connect(settings, &Settings::dotColorChanged, dotColor, &KColorButton::setColor);
   connect(settings, &Settings::dotColorChanged, this, &PreferencesDialog::resetPresetCombo);
   dotGrid->addWidget(new QLabel(tr("Dot Color"), this), 1, 0);
   dotGrid->addWidget(dotColor, 1, 1);
@@ -528,9 +530,10 @@ QGroupBox* PreferencesDialog::createBorderGroupBox(Settings* settings)
   borderGrid->addWidget(new QLabel(tr("Border Size"), this), 0, 0);
   borderGrid->addLayout(bordersizeHBox, 0, 1);
 
-  const auto borderColor = new ColorSelector(tr("Select Border Color"), settings->borderColor(), this);
-  connect(borderColor, &ColorSelector::colorChanged, settings, &Settings::setBorderColor);
-  connect(settings, &Settings::borderColorChanged, borderColor, &ColorSelector::setColor);
+  const auto borderColor = new KColorButton(settings->borderColor(), this);
+  borderColor->setAccessibleName(tr("Border Color"));
+  connect(borderColor, &KColorButton::changed, settings, &Settings::setBorderColor);
+  connect(settings, &Settings::borderColorChanged, borderColor, &KColorButton::setColor);
   connect(settings, &Settings::borderColorChanged, this, &PreferencesDialog::resetPresetCombo);
   borderGrid->addWidget(new QLabel(tr("Border Color"), this), 1, 0);
   borderGrid->addWidget(borderColor, 1, 1);

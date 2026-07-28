@@ -126,6 +126,7 @@ deps: _require-arch
         kdbusaddons
         kglobalaccel
         knotifications
+        kwidgetsaddons
         kwindowsystem
         kxmlgui
         layer-shell-qt

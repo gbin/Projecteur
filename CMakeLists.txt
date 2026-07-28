@@ -26,7 +26,7 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui LinguistTools Quick Widgets)
 find_package(KF6 6.7 REQUIRED COMPONENTS Config ConfigWidgets CoreAddons DBusAddons GlobalAccel Notifications
-                                        Package KirigamiPlatform WindowSystem XmlGui)
+                                        Package KirigamiPlatform WidgetsAddons WindowSystem XmlGui)
 find_package(Plasma 6.7 REQUIRED)
 find_package(LayerShellQt 6.7 REQUIRED)
 set(QT_PACKAGE_NAME Qt6)
@@ -38,7 +38,6 @@ qt6_add_resources(RESOURCES qml/qml.qrc resources.qrc)
 add_executable(projecteur
   src/main.cc                  src/enum-helper.h
   src/actiondelegate.cc        src/actiondelegate.h
-  src/colorselector.cc         src/colorselector.h
   src/device.cc                src/device.h
   src/device-command-helper.cc src/device-command-helper.h
   src/device-hidpp.cc          src/device-hidpp.h
@@ -88,7 +87,7 @@ target_include_directories(projecteur PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(projecteur
   PRIVATE Qt6::Core Qt6::DBus Qt6::Quick Qt6::Widgets
           KF6::ConfigCore KF6::ConfigGui KF6::ConfigWidgets KF6::CoreAddons KF6::DBusAddons
-          KF6::GlobalAccel KF6::Notifications KF6::WindowSystem KF6::XmlGui
+          KF6::GlobalAccel KF6::Notifications KF6::WidgetsAddons KF6::WindowSystem KF6::XmlGui
           LayerShellQt::Interface
 )
 
