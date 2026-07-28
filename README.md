@@ -70,7 +70,8 @@ So here it is: a Linux application for the Logitech Spotlight.
 
 * Configurable desktop spotlight
   * _shade color_, _opacity_, _cursor_, _border_, _center dot_ and different _shapes_
-  * Zoom (magnifier) functionality
+  * Live zoom through KWin and KPipeWire, so videos, animations, and other changing
+    desktop content continue updating inside the magnifier
 * Multiple screen support
 * Support of devices beyond the Logitech Spotlight (see [Device Support](#device-support))
 * Button mapping:
@@ -212,10 +213,11 @@ and Hold Move actions for the same button.
 
 * C++17 compiler
 * CMake 3.20 or later
-* Qt 6.11 with Core, DBus, Gui, Quick, and Widgets
+* Qt 6.11 with Core, DBus, Gui, Quick, WaylandClient, and Widgets
 * KDE Plasma 6.7 Wayland, including Libplasma, KConfig, KConfigWidgets, KCoreAddons,
   KDBusAddons, KGlobalAccel, KI18n, KNotifications, KWidgetsAddons, KWindowSystem,
   and KXmlGui
+* KPipeWire 6.7
 * LayerShellQt 6.7
 * Extra CMake Modules 6.7 or later
 
@@ -416,9 +418,10 @@ Wayland is the only supported windowing platform in this port. Do not force
 
 #### Wayland Zoom
 
-Zoom is implemented for KDE Plasma through KWin's private screencast protocol and
-KPipeWire. KWin omits Projecteur's own windows from the stream, preventing recursive
-overlay capture while allowing videos and other changing content to remain live.
+Zoom uses a low-latency live stream from KWin's private screencast protocol through
+KPipeWire instead of repeatedly capturing static screenshots. Videos, animations,
+and other changing desktop content therefore continue updating inside the magnifier.
+KWin omits Projecteur's own windows from the stream, preventing recursive overlay capture.
 `ScreenShot2` remains as a fallback when streaming is unavailable. The installed
 desktop entry declares both restricted interfaces; install Projecteur instead of
 running it from an arbitrary build path.
