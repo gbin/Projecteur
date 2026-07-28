@@ -1,6 +1,7 @@
 list(APPEND _PkgDeps_Projecteur_archlinux
   "qt6-base>=6.11"
   "qt6-declarative>=6.11"
+  "qt6-wayland>=6.11"
   "layer-shell-qt>=6.7"
   "kconfig>=6.7"
   "kconfigwidgets>=6.7"
@@ -8,6 +9,7 @@ list(APPEND _PkgDeps_Projecteur_archlinux
   "kdbusaddons>=6.7"
   "kglobalaccel>=6.7"
   "ki18n>=6.7"
+  "kpipewire>=6.7"
   "knotifications>=6.7"
   "kwidgetsaddons>=6.7"
   "kwindowsystem>=6.7"
