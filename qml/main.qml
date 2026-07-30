@@ -104,8 +104,8 @@ Window {
                 : Qt.rect(0, 0, desktopItem.width, desktopItem.height)
             smooth: true
             textureSize: Qt.size(
-                Math.max(1, Math.round(desktopItem.width)),
-                Math.max(1, Math.round(desktopItem.height)))
+                Math.max(1, Math.round(desktopItem.width * mainWindow.deviceScale)),
+                Math.max(1, Math.round(desktopItem.height * mainWindow.deviceScale)))
         }
 
         MultiEffect {
