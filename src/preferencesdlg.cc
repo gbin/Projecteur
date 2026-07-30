@@ -116,6 +116,7 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
   connect(settings, &Settings::borderOpacityChanged, this, modified);
   connect(settings, &Settings::zoomEnabledChanged, this, modified);
   connect(settings, &Settings::zoomFactorChanged, this, modified);
+  connect(settings, &Settings::zoomModeChanged, this, modified);
   connect(settings, &Settings::multiScreenOverlayEnabledChanged, this, modified);
   for (const auto& shape : Settings::spotShapes()) {
     if (auto* shapeSettings = settings->shapeSettings(shape.name())) {
@@ -577,6 +578,27 @@ QGroupBox* PreferencesDialog::createZoomGroupBox(Settings* settings)
   connect(settings, &Settings::zoomFactorChanged, this, &PreferencesDialog::resetPresetCombo);
   zoomGrid->addWidget(new QLabel(i18n("Zoom Level"), this), 0, 0);
   zoomGrid->addWidget(zoomLevelSb, 0, 1);
+
+  const auto zoomModeCombo = new QComboBox(this);
+  zoomModeCombo->addItem(i18n("Smooth (images)"), QStringLiteral("smooth"));
+  zoomModeCombo->addItem(i18n("Text and UI"), QStringLiteral("text"));
+  zoomModeCombo->addItem(i18n("Pixel-perfect"), QStringLiteral("pixel"));
+  zoomModeCombo->setCurrentIndex(zoomModeCombo->findData(settings->zoomMode()));
+  zoomModeCombo->setToolTip(
+    i18n("Choose edge reconstruction for text, smooth filtering for images, "
+         "or nearest-neighbor scaling for pixel inspection."));
+  connect(zoomModeCombo, &QComboBox::currentIndexChanged, settings,
+    [settings, zoomModeCombo](int index) {
+      settings->setZoomMode(zoomModeCombo->itemData(index).toString());
+    });
+  connect(settings, &Settings::zoomModeChanged, zoomModeCombo,
+    [zoomModeCombo](const QString& mode) {
+      const auto index = zoomModeCombo->findData(mode);
+      if (index >= 0) { zoomModeCombo->setCurrentIndex(index); }
+    });
+  connect(settings, &Settings::zoomModeChanged, this, &PreferencesDialog::resetPresetCombo);
+  zoomGrid->addWidget(new QLabel(i18n("Content Type"), this), 1, 0);
+  zoomGrid->addWidget(zoomModeCombo, 1, 1);
   zoomGrid->setColumnStretch(1, 1);
   return zoomGroup;
 }

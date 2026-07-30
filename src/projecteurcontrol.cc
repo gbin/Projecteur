@@ -137,6 +137,7 @@ ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Setting
   connect(m_settings, &Settings::borderOpacityChanged, this, settingsChanged);
   connect(m_settings, &Settings::zoomEnabledChanged, this, settingsChanged);
   connect(m_settings, &Settings::zoomFactorChanged, this, settingsChanged);
+  connect(m_settings, &Settings::zoomModeChanged, this, settingsChanged);
   connect(m_settings, &Settings::multiScreenOverlayEnabledChanged, this, settingsChanged);
 
   for (const auto& shape : Settings::spotShapes()) {

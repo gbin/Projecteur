@@ -35,6 +35,7 @@ makedepends=(
   'cmake>=3.20'
   'extra-cmake-modules>=6.7'
   'gettext'
+  'qt6-shadertools>=6.11'
 )
 source=(
   'projecteur-local.tar.gz'

@@ -41,6 +41,7 @@ namespace {
     constexpr char borderOpacity[] = "borderOpacity";
     constexpr char zoomEnabled[] = "enableZoom";
     constexpr char zoomFactor[] = "zoomFactor";
+    constexpr char zoomMode[] = "zoomMode";
     constexpr char multiScreenOverlay[] = "multiScreenOverlay";
     constexpr char presentationTimerEnabled[] = "presentationTimerEnabled";
     constexpr char presentationTimerDurationSeconds[] = "presentationTimerDurationSeconds";
@@ -67,6 +68,7 @@ namespace {
       constexpr double borderOpacity = 0.8;
       constexpr bool zoomEnabled = false;
       constexpr double zoomFactor = 2.0;
+      constexpr char zoomMode[] = "smooth";
       constexpr bool multiScreenOverlay = false;
       constexpr bool presentationTimerEnabled = false;
       constexpr int presentationTimerDurationSeconds = 15 * 60;
@@ -93,6 +95,13 @@ namespace {
   // -----------------------------------------------------------------------------------------------
   bool toBool(const QString& value) {
     return (value.toLower() == "true" || value.toLower() == "on" || value.toInt() > 0);
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  bool isZoomMode(const QString& mode) {
+    return mode == QStringLiteral("smooth")
+        || mode == QStringLiteral("text")
+        || mode == QStringLiteral("pixel");
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -347,6 +356,9 @@ void Settings::initializeStringProperties()
   map.emplace_back( "zoom.factor", StringProperty{ StringProperty::Double,
                     {::settings::ranges::zoomFactor.min, ::settings::ranges::zoomFactor.max},
                     [this](const QString& value){ setZoomFactor(value.toDouble()); } } );
+  map.emplace_back( "zoom.mode", StringProperty{ StringProperty::StringEnum,
+                    {QStringLiteral("smooth"), QStringLiteral("text"), QStringLiteral("pixel")},
+                    [this](const QString& value){ setZoomMode(value); } } );
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -402,6 +414,7 @@ Settings::SpotlightSettings Settings::spotlightSettings() const
     {::settings::borderOpacity, m_borderOpacity},
     {::settings::zoomEnabled, m_zoomEnabled},
     {::settings::zoomFactor, m_zoomFactor},
+    {::settings::zoomMode, m_zoomMode},
     {::settings::multiScreenOverlay, m_multiScreenOverlayEnabled},
   };
 
@@ -439,6 +452,7 @@ Settings::SpotlightSettings Settings::defaultSpotlightSettings()
     {::settings::borderOpacity, ::settings::defaultValue::borderOpacity},
     {::settings::zoomEnabled, ::settings::defaultValue::zoomEnabled},
     {::settings::zoomFactor, ::settings::defaultValue::zoomFactor},
+    {::settings::zoomMode, QString(::settings::defaultValue::zoomMode)},
     {::settings::multiScreenOverlay, ::settings::defaultValue::multiScreenOverlay},
   };
 
@@ -472,6 +486,7 @@ void Settings::setSpotlightSettings(const SpotlightSettings& values)
   setBorderOpacity(values.value(::settings::borderOpacity, m_borderOpacity).toDouble());
   setZoomEnabled(values.value(::settings::zoomEnabled, m_zoomEnabled).toBool());
   setZoomFactor(values.value(::settings::zoomFactor, m_zoomFactor).toDouble());
+  setZoomMode(values.value(::settings::zoomMode, m_zoomMode).toString());
   setMultiScreenOverlayEnabled(
     values.value(::settings::multiScreenOverlay, m_multiScreenOverlayEnabled).toBool());
 
@@ -515,6 +530,7 @@ void Settings::setDefaults()
   setBorderOpacity(settings::defaultValue::borderOpacity);
   setZoomEnabled(settings::defaultValue::zoomEnabled);
   setZoomFactor(settings::defaultValue::zoomFactor);
+  setZoomMode(settings::defaultValue::zoomMode);
   setMultiScreenOverlayEnabled(settings::defaultValue::multiScreenOverlay);
   shapeSettingsSetDefaults();
 }
@@ -683,6 +699,7 @@ void Settings::load(const QString& preset)
     setBorderOpacity(m_config->borderOpacity());
     setZoomEnabled(m_config->zoomEnabled());
     setZoomFactor(m_config->zoomFactor());
+    setZoomMode(m_config->zoomMode());
     setMultiScreenOverlayEnabled(m_config->multiScreenOverlay());
     shapeSettingsLoad();
     return;
@@ -706,6 +723,7 @@ void Settings::load(const QString& preset)
   setBorderOpacity(readValue(s+::settings::borderOpacity, settings::defaultValue::borderOpacity).toDouble());
   setZoomEnabled(readValue(s+::settings::zoomEnabled, settings::defaultValue::zoomEnabled).toBool());
   setZoomFactor(readValue(s+::settings::zoomFactor, settings::defaultValue::zoomFactor).toDouble());
+  setZoomMode(readValue(s+::settings::zoomMode, settings::defaultValue::zoomMode).toString());
   setMultiScreenOverlayEnabled(readValue(s+::settings::multiScreenOverlay, settings::defaultValue::multiScreenOverlay).toBool());
   shapeSettingsLoad(preset);
 }
@@ -732,6 +750,7 @@ void Settings::savePreset(const QString& preset)
   writeValue(section+::settings::borderOpacity, m_borderOpacity);
   writeValue(section+::settings::zoomEnabled, m_zoomEnabled);
   writeValue(section+::settings::zoomFactor, m_zoomFactor);
+  writeValue(section+::settings::zoomMode, m_zoomMode);
   writeValue(section+::settings::multiScreenOverlay, m_multiScreenOverlayEnabled);
   shapeSettingsSavePreset(preset);
 
@@ -998,6 +1017,19 @@ void Settings::setZoomFactor(double factor)
     qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "zoom.factor = " << m_zoomFactor;
     emit zoomFactorChanged(m_zoomFactor);
   }
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setZoomMode(const QString& mode)
+{
+  const auto normalizedMode = mode.trimmed().toLower();
+  if (!isZoomMode(normalizedMode) || normalizedMode == m_zoomMode) { return; }
+
+  m_zoomMode = normalizedMode;
+  m_config->setZoomMode(m_zoomMode);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "zoom.mode = " << m_zoomMode;
+  emit zoomModeChanged(m_zoomMode);
 }
 
 // -------------------------------------------------------------------------------------------------

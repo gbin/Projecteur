@@ -102,16 +102,27 @@ Window {
                     desktopItem.width,
                     desktopItem.height)
                 : Qt.rect(0, 0, desktopItem.width, desktopItem.height)
-            smooth: true
+            smooth: Settings.zoomMode !== "pixel"
             textureSize: Qt.size(
                 Math.max(1, Math.round(desktopItem.width * mainWindow.deviceScale)),
                 Math.max(1, Math.round(desktopItem.height * mainWindow.deviceScale)))
         }
 
+        ShaderEffect {
+            id: textZoom
+            anchors.fill: centerRect
+            visible: false
+            property variant source: desktopTexture
+            property size outputSize: Qt.size(
+                Math.max(1, Math.round(width * mainWindow.deviceScale)),
+                Math.max(1, Math.round(height * mainWindow.deviceScale)))
+            fragmentShader: "qrc:/shaders/textzoom.frag.qsb"
+        }
+
         MultiEffect {
             visible: Settings.zoomEnabled && mainWindow.spotOnCurrentWindow
             anchors.fill: centerRect
-            source: desktopTexture
+            source: Settings.zoomMode === "text" ? textZoom : desktopTexture
             maskEnabled: true
             maskSource: spotShapeLoader
             enabled: false

@@ -51,12 +51,9 @@ So here it is: a Linux application for the Logitech Spotlight.
     - [Pre-requisites](#pre-requisites)
       - [When building Projecteur yourself](#when-building-projecteur-yourself)
     - [Application Menu](#application-menu)
-    - [Command Line Interface](#command-line-interface)
-    - [Scriptability](#scriptability)
     - [Using Projecteur without a device](#using-projecteur-without-a-device)
     - [Device Support](#device-support)
       - [Compile Time](#compile-time)
-      - [Runtime](#runtime)
     - [Troubleshooting](#troubleshooting)
       - [Opaque Spotlight / No Transparency](#opaque-spotlight--no-transparency)
       - [Missing System Tray](#missing-system-tray)
@@ -95,6 +92,19 @@ The configurable overlay combines different spotlight shapes with shading, zoom,
 and an optional border. This example uses a circular zoom area with a green border.
 
 [<img src="doc/screenshot-spot.png" alt="Circular Projecteur spotlight demonstrating zoom, shade, and a green border" title="Configurable spotlight shape, zoom, shade, and border" width="900" />](./doc/screenshot-spot.png)
+
+#### Text-optimized zoom
+
+The **Text and UI** content mode applies bounded edge enhancement after smooth
+scaling, making documents, email, terminals, and application controls easier to
+read without the blockiness of nearest-neighbor enlargement.
+
+[<img src="doc/screenshot-text-zoom.png" alt="Projecteur magnifier using Text and UI mode on an email" title="Text and UI zoom mode" width="659" />](./doc/screenshot-text-zoom.png)
+
+Choose the content type independently from the zoom level in the Zoom preferences.
+The selected mode is also stored in spotlight presets.
+
+[<img src="doc/screenshot-zoom-modes.png" alt="Projecteur Zoom preferences showing Smooth, Text and UI, and Pixel-perfect content types" title="Selectable zoom content types" width="500" />](./doc/screenshot-zoom-modes.png)
 
 #### KDE-styled preferences
 
@@ -299,65 +309,11 @@ Presenter connection, battery, access-error, and presentation-timer notification
 are registered with Plasma and can be customized under System Settings →
 Notifications → Applications → Projecteur.
 
-### Command Line Interface
-
-Additional to the standard `--help` and `--version` options, there is an option to send
-commands to a running instance of _Projecteur_ and the ability to set properties.
-
-```txt
-Usage: projecteur [OPTION]...
-
-<Options>
-  -h, --help              Show command line usage.
-  --help-all              Show complete command line usage with all properties.
-  -v, --version           Print application version.
-  -f, --fullversion       Print extended version info.
-  --cfg FILE              Set custom config file.
-  -d, --device-scan       Print device-scan results.
-  --show-dialog           Show preferences dialog on start.
-  -m, --minimize-only     Only allow minimizing the preferences dialog.
-  -D DEVICE               Additional accepted device; DEVICE=vendorId:productId
-  -c COMMAND|PROPERTY     Send command/property to a running instance.
-
-<Commands>
-  spot=[on|off|toggle]     Turn spotlight on/off or toggle.
-  spot.size.adjust=[+|-]N  Increase or decrease spot size by N.
-  settings=[show|hide]     Show/hide preferences dialog.
-  preset=NAME              Set a preset.
-  quit                     Quit the running instance.
-```
-
-A complete list the properties that can be set via the command line, can be listed with the
-`--help-all` option or can also be found on the man pagers with newer versions of
-_Projecteur_ (`man projecteur`).
-
-### Scriptability
-
-_Projecteur_ allows you to set almost all aspects of the spotlight via the command line
-for a running instance.
-
-Example:
-
-```bash
-# Set showing the border to true
-projecteur -c border=true
-# Set the border color to red
-projecteur -c border.color=#ff0000
-# Send a vibrate command to the device with
-# intensity=128 and length=0 (length only applies to the original Logitech Spotlight)
-projecteur -c vibrate=128,0
-```
-
 Projecteur registers native KDE global actions for toggling the spotlight, showing
 preferences, controlling the presentation timer, and cycling presets. No key
 combinations are assigned by default. Configure them on the **Shortcuts** page in
 Projecteur Preferences or under Plasma System Settings → Keyboard → Shortcuts →
 Projecteur.
-
-The command line interface remains available for scripts and non-interactive use.
-
-A complete list the properties that can be set via the command line, can be
-listed with the `--help-all` command line option.
 
 ### Using Projecteur without a device
 
@@ -384,17 +340,6 @@ Additional devices can be added to `devices.conf`. At CMake configuration time,
 the project will be configured to support these devices and also create entries
 for them in the generated udev-rule file.
 
-#### Runtime
-
-_Projecteur_ will also accept devices as supported when added via the `-D`
-command line option.
-
-Example: `projecteur -D 04b3:310c`
-
-This will enable devices within _Projecteur_ and the application will try to
-connect to that device if it is detected. It is, however, up to the user to make
-sure the device is accessible (via udev rules).
-
 ### Troubleshooting
 
 #### Opaque Spotlight / No Transparency
@@ -404,12 +349,9 @@ The overlay requires the Plasma Wayland compositor. Verify that the session repo
 
 #### Missing System Tray
 
-If the Plasma system tray does not show the _Projecteur_ applet, commands can be sent
-to the application to bring up the preferences
-dialog, test the spotlight, quit the application or set spotlight properties.
-See [Command Line Interface](#command-line-interface). There is also a command
-line option (`-m`) to prevent the preferences dialog from hiding, allowing it
-only to minimize - behaving more like a regular application window.
+If the Plasma system tray does not show the _Projecteur_ applet, verify that
+Projecteur is running and that its applet is enabled in Plasma's system tray
+configuration.
 
 #### Wayland
 
@@ -426,14 +368,28 @@ KWin omits Projecteur's own windows from the stream, preventing recursive overla
 desktop entry declares both restricted interfaces; install Projecteur instead of
 running it from an arbitrary build path.
 
+The **Content Type** setting controls how the captured desktop pixels are enlarged:
+
+| Mode | Best for | Scaling behavior |
+| --- | --- | --- |
+| **Smooth (images)** | Photographs, video, gradients, and mixed content | Bilinear filtering produces continuous tones and the fewest scaling artifacts. This is the safe general-purpose mode. |
+| **Text and UI** | Documents, email, terminals, diagrams, and application controls | Starts with smooth scaling, then applies a contrast-adaptive edge enhancement in linear light. The result is clamped to neighboring colors to avoid halos and invented dark or bright pixels. |
+| **Pixel-perfect** | Inspecting source pixels, pixel art, and debugging | Nearest-neighbor scaling preserves exact captured pixel values. Text will usually look blocky, especially with fractional zoom factors. |
+
+Text and UI mode improves the captured raster; it cannot recover the original font
+outlines or rerender glyphs as vector text. Smooth remains preferable when the
+magnifier covers both text and photographic content.
+
+The setting is available in **Preferences → Spotlight → Zoom → Content Type** and is
+stored in spotlight presets.
+
 #### Device shows as not connected
 
 If the device shows as not connected, there are some things you can do:
 
-* Check for devices with _Projecteur_'s command line option `-d` or `--device-scan` option.
-  This will show you a list of all supported and detected devices and also if
-  they are readable/writable. If a detected device is not readable/writable, it is an indicator
-  that there is something wrong with the installed _udev_ rules.
+* Use Projecteur's device scan to list supported and detected devices and whether
+  they are readable and writable. A detected device without the required access
+  usually indicates a problem with the installed _udev_ rules.
 * Manually on the shell: Check if the device is detected by the Linux system: Run
   `cat /proc/bus/input/devices | grep -A 5 "Vendor=046d"` \
   This should show one or multiple spotlight devices (among other Logitech devices)

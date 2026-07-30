@@ -41,6 +41,7 @@ class Settings : public QObject
   Q_PROPERTY(double borderOpacity READ borderOpacity WRITE setBorderOpacity NOTIFY borderOpacityChanged)
   Q_PROPERTY(bool zoomEnabled READ zoomEnabled WRITE setZoomEnabled NOTIFY zoomEnabledChanged)
   Q_PROPERTY(double zoomFactor READ zoomFactor WRITE setZoomFactor NOTIFY zoomFactorChanged)
+  Q_PROPERTY(QString zoomMode READ zoomMode WRITE setZoomMode NOTIFY zoomModeChanged)
   Q_PROPERTY(bool multiScreenOverlayEnabled READ multiScreenOverlayEnabled
                   WRITE setMultiScreenOverlayEnabled NOTIFY multiScreenOverlayEnabledChanged)
 public:
@@ -85,6 +86,8 @@ public:
   void setZoomEnabled(bool enabled);
   double zoomFactor() const { return m_zoomFactor; }
   void setZoomFactor(double factor);
+  QString zoomMode() const { return m_zoomMode; }
+  void setZoomMode(const QString& mode);
   bool multiScreenOverlayEnabled() const { return m_multiScreenOverlayEnabled; }
   void setMultiScreenOverlayEnabled(bool enabled);
   bool overlayDisabled() const { return m_overlayDisabled; }
@@ -205,6 +208,7 @@ signals:
   void borderOpacityChanged(double opacity);
   void zoomEnabledChanged(bool enabled);
   void zoomFactorChanged(double zoomFactor);
+  void zoomModeChanged(const QString& mode);
   void multiScreenOverlayEnabledChanged(bool enabled);
   void overlayDisabledChanged(bool disabled);
 
@@ -231,6 +235,7 @@ private:
   double m_borderOpacity = 0.8;
   bool m_zoomEnabled = false;
   double m_zoomFactor = 2.0;
+  QString m_zoomMode = QStringLiteral("smooth");
   bool m_showSpotShade = true;
   bool m_showCenterDot = false;
   bool m_spotRotationAllowed = false;

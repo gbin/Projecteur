@@ -20,7 +20,7 @@ list(APPEND _PkgDeps_Projecteur_archlinux
 
 list(APPEND _PkgDepsMake_Projecteur_archlinux
   "fakeroot" "awk" "cmake>=3.20" "extra-cmake-modules>=6.7" "gettext" "make" "lsb-release"
-  "tar" "pkg-config"
+  "tar" "pkg-config" "qt6-shadertools>=6.11"
 )
 
 list(APPEND PkgDependencies_MAP_Projecteur

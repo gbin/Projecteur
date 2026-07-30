@@ -137,6 +137,7 @@ deps: _require-arch
         pacman-contrib
         qt6-base
         qt6-declarative
+        qt6-shadertools
     )
 
     mapfile -t missing < <(pacman -T "${dependencies[@]}" || true)

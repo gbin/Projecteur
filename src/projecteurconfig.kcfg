@@ -72,6 +72,9 @@
       <min>1.5</min>
       <max>20.0</max>
     </entry>
+    <entry name="ZoomMode" key="zoomMode" type="String">
+      <default>smooth</default>
+    </entry>
     <entry name="MultiScreenOverlay" key="multiScreenOverlay" type="Bool">
       <default>false</default>
     </entry>

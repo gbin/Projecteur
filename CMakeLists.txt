@@ -26,7 +26,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui Quick WaylandClient Widgets)
+find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui Quick ShaderTools WaylandClient Widgets)
 find_package(KF6 6.7 REQUIRED COMPONENTS Config ConfigWidgets CoreAddons DBusAddons GlobalAccel I18n
                                         Notifications Package KirigamiPlatform WidgetsAddons WindowSystem XmlGui)
 find_package(KPipeWire 6.7 REQUIRED)
@@ -63,6 +63,12 @@ add_executable(projecteur
   src/spotshapes.cc            src/spotshapes.h
   src/virtualdevice.cc         src/virtualdevice.h
   ${RESOURCES})
+
+qt6_add_shaders(projecteur projecteur_shaders
+  PREFIX "/shaders"
+  BASE "${CMAKE_CURRENT_SOURCE_DIR}/qml/shaders"
+  FILES qml/shaders/textzoom.frag
+)
 
 ecm_add_qtwayland_client_protocol(projecteur
   PROTOCOL "${CMAKE_CURRENT_SOURCE_DIR}/protocols/zkde-screencast-unstable-v1.xml"
@@ -209,6 +215,7 @@ ki18n_install(po)
 add_custom_target(non-sources SOURCES README.md LICENSE.md doc/CHANGELOG.md devices.conf
                                       src/extra-devices.cc.in src/projecteurconfig.kcfg
                                       src/org.projecteur.Projecteur.xml
+                                      qml/shaders/textzoom.frag
                                       55-projecteur.rules.in projecteur.notifyrc
                                       cmake/templates/projecteur.desktop.in)
 
