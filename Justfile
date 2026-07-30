@@ -127,6 +127,7 @@ deps: _require-arch
         kdbusaddons
         kglobalaccel
         ki18n
+        kpipewire
         knotifications
         kwidgetsaddons
         kwindowsystem
@@ -138,6 +139,7 @@ deps: _require-arch
         qt6-base
         qt6-declarative
         qt6-shadertools
+        qt6-wayland
     )
 
     mapfile -t missing < <(pacman -T "${dependencies[@]}" || true)

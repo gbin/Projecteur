@@ -1,411 +1,167 @@
 # Projecteur
 
-[![Build Status][gh-badge]][gh-link]
+**A virtual laser pointer and live magnifier built for KDE Plasma presentations.**
 
-Qt 6 / KDE Plasma Wayland application for the Logitech Spotlight device and
-similar presenters.
+[![Build status](https://github.com/gbin/Projecteur-kde/actions/workflows/ci-build.yml/badge.svg?branch=develop)](https://github.com/gbin/Projecteur-kde/actions/workflows/ci-build.yml?query=branch%3Adevelop)
+![KDE Plasma 6.7+](https://img.shields.io/badge/KDE_Plasma-6.7%2B-1d99f3?logo=kde&logoColor=white)
+![Wayland only](https://img.shields.io/badge/display-Wayland_only-5c6bc0)
+[![MIT license](https://img.shields.io/badge/license-MIT-2ea44f)](./LICENSE.md)
 
-## About This Fork
+Projecteur turns a Logitech Spotlight—or another supported presenter—into an
+on-screen spotlight your audience can see in the room, in a screen share, and in
+the recording. Point, magnify, change slides, run a timer, and keep everything
+close at hand in Plasma.
 
-This repository is a fork of [jahnf/Projecteur](https://github.com/jahnf/Projecteur)
-focused on supporting modern KDE Plasma on Wayland. It targets KDE Plasma 6.7
-with Qt 6.11 and LayerShellQt 6.7. Wayland is the only supported windowing
-platform; Qt 5 and X11 are outside the scope of this fork.
+[<img src="doc/screenshot-spot.png" alt="Projecteur highlighting and magnifying part of a presentation slide" width="900">](./doc/screenshot-spot.png)
 
-In addition to the hardware supported by the upstream project, this fork adds
-support for the **Logitech Spotlight 2** through its Logi Bolt USB-C receiver
-(`046d:c548`) and over Bluetooth (`046d:b506`).
+> [!NOTE]
+> This KDE/Wayland edition requires **KDE Plasma 6.7 or newer**, **Qt 6.11 or
+> newer**, and a **Wayland session**. Qt 5 and X11 are not supported.
 
-This is an independent, unofficial fork. Please report problems specific to
-this version in the [fork's issue tracker](https://github.com/gbin/Projecteur-kde/issues).
-Only report a problem upstream when it also reproduces in the original project.
+## Why Projecteur?
 
-[gh-badge]: https://github.com/gbin/Projecteur-kde/actions/workflows/ci-build.yml/badge.svg?branch=develop
-[gh-link]: https://github.com/gbin/Projecteur-kde/actions/workflows/ci-build.yml?query=branch%3Adevelop
+- **Visible everywhere.** Unlike a physical laser, the spotlight appears in
+  projectors, screen shares, and recordings.
+- **Live magnification.** KWin and KPipeWire keep video, animation, and changing
+  content moving inside the zoom area.
+- **Made for Plasma.** Native system tray controls, global shortcuts,
+  notifications, and multi-screen support feel at home on KDE.
+- **Designed for presenting.** Save spotlight presets, remap presenter buttons,
+  control volume or scrolling, and use haptic timer alerts on compatible devices.
+- **Useful without hardware.** Trigger the spotlight from a global shortcut for
+  online demos and video calls.
 
-## Motivation
+## See it in action
 
-I saw the Logitech Spotlight device in action at a conference and liked it immediately.
-Unfortunately as in a lot of cases, software is only provided for Windows and Mac.
-The device itself works just fine on Linux, but the cool spotlight feature is
-only available using additional software.
+### Magnify the content, not the pixels
 
-So here it is: a Linux application for the Logitech Spotlight.
+Choose smooth scaling for images, edge-enhanced **Text and UI** mode for
+documents and application demos, or pixel-perfect scaling for source pixels.
+The zoom mode is saved with each spotlight preset.
 
-## Table of Contents
+[<img src="doc/screenshot-text-zoom.png" alt="Projecteur magnifying text and interface content with a sharp green-bordered spotlight" width="620">](./doc/screenshot-text-zoom.png)
 
-- [Projecteur](#projecteur)
-  - [About This Fork](#about-this-fork)
-  - [Motivation](#motivation)
-  - [Table of Contents](#table-of-contents)
-  - [Features](#features)
-    - [Screenshots](#screenshots)
-  - [Supported Environments](#supported-environments)
-  - [How it works](#how-it-works)
-    - [Button mapping](#button-mapping)
-      - [Hold Button Mapping for Logitech Spotlight](#hold-button-mapping-for-logitech-spotlight)
-  - [Building](#building)
-    - [Requirements](#requirements)
-    - [Build Example](#build-example)
-  - [Installation/Running](#installationrunning)
-    - [Pre-requisites](#pre-requisites)
-      - [When building Projecteur yourself](#when-building-projecteur-yourself)
-    - [Application Menu](#application-menu)
-    - [Using Projecteur without a device](#using-projecteur-without-a-device)
-    - [Device Support](#device-support)
-      - [Compile Time](#compile-time)
-    - [Troubleshooting](#troubleshooting)
-      - [Opaque Spotlight / No Transparency](#opaque-spotlight--no-transparency)
-      - [Missing System Tray](#missing-system-tray)
-      - [Wayland](#wayland)
-      - [Wayland Zoom](#wayland-zoom)
-      - [Device shows as not connected](#device-shows-as-not-connected)
-  - [Changelog](#changelog)
-  - [License](#license)
+### Stay in control from the Plasma panel
 
-## Features
+See connected presenters, test the spotlight, switch presets, start a
+presentation timer, and open preferences without breaking your flow.
 
-* Configurable desktop spotlight
-  * _shade color_, _opacity_, _cursor_, _border_, _center dot_ and different _shapes_
-  * Live zoom through KWin and KPipeWire, so videos, animations, and other changing
-    desktop content continue updating inside the magnifier
-* Multiple screen support
-* Support of devices beyond the Logitech Spotlight (see [Device Support](#device-support))
-* Button mapping:
-  * Map any button on the device to (almost) any keyboard combination.
-  * Switch between (cycle through) custom spotlight presets.
-  * Audio Volume / Horizontal and Vertical Scrolling (Logitech Spotlight).
-* Vibration support for compatible presenters, including the Logitech Spotlight
-  and Spotlight 2; the presentation timer triggers haptic feedback on completion
-* Native KDE Plasma system tray applet with presenter status, first-class
-  presentation timer settings, a live remaining-minutes badge, and quick controls
-* Native KDE Plasma notifications for presenter status, battery level, access
-  errors, and presentation timers
-* Native KDE global shortcuts, configurable in Projecteur or Plasma System Settings
-* Usable without a presenter device (e.g. for online presentations)
+[<img src="doc/screenshot-traymenu.png" alt="Projecteur Plasma applet showing a connected Logitech Spotlight 2 and quick controls" width="480">](./doc/screenshot-traymenu.png)
 
-### Screenshots
+### Make the spotlight yours
 
-#### Spotlight overlay
+Tune the shape, shade, zoom, cursor, border, multi-screen behavior, and presets
+with native KDE controls.
 
-The configurable overlay combines different spotlight shapes with shading, zoom,
-and an optional border. This example uses a circular zoom area with a green border.
+[<img src="doc/screenshot-settings.png" alt="Projecteur preferences with spotlight shape, shade, zoom, cursor, border, and preset controls" width="620">](./doc/screenshot-settings.png)
 
-[<img src="doc/screenshot-spot.png" alt="Circular Projecteur spotlight demonstrating zoom, shade, and a green border" title="Configurable spotlight shape, zoom, shade, and border" width="900" />](./doc/screenshot-spot.png)
+## Install
 
-#### Text-optimized zoom
+Projecteur-kde is under active development and currently distributed from
+source. The install step is important: KWin grants zoom access using Projecteur's
+installed desktop metadata, and the presenter needs the installed udev rules.
 
-The **Text and UI** content mode applies bounded edge enhancement after smooth
-scaling, making documents, email, terminals, and application controls easier to
-read without the blockiness of nearest-neighbor enlargement.
+### Arch Linux and Arch-based distributions
 
-[<img src="doc/screenshot-text-zoom.png" alt="Projecteur magnifier using Text and UI mode on an email" title="Text and UI zoom mode" width="659" />](./doc/screenshot-text-zoom.png)
-
-Choose the content type independently from the zoom level in the Zoom preferences.
-The selected mode is also stored in spotlight presets.
-
-[<img src="doc/screenshot-zoom-modes.png" alt="Projecteur Zoom preferences showing Smooth, Text and UI, and Pixel-perfect content types" title="Selectable zoom content types" width="500" />](./doc/screenshot-zoom-modes.png)
-
-#### KDE-styled preferences
-
-Projecteur uses native KDE controls for configuring the spotlight shape, shade,
-zoom, cursor, border, multi-screen behavior, and presets.
-
-[<img src="doc/screenshot-settings.png" alt="KDE-styled Projecteur preferences" title="KDE-styled Projecteur preferences" width="600" />](./doc/screenshot-settings.png)
-
-#### Plasma global shortcuts
-
-Projecteur's actions integrate with Plasma's global shortcut settings, where
-shortcuts can be assigned for the spotlight, preferences, presentation timer,
-and spotlight presets.
-
-[<img src="doc/screenshot-global-shortcuts.png" alt="Projecteur actions in Plasma's global shortcut settings" title="Projecteur global shortcuts in KDE Plasma" width="1000" />](./doc/screenshot-global-shortcuts.png)
-
-#### Plasma system tray applet
-
-The native Plasma applet shows connected presenters and provides quick access to
-the spotlight, presets, timer, test action, and preferences.
-
-[<img src="doc/screenshot-traymenu.png" alt="Projecteur Plasma applet with a connected Logitech Spotlight 2 and quick controls" title="Projecteur Plasma system tray applet" width="500" />](./doc/screenshot-traymenu.png)
-
-The panel icon also provides connected-presenter status at a glance.
-
-[<img src="doc/screenshot-plasma-applet.png" alt="Projecteur system tray applet showing one connected presenter in KDE Plasma" title="Connected presenter status in the Plasma panel" width="268" />](./doc/screenshot-plasma-applet.png)
-
-#### KDE Plasma notifications
-
-Presenter connections, battery status, device-access errors, and timer completion
-use KDE Plasma's native notification system.
-
-[<img src="doc/screenshot-notification.png" alt="Projecteur presenter connected notification in KDE Plasma" title="Native Projecteur notification in KDE Plasma" width="420" />](./doc/screenshot-notification.png)
-
-#### Presentation timer
-
-The presentation timer is a first-class applet setting. It can start immediately
-or on the next presenter button press.
-
-[<img src="doc/screenshot-applet-presentation-timer.png" alt="First-class presentation timer settings in the Projecteur Plasma applet" title="Presentation timer in the Projecteur Plasma applet" width="900" />](./doc/screenshot-applet-presentation-timer.png)
-
-While the timer runs, the panel icon displays the remaining minutes and its
-tooltip shows the precise countdown. When time expires, compatible presenters
-such as the Logitech Spotlight 2 provide configurable haptic feedback.
-
-[<img src="doc/screenshot-applet-timer-countdown.png" alt="Projecteur panel icon with a highlighted five-minute badge and tooltip showing 04:27 remaining" title="Live presentation timer countdown on the Projecteur panel icon" width="375" />](./doc/screenshot-applet-timer-countdown.png)
-
-## Supported Environments
-
-This port targets KDE Plasma 6.7 on Wayland with Qt 6.11. X11 and Qt 5 are not
-supported. The spotlight overlay and device features are Wayland-native; zoom uses
-KWin's restricted screencast protocol and KPipeWire.
-
-If you build the application yourself, install both the generated desktop entry and
-udev rules (see [pre-requisites](#pre-requisites)).
-
-## How it works
-
-With a connection via the USB Dongle Receiver or via Bluetooth, the Logitech Spotlight
-device will be detected by Linux as a HID device with mouse and keyboard events.
-As mouse events, the device sends relative cursor movements and left button presses.
-Acting as a keyboard, the device basically just sends left and right arrow key press
-events when forward or back is pressed on the device.
-
-The mouse move events of the device are what we are mainly interested in. Since the device is
-already detected as a mouse input device and able to move the cursor, we simply detect
-if the Spotlight device is sending mouse move events. If it is sending mouse events,
-we will 'turn on' the desktop spot (virtual laser).
-
-For more details: Have a look at the source code ;)
-
-### Button mapping
-
-Button mapping works by **grabbing** all device events of connected
-devices and forwarding them to a virtual _'uinput'_ device if not configured
-differently by the button mapping configuration. If a mapped configuration for
-a button exists, _Projecteur_ will inject the mapped action instead.
-(You can still disable device grabbing with the `--disable-uinput` command
-line option - button mapping will be disabled then.)
-
-Input events from the presenter device can be mapped to different actions.
-The _Key Sequence_ action is particularly powerful as it can emit any user-defined
-keystroke. These keystrokes can invoke shortcut in presentation software
-(or any other software) being used. Similarly, the _Cycle Preset_ action can be
-used for cycling different spotlight presets. However, it should be noted that
-presets are ordered alphabetically on program start. To retain a certain
-order of your presets, you can prepend the preset name with a number.
-
-#### Hold Button Mapping for Logitech Spotlight
-
-Logitech Spotlight can send Hold event for Next and Back buttons as HID++
-messages. Using this device feature, this program provides three different
-usage of the Next or Hold button.
-
-1. Button Tap
-2. Long-Press Event
-3. Button Hold and Move Event
-
-On the Input Mapper tab (Devices tab in Preferences dialog box), the first two
-button usages (_i.e._ tap and long-press) can be mapped directly by tapping or
-long pressing the relevant button. For mapping the third button usage (_i.e._
-Hold Move Event), please ensure that the device is active by pressing any button,
-and then right click in first column (Input Sequence) for any entry and select
-the relevant option. Additional mapped actions (e.g. _Vertical Scrolling_,
-_Horizontal Scrolling_, or _Volume control_) can be selected for these hold
-move events.
-
-Please note that in case when both Long-Press event and Hold Move events are
-mapped for a particular button, both actions will executed if user hold the
-button and move device. To avoid this situation, do not set both Long-Press
-and Hold Move actions for the same button.
-
-## Building
-
-### Requirements
-
-* C++17 compiler
-* CMake 3.20 or later
-* Qt 6.11 with Core, DBus, Gui, Quick, WaylandClient, and Widgets
-* KDE Plasma 6.7 Wayland, including Libplasma, KConfig, KConfigWidgets, KCoreAddons,
-  KDBusAddons, KGlobalAccel, KI18n, KNotifications, KWidgetsAddons, KWindowSystem,
-  and KXmlGui
-* KPipeWire 6.7
-* LayerShellQt 6.7
-* Extra CMake Modules 6.7 or later
-
-### Build Example
+Install [`just`](https://github.com/casey/just), then use the included packaging
+workflow. It installs missing build dependencies, creates a native package, and
+installs it with `pacman`.
 
 ```sh
-git clone https://github.com/gbin/Projecteur-kde
+sudo pacman -S --needed just
+git clone https://github.com/gbin/Projecteur-kde.git
 cd Projecteur-kde
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
-cmake --build build
-sudo cmake --install build
+just install
 ```
 
-### Translations
+### Other distributions
 
-Projecteur uses KDE's KI18n/gettext translation system. Run `Messages.sh` through the standard
-KDE translation tooling to extract `projecteur.pot`; translated catalogs placed under
-`po/<locale>/projecteur.po` are compiled and installed automatically.
-
-### Arch Linux
-
-On Arch Linux and Arch-based distributions, the `Justfile` can install missing
-build dependencies and run the complete local packaging workflow:
+Install the [build dependencies](./CONTRIBUTING.md#requirements), then:
 
 ```sh
-just build    # Compile build/projecteur
-just package  # Create build/packages/projecteur-*.pkg.tar.zst
-just install  # Build, package, and install the package with pacman
+git clone https://github.com/gbin/Projecteur-kde.git
+cd Projecteur-kde
+cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/usr \
+  -DPACKAGE_TARGETS=OFF
+cmake --build build --parallel
+sudo cmake --install build
+sudo udevadm control --reload-rules
+sudo udevadm trigger
 ```
 
-`just package` packages the current working tree, including uncommitted files,
-through the checked-in `packaging/arch/PKGBUILD`. `just install` uses `sudo`
-only for dependency installation and the final `pacman -U`. It stops a running
-Projecteur instance, compiles, packages and installs the current tree, then
-restarts `plasma-plasmashell.service` and Projecteur.
+Reconnect the presenter after installing, then launch **Projecteur** from the
+application menu.
 
-Installing is required for zoom: KWin authorizes the screencast and screenshot
-interfaces by matching the running executable with the installed
-`org.projecteur.Projecteur.desktop` metadata. A binary run directly from the build
-directory can use the normal spotlight, but KWin will reject its zoom capture request.
+## Your first minute
 
-## Installation/Running
+1. Open the Projecteur applet in the Plasma system tray.
+2. Confirm that your presenter appears under **Connected presenters**.
+3. Select **Test Spotlight** to try the current look.
+4. Open **Preferences** to adjust the spotlight or map presenter buttons.
+5. Optionally assign **Toggle Spotlight** under **Preferences → Shortcuts** for
+   keyboard-only use.
 
-Projecteur stores its KDE configuration in `~/.config/projecteurrc`.
+The applet can also start a presentation timer immediately or on the next button
+press. While it runs, the panel badge shows the remaining minutes; compatible
+presenters vibrate when time expires.
 
-### Pre-requisites
+## Supported presenters
 
-#### When building Projecteur yourself
-
-The input devices detected from the Spotlight device must be readable to the
-user running the application. To make this easier there is a udev rule template
-file in this repository: `55-projecteur.rules.in`
-
-* During the CMake run, the file `55-projecteur.rules` will be created from this template
-  in your **build directory**. Copy that generated file to `/lib/udev/rules.d/55-projecteur.rules`
-* Most recent systems (using systemd) will automatically pick up the rule.
-  If not, run `sudo udevadm control --reload-rules` and `sudo udevadm trigger`
-  to load the rules without a reboot.
-* After that, the input devices from the Logitech USB Receiver (but also the Bluetooth device)
-  in /dev/input should be readable/writable by you.
-  (See also about [device detection](#device-shows-as-not-connected))
-
-### System Tray
-
-Projecteur provides a native Plasma system tray popup while the application is
-running. It shows connected presenters and offers quick access to the overlay,
-presets, spotlight test, and first-class presentation timer controls, as well as
-the preferences, about, and quit actions. Plasma owns the popup placement and
-closes it when the icon is clicked again or focus moves elsewhere.
-
-While the presentation timer is running, the panel icon shows how many minutes
-remain. When the timer finishes, Projecteur triggers configurable haptic feedback
-on compatible presenter devices such as the Logitech Spotlight 2.
-
-If the system tray icon is missing, see the
-[Troubleshooting](#missing-system-tray) section.
-
-Presenter connection, battery, access-error, and presentation-timer notifications
-are registered with Plasma and can be customized under System Settings →
-Notifications → Applications → Projecteur.
-
-Projecteur registers native KDE global actions for toggling the spotlight, showing
-preferences, controlling the presentation timer, and cycling presets. No key
-combinations are assigned by default. Configure them on the **Shortcuts** page in
-Projecteur Preferences or under Plasma System Settings → Keyboard → Shortcuts →
-Projecteur.
-
-### Using Projecteur without a device
-
-You can use _Projecteur_ for online presentations and video conferences without a
-presenter device. Assign a key combination to **Toggle Spotlight** on the Shortcuts
-page in Projecteur Preferences, then use it while sharing your screen.
-
-### Device Support
-
-Besides the _Logitech Spotlight_, the following devices are currently supported out of the box:
-
-* Logitech Spotlight 2 via Logi Bolt USB-C receiver _(046d:c548)_ or Bluetooth _(046d:b506)_
-* AVATTO H100 / August WP200 _(0c45:8101)_
-* August LP315 _(2312:863d)_
-* AVATTO i10 Pro _(2571:4109)_
-* August LP310 _(69a7:9803)_
-* Norwii Wireless Presenter _(3243:0122)_
-* Kensington PowerPointer _(1ea7:0002)_
-
-#### Compile Time
-
-Besides the Logitech Spotlight, similar devices can be used and are supported.
-Additional devices can be added to `devices.conf`. At CMake configuration time,
-the project will be configured to support these devices and also create entries
-for them in the generated udev-rule file.
-
-### Troubleshooting
-
-#### Opaque Spotlight / No Transparency
-
-The overlay requires the Plasma Wayland compositor. Verify that the session reports
-`XDG_SESSION_TYPE=wayland` and that Projecteur logs `Qt platform plugin: wayland`.
-
-#### Missing System Tray
-
-If the Plasma system tray does not show the _Projecteur_ applet, verify that
-Projecteur is running and that its applet is enabled in Plasma's system tray
-configuration.
-
-#### Wayland
-
-Wayland is the only supported windowing platform in this port. Do not force
-`QT_QPA_PLATFORM=xcb`.
-
-#### Wayland Zoom
-
-Zoom uses a low-latency live stream from KWin's private screencast protocol through
-KPipeWire instead of repeatedly capturing static screenshots. Videos, animations,
-and other changing desktop content therefore continue updating inside the magnifier.
-KWin omits Projecteur's own windows from the stream, preventing recursive overlay capture.
-`ScreenShot2` remains as a fallback when streaming is unavailable. The installed
-desktop entry declares both restricted interfaces; install Projecteur instead of
-running it from an arbitrary build path.
-
-The **Content Type** setting controls how the captured desktop pixels are enlarged:
-
-| Mode | Best for | Scaling behavior |
+| Presenter | Connection | Device ID |
 | --- | --- | --- |
-| **Smooth (images)** | Photographs, video, gradients, and mixed content | Bilinear filtering produces continuous tones and the fewest scaling artifacts. This is the safe general-purpose mode. |
-| **Text and UI** | Documents, email, terminals, diagrams, and application controls | Starts with smooth scaling, then applies a contrast-adaptive edge enhancement in linear light. The result is clamped to neighboring colors to avoid halos and invented dark or bright pixels. |
-| **Pixel-perfect** | Inspecting source pixels, pixel art, and debugging | Nearest-neighbor scaling preserves exact captured pixel values. Text will usually look blocky, especially with fractional zoom factors. |
+| Logitech Spotlight | USB receiver / Bluetooth | `046d:c53e` / `046d:b503` |
+| Logitech Spotlight 2 | Logi Bolt USB-C receiver / Bluetooth | `046d:c548` / `046d:b506` |
+| Lenovo ThinkPad X1 Presenter Mouse | USB / Bluetooth | `17ef:60d9` / `17ef:60db` |
+| AVATTO H100 / August WP200 | USB | `0c45:8101` |
+| August LP315 | USB | `2312:863d` |
+| AVATTO i10 Pro | USB | `2571:4109` |
+| August LP310 | USB | `69a7:9803` |
+| Norwii Wireless Presenter | USB | `3243:0122` |
+| Kensington PowerPointer | USB | `1ea7:0002` |
 
-Text and UI mode improves the captured raster; it cannot recover the original font
-outlines or rerender glyphs as vector text. Smooth remains preferable when the
-magnifier covers both text and photographic content.
+Projecteur can also accept an additional device at runtime with
+`--additional-device VENDOR:PRODUCT`. See `projecteur --help` for details.
 
-The setting is available in **Preferences → Spotlight → Zoom → Content Type** and is
-stored in spotlight presets.
+## Need help?
 
-#### Device shows as not connected
+- **Presenter not detected?** Run `projecteur --device-scan`. A detected device
+  that is not readable or writable usually means the udev rules are missing or
+  stale.
+- **Zoom not working?** Confirm that Projecteur is installed—not run only from
+  the build directory—and that the session is KDE Plasma on Wayland.
+- **Applet missing?** Check that Projecteur is running and enabled in the Plasma
+  system tray configuration.
 
-If the device shows as not connected, there are some things you can do:
+The [troubleshooting guide](./doc/TROUBLESHOOTING.md) has detailed checks. If the
+problem remains, [open an issue](https://github.com/gbin/Projecteur-kde/issues)
+with the output of `projecteur --fullversion` and `projecteur --device-scan`.
 
-* Use Projecteur's device scan to list supported and detected devices and whether
-  they are readable and writable. A detected device without the required access
-  usually indicates a problem with the installed _udev_ rules.
-* Manually on the shell: Check if the device is detected by the Linux system: Run
-  `cat /proc/bus/input/devices | grep -A 5 "Vendor=046d"` \
-  This should show one or multiple spotlight devices (among other Logitech devices)
-  * Check that the corresponding `/dev/input/event??` device file is readable by you. \
-    Example: `test -r /dev/input/event19 && echo "SUCCESS" || echo "NOT readable"`
-* Make sure you don't have conflicting udev rules installed, e.g. first you installed
-  the udev rule yourself and later you used the automatically built Linux packages to
-  install _Projecteur_.
+## Documentation
 
-## Changelog
+- [User guide](./doc/USER-GUIDE.md) — presets, zoom modes, button mapping,
+  shortcuts, timers, and device-free use
+- [Troubleshooting](./doc/TROUBLESHOOTING.md) — display, zoom, device access, and
+  system tray diagnostics
+- [Changelog](./doc/CHANGELOG.md)
+- [Contributing and development setup](./CONTRIBUTING.md)
+- Command-line reference: `man projecteur`
 
-See [CHANGELOG.md](./doc/CHANGELOG.md) for a detailed changelog.
+## About this edition
+
+This is an independent, unofficial KDE Plasma/Wayland fork of
+[Jahn Fuchs' Projecteur](https://github.com/jahnf/Projecteur). It adds a native
+Plasma 6 experience, a Wayland-native overlay and live zoom pipeline, and
+Logitech Spotlight 2 support.
+
+Please report issues that affect this edition in
+[this repository](https://github.com/gbin/Projecteur-kde/issues). Report upstream
+only when the same problem also occurs in the original project.
 
 ## License
 
-Copyright 2018-2021 Jahn Fuchs
+Projecteur is available under the [MIT License](./LICENSE.md).
 
-This project is distributed under the [MIT License](https://opensource.org/licenses/MIT),
-see [LICENSE.md](./LICENSE.md) for more information.
+Copyright © 2018–2021 Jahn Fuchs. Fork modifications copyright © 2026 Guillaume
+Binet and Projecteur contributors.

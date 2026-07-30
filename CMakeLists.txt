@@ -212,7 +212,9 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version-string.archlinux" "${PROJECTEUR_
 ki18n_install(po)
 
 # Add target with non-source files for convenience when using IDEs like QtCreator and others
-add_custom_target(non-sources SOURCES README.md LICENSE.md doc/CHANGELOG.md devices.conf
+add_custom_target(non-sources SOURCES README.md CONTRIBUTING.md LICENSE.md
+                                      doc/CHANGELOG.md doc/USER-GUIDE.md
+                                      doc/TROUBLESHOOTING.md devices.conf
                                       src/extra-devices.cc.in src/projecteurconfig.kcfg
                                       src/org.projecteur.Projecteur.xml
                                       qml/shaders/textzoom.frag
