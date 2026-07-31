@@ -86,6 +86,7 @@ namespace SpecialKeys
   enum class Key : uint16_t {
     NextHold = 0x0e10,
     BackHold = 0x0e11,
+    ActionButton = 0x0e12,
     NextHoldMove = 0x0ff0,
     BackHoldMove = 0x0ff1,
   };

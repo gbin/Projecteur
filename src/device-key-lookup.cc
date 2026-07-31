@@ -45,6 +45,8 @@ const QString& lookup(const DeviceId& dId, const DeviceInputEvent& die)
        SpecialKeys::eventSequenceInfo(SpecialKeys::Key::NextHold).name },
     { eHash(EV_KEY, to_integral(SpecialKeys::Key::BackHold)),
        SpecialKeys::eventSequenceInfo(SpecialKeys::Key::BackHold).name },
+    { eHash(EV_KEY, to_integral(SpecialKeys::Key::ActionButton)),
+       SpecialKeys::eventSequenceInfo(SpecialKeys::Key::ActionButton).name },
   };
 
   static const KeyNameMap avattoH100Mapping = {
@@ -57,6 +59,8 @@ const QString& lookup(const DeviceId& dId, const DeviceInputEvent& die)
   {
     {dHash({0x046d, 0xc53e}), logitechSpotlightMapping}, // Spotlight USB
     {dHash({0x046d, 0xb503}), logitechSpotlightMapping}, // Spotlight Bluetooth
+    {dHash({0x046d, 0xc548}), logitechSpotlightMapping}, // Spotlight 2 (Logi Bolt Receiver)
+    {dHash({0x046d, 0xb506}), logitechSpotlightMapping}, // Spotlight 2 (Bluetooth)
     {dHash({0x0c45, 0x8101}), avattoH100Mapping},        // Avatto H100, August WP200
   };
 

@@ -76,6 +76,7 @@ enum class DeviceFlag : uint32_t {
   NextHold       = 1 << 18, ///< Device can be configured to send 'Next Hold' event.
   BackHold       = 1 << 19, ///< Device can be configured to send 'Back Hold' event.
   PointerSpeed   = 1 << 20, ///< Device allows changing pointer speed.
+  ActionButton   = 1 << 21, ///< Device can be configured to send 'Action Button' event.
 };
 ENUM(DeviceFlag, DeviceFlags)
 

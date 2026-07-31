@@ -465,6 +465,7 @@ const char* toString(DeviceFlag f, bool withClass)
     ENUM_CASE_STRINGIFY3(DeviceFlag, NextHold, withClass);
     ENUM_CASE_STRINGIFY3(DeviceFlag, BackHold, withClass);
     ENUM_CASE_STRINGIFY3(DeviceFlag, PointerSpeed, withClass);
+    ENUM_CASE_STRINGIFY3(DeviceFlag, ActionButton, withClass);
   }
   return withClass ? "DeviceFlag::(unknown)" : "(unknown)";
 }

@@ -719,7 +719,8 @@ void DeviceInfoWidget::updateHidppInfo(SubHidppConnection* hdc)
                          , DeviceFlag::ReportBattery
                          , DeviceFlag::NextHold
                          , DeviceFlag::BackHold
-                         , DeviceFlag::PointerSpeed })
+                         , DeviceFlag::PointerSpeed
+                         , DeviceFlag::ActionButton })
   {
     if (hdc->hasFlags(flag)) { m_hidppInfo.hidppFlags.push_back(toString(flag, false)); }
   }

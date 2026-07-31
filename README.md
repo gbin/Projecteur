@@ -91,8 +91,9 @@ rules installed (see [pre-requisites section](#pre-requisites)).
 
 ## How it works
 
-With a connection via the USB Dongle Receiver or via Bluetooth, the Logitech Spotlight
-device will be detected by Linux as a HID device with mouse and keyboard events.
+With a connection via the USB Dongle Receiver, the Logi Bolt receiver or via Bluetooth, the
+Logitech Spotlight (and Spotlight 2) device(s) will be detected by Linux as a HID device
+with mouse and keyboard events.
 As mouse events, the device sends relative cursor movements and left button presses.
 Acting as a keyboard, the device basically just sends left and right arrow key press
 events when forward or back is pressed on the device.
@@ -144,6 +145,17 @@ Please note that in case when both Long-Press event and Hold Move events are
 mapped for a particular button, both actions will executed if user hold the
 button and move device. To avoid this situation, do not set both Long-Press
 and Hold Move actions for the same button.
+
+#### Action Button of the Logitech Spotlight 2
+
+In addition to the _Next_ and _Back_ buttons, the Logitech Spotlight 2 features a
+dedicated _Action_ button. On both connection types (Logi Bolt USB receiver and
+Bluetooth), _Projecteur_ diverts the button's events so it can be mapped like any
+other button in the Input Mapper (Devices tab in Preferences dialog box): add a new
+input mapping entry, double click in the first column (Input Sequence) and press the
+_Action_ button to record it. The recorded entry will be shown as _Action Button_.
+The _Highlight_ button of the Spotlight 2 is a virtual left mouse button and is
+forwarded to the system like a regular mouse click.
 
 ## Download
 
@@ -296,6 +308,8 @@ your screen in an online presentation or call.
 
 Besides the _Logitech Spotlight_, the following devices are currently supported out of the box:
 
+* Logitech Spotlight 2 via the Logi Bolt USB Receiver _(046d:c548)_
+* Logitech Spotlight 2 via Bluetooth _(046d:b506)_
 * AVATTO H100 / August WP200 _(0c45:8101)_
 * August LP315 _(2312:863d)_
 * AVATTO i10 Pro _(2571:4109)_

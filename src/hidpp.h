@@ -43,6 +43,7 @@ namespace HIDPP {
     Reset                = 0x0020,
     DFUControlSigned     = 0x00c2,
     BatteryStatus        = 0x1000,
+    UnifiedBattery       = 0x1004,
     PresenterControl     = 0x1a00,
     Sensor3D             = 0x1a01,
     ReprogramControlsV4  = 0x1b04,
@@ -246,6 +247,11 @@ public:
   using RequestResultCallback = std::function<void(MsgResult, HIDPP::Message&&)>;
 
   virtual BusType busType() const = 0;
+
+  /// HID++ device index of the connected device, e.g. the wireless device slot
+  /// number on a Logitech USB receiver.
+  /// Defaults to the first wireless device slot.
+  virtual uint8_t deviceIndex() const { return HIDPP::DeviceIndex::WirelessDevice1; }
 
   // --- synchronous versions
   virtual ssize_t sendData(std::vector<uint8_t> msg) = 0;
