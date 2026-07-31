@@ -41,6 +41,7 @@ public:
   // --- HidppConnectionInterface implementation:
 
   BusType busType() const override { return m_details.deviceId.busType; }
+  uint8_t deviceIndex() const override { return m_deviceIndex; }
   ssize_t sendData(std::vector<uint8_t> msg) override;
   ssize_t sendData(HIDPP::Message msg) override;
   void sendData(std::vector<uint8_t> msg, SendResultCallback resultCb) override;
@@ -94,6 +95,10 @@ private:
   void initFeatures(std::function<void(std::map<HIDPP::FeatureCode, MsgResult>&&)> cb);
 
   void getBatteryLevelStatus(std::function<void(MsgResult, HIDPP::BatteryInfo&&)> cb);
+  void getUnifiedBatteryLevel(std::function<void(MsgResult, HIDPP::BatteryInfo&&)> cb);
+  /// Maps the charging status byte of the HID++ UnifiedBattery feature (0x1004)
+  /// onto the battery status enum.
+  static HIDPP::BatteryStatus toBatteryStatus1004(uint8_t chargingStatus);
 
   void setReceiverState(ReceiverState rs);
   void setPresenterState(PresenterState ps);
@@ -102,6 +107,10 @@ private:
   void onHidppDataAvailable(int fd);
 
   void getProtocolVersion(std::function<void(MsgResult, HIDPP::Error, HIDPP::ProtocolVersion)> cb);
+  /// Probes all wireless device slots of a HID++ USB receiver to find the
+  /// connected device and store its device index. For bluetooth connections
+  /// the device index is always the default wireless device.
+  void discoverDeviceIndex(std::function<void(bool, HIDPP::ProtocolVersion)> cb);
   void checkPresenterOnline(std::function<void(bool, HIDPP::ProtocolVersion)> cb);
   void checkAndUpdatePresenterState(std::function<void(PresenterState)> cb);
 
@@ -115,6 +124,10 @@ private:
   HIDPP::FeatureSet m_featureSet;
   HIDPP::ProtocolVersion m_protocolVersion;
   HIDPP::BatteryInfo m_batteryInfo;
+
+  /// HID++ device index of the connected device. Defaults to the first
+  /// wireless device slot and is discovered for HID++ USB receivers.
+  uint8_t m_deviceIndex = HIDPP::DeviceIndex::WirelessDevice1;
 
   ReceiverState m_receiverState = ReceiverState::Uninitialized;
   PresenterState m_presenterState = PresenterState::Uninitialized;

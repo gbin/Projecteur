@@ -969,6 +969,8 @@ const std::map<Key, SpecialKeyEventSeqInfo>&  keyEventSequenceMap()
       KeyEventSequence{{{EV_KEY, to_integral(Key::NextHold), 1}}}}},
     {Key::BackHold, {InputMapper::tr("Back Hold"),
       KeyEventSequence{{{EV_KEY, to_integral(Key::BackHold), 1}}}}},
+    {Key::ActionButton, {InputMapper::tr("Action Button"),
+      KeyEventSequence{{{EV_KEY, to_integral(Key::ActionButton), 1}}}}},
     {Key::NextHoldMove, {InputMapper::tr("Next Hold Move"),
       makeSpecialKeyEventSequence(to_integral(Key::NextHoldMove)) }},
     {Key::BackHoldMove, {InputMapper::tr("Back Hold Move"),

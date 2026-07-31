@@ -463,13 +463,19 @@ void Spotlight::registerForNotifications(SubHidppConnection* connection)
       // Logitech Spotlight:
       //   * Next Button = 0xda
       //   * Back Button = 0xdc
+      // Logitech Spotlight 2:
+      //   * Next Button = 0xd9 (short press), 0xda (hold)
+      //   * Back Button = 0xdb (short press), 0xdc (hold)
+      //   * Action Button = 0xfb (short press), 0xfc (hold)
       // Byte 5 and 7 indicate pressed buttons
       // Back and next can be pressed at the same time
 
       constexpr uint8_t ButtonNext = 0xda;
       constexpr uint8_t ButtonBack = 0xdc;
+      constexpr uint8_t ButtonAction = 0xfb;
       const auto isNextPressed = msg[5] == ButtonNext || msg[7] == ButtonNext;
       const auto isBackPressed = msg[5] == ButtonBack || msg[7] == ButtonBack;
+      const auto isActionPressed = msg[5] == ButtonAction || msg[7] == ButtonAction;
 
       if (!m_holdButtonStatus->nextPressed() && isNextPressed)
       {
@@ -487,6 +493,15 @@ void Spotlight::registerForNotifications(SubHidppConnection* connection)
         }
       }
 
+      if (!m_actionButtonPressed && isActionPressed)
+      {
+        const auto& actionButton = SpecialKeys::eventSequenceInfo(SpecialKeys::Key::ActionButton);
+        for (const auto& ke: actionButton.keyEventSeq) {
+          connection->inputMapper()->addEvents(ke);
+        }
+      }
+
+      m_actionButtonPressed = isActionPressed;
       m_holdButtonStatus->setButtonsPressed(isNextPressed, isBackPressed);
     }), 0 /* function 0 */);
 

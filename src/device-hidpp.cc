@@ -138,16 +138,12 @@ void SubHidppConnection::sendRequest(HIDPP::Message msg, RequestResultCallback r
     }
 
     // Device index sanity check
-    static const std::array<uint8_t, 3> validDeviceIndexes {
-      HIDPP::DeviceIndex::CordedDevice,
-      HIDPP::DeviceIndex::DefaultDevice,
-      HIDPP::DeviceIndex::WirelessDevice1,
-    };
+    const uint8_t dIdx = msg.deviceIndex();
+    const bool isValidDeviceIndex = (dIdx == HIDPP::DeviceIndex::CordedDevice
+      || dIdx == HIDPP::DeviceIndex::DefaultDevice
+      || (dIdx >= HIDPP::DeviceIndex::WirelessDevice1 && dIdx <= HIDPP::DeviceIndex::WirelessDevice6));
 
-    const auto deviceIndexIt
-      = std::find(validDeviceIndexes.cbegin(), validDeviceIndexes.cend(), msg.deviceIndex());
-
-    if (deviceIndexIt == validDeviceIndexes.cend())
+    if (!isValidDeviceIndex)
     {
       logWarn(hid) << tr("Invalid device index (%1) in message for '%2'")
                       .arg(msg.deviceIndex()).arg(path());
@@ -382,7 +378,7 @@ void SubHidppConnection::sendVibrateCommand(uint8_t intensity, uint8_t length,
 
   using namespace HIDPP;
 
-  Message vibrateMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, pcIndex, 1, {
+  Message vibrateMsg(Message::Type::Long, m_deviceIndex, pcIndex, 1, {
     length, 0xe8, intensity
   });
 
@@ -402,7 +398,7 @@ void SubHidppConnection::getBatteryLevelStatus(
     return;
   }
 
-  Message batteryReqMsg(Message::Type::Short, DeviceIndex::WirelessDevice1, batteryIndex, 0);
+  Message batteryReqMsg(Message::Type::Short, m_deviceIndex, batteryIndex, 0);
   sendRequest(std::move(batteryReqMsg), [cb=std::move(cb)](MsgResult res, Message&& msg) mutable
   {
     if (!cb) { return; }
@@ -411,6 +407,51 @@ void SubHidppConnection::getBatteryLevelStatus(
                                               : BatteryInfo{msg[4],
                                                             msg[5],
                                                             to_enum<BatteryStatus>(msg[6])};
+    cb(res, std::move(batteryInfo));
+  });
+}
+
+// -------------------------------------------------------------------------------------------------
+HIDPP::BatteryStatus SubHidppConnection::toBatteryStatus1004(uint8_t chargingStatus)
+{
+  using BatteryStatus = HIDPP::BatteryStatus;
+  switch (chargingStatus) {
+    case 0: return BatteryStatus::Discharging;
+    case 1: return BatteryStatus::Charging;
+    case 2: return BatteryStatus::SlowCharging;
+    case 3: return BatteryStatus::Full;
+    case 4: return BatteryStatus::ChargingError;
+    default: return BatteryStatus::InvalidBattery;
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
+void SubHidppConnection::getUnifiedBatteryLevel(
+  std::function<void(MsgResult, HIDPP::BatteryInfo&&)> cb)
+{
+  using namespace HIDPP;
+
+  const auto ubIndex = m_featureSet.featureIndex(FeatureCode::UnifiedBattery);
+  if (ubIndex == 0)
+  {
+    if (cb) { cb(MsgResult::FeatureNotSupported, {}); }
+    return;
+  }
+
+  // UnifiedBattery (0x1004) get status command (function 0x01) response:
+  //   msg[4] = state of charge in percent
+  //   msg[5] = battery level flags (critical/low/good/full)
+  //   msg[6] = charging status
+  //   msg[7] = external power source indicator
+  Message batteryReqMsg(Message::Type::Long, m_deviceIndex, ubIndex, 0x01, Message::Data{0,0,0,0});
+  sendRequest(std::move(batteryReqMsg), [cb=std::move(cb)](MsgResult res, Message&& msg) mutable
+  {
+    if (!cb) { return; }
+
+    BatteryInfo batteryInfo;
+    if (res == MsgResult::Ok) {
+      batteryInfo = BatteryInfo{msg[4], 0, toBatteryStatus1004(msg[6])};
+    }
     cb(res, std::move(batteryInfo));
   });
 }
@@ -431,7 +472,7 @@ void SubHidppConnection::setPointerSpeed(uint8_t speed,
   const uint8_t pointerSpeed = 0x10 & speed;
 
   sendRequest(
-    HIDPP::Message(HIDPP::Message::Type::Long, HIDPP::DeviceIndex::WirelessDevice1,
+    HIDPP::Message(HIDPP::Message::Type::Long, m_deviceIndex,
                    psIndex, 1, HIDPP::Message::Data{pointerSpeed}),
     std::move(cb)
   );
@@ -628,7 +669,7 @@ void SubHidppConnection::initFeatures(
   if (const auto resetFeatureIndex = m_featureSet.featureIndex(FeatureCode::Reset))
   {
     batch.emplace(RequestBatchItem {
-      Message(Message::Type::Long, DeviceIndex::WirelessDevice1, resetFeatureIndex, 1),
+      Message(Message::Type::Long, m_deviceIndex, resetFeatureIndex, 1),
       [resultMap](MsgResult res, Message&& /* msg */) {
         resultMap->emplace(FeatureCode::Reset, res);
       }
@@ -641,7 +682,7 @@ void SubHidppConnection::initFeatures(
     if (hasFlags(DeviceFlags::NextHold))
     {
       batch.emplace(RequestBatchItem {
-        Message(Message::Type::Long, DeviceIndex::WirelessDevice1, contrFeatureIndex, 3,
+        Message(Message::Type::Long, m_deviceIndex, contrFeatureIndex, 3,
                 Message::Data{0x00, 0xda, 0x33}),
         [resultMap](MsgResult res, Message&& /* msg */) {
           resultMap->emplace(FeatureCode::ReprogramControlsV4, res);
@@ -652,20 +693,39 @@ void SubHidppConnection::initFeatures(
     if (hasFlags(DeviceFlags::BackHold))
     {
       batch.emplace(RequestBatchItem {
-        Message(Message::Type::Long, DeviceIndex::WirelessDevice1, contrFeatureIndex, 3,
+        Message(Message::Type::Long, m_deviceIndex, contrFeatureIndex, 3,
                 Message::Data{0x00, 0xdc, 0x33}),
         [resultMap](MsgResult res, Message&& /* msg */) {
           resultMap->emplace(FeatureCode::ReprogramControlsV4, res);
         }
       });
     }
+
+    // Enable 'Action Button' on hold/tap functionality for the Logitech Spotlight 2.
+    // The device reports the action button as control id 0x00fb. If the device
+    // does not support this control, the request will fail and the ActionButton
+    // device flag stays unset.
+    batch.emplace(RequestBatchItem {
+      Message(Message::Type::Long, m_deviceIndex, contrFeatureIndex, 3,
+              Message::Data{0x00, 0xfb, 0x03}),
+      [resultMap, this](MsgResult res, Message&& /* msg */) {
+        if (res == MsgResult::Ok) {
+          setFlags(DeviceFlags::ActionButton, true);
+          logDebug(hid) << tr("Subdevice '%1' reported 'Action Button' control support.")
+                           .arg(path());
+        } else {
+          setFlags(DeviceFlags::ActionButton, false);
+        }
+        resultMap->emplace(FeatureCode::ReprogramControlsV4, res);
+      }
+    });
   }
 
   if (const auto psFeatureIndex = m_featureSet.featureIndex(FeatureCode::PointerSpeed))
   {
     // Reset pointer speed to 0x14 - the device accepts values from 0x10 to 0x19
     batch.emplace(RequestBatchItem {
-      HIDPP::Message(HIDPP::Message::Type::Long, HIDPP::DeviceIndex::WirelessDevice1,
+      HIDPP::Message(HIDPP::Message::Type::Long, m_deviceIndex,
                      psFeatureIndex, 1, HIDPP::Message::Data{0x14}),
       [resultMap](MsgResult res, Message&& /* msg */) {
         resultMap->emplace(FeatureCode::PointerSpeed, res);
@@ -697,7 +757,13 @@ void SubHidppConnection::updateDeviceFlags()
     featureFlagsSet |= DeviceFlag::ReportBattery;
     logDebug(hid) << tr("Subdevice '%1' reported %2 support.")
                      .arg(path()).arg(toString(HIDPP::FeatureCode::BatteryStatus));
-  } else {
+  }
+  else if (m_featureSet.featureCodeSupported(HIDPP::FeatureCode::UnifiedBattery)) {
+    featureFlagsSet |= DeviceFlag::ReportBattery;
+    logDebug(hid) << tr("Subdevice '%1' reported %2 support.")
+                     .arg(path()).arg(toString(HIDPP::FeatureCode::UnifiedBattery));
+  }
+  else {
     featureFlagsUnset |= DeviceFlag::ReportBattery;
   }
 
@@ -713,6 +779,7 @@ void SubHidppConnection::updateDeviceFlags()
   else {
     featureFlagsUnset |= DeviceFlags::NextHold;
     featureFlagsUnset |= DeviceFlags::BackHold;
+    featureFlagsUnset |= DeviceFlags::ActionButton;
   }
   m_inputMapper->setSpecialMoveInputs(std::move(specialMoveInputs));
 
@@ -742,15 +809,21 @@ void SubHidppConnection::registerForFeatureNotifications()
       // Logitech Spotlight:
       //   * Next Button = 0xda
       //   * Back Button = 0xdc
+      // Logitech Spotlight 2:
+      //   * Next Button = 0xd9 (short press), 0xda (hold)
+      //   * Back Button = 0xdb (short press), 0xdc (hold)
+      //   * Action Button = 0xfb (short press), 0xfc (hold)
       // Byte 5 and 7 indicate pressed buttons
       // Back and next can be pressed at the same time
 
       constexpr uint8_t ButtonNext = 0xda;
       constexpr uint8_t ButtonBack = 0xdc;
+      constexpr uint8_t ButtonAction = 0xfb;
       const auto isNextPressed = msg[5] == ButtonNext || msg[7] == ButtonNext;
       const auto isBackPressed = msg[5] == ButtonBack || msg[7] == ButtonBack;
-      logDebug(hid) << tr("Buttons pressed: Next = %1, Back = %2")
-                       .arg(isNextPressed).arg(isBackPressed);
+      const auto isActionPressed = msg[5] == ButtonAction || msg[7] == ButtonAction;
+      logDebug(hid) << tr("Buttons pressed: Next = %1, Back = %2, Action = %3")
+                       .arg(isNextPressed).arg(isBackPressed).arg(isActionPressed);
 
     }), 0 /* function 0 */);
 
@@ -771,6 +844,14 @@ void SubHidppConnection::registerForFeatureNotifications()
     registerNotificationCallback(this, batIndex, makeSafeCallback([this](Message&& msg) {
       setBatteryInfo(BatteryInfo{msg[4], msg[5], to_enum<BatteryStatus>(msg[6])});
     }), 0 /* function 0 */);  }
+
+  if (const auto ubIndex = m_featureSet.featureIndex(FeatureCode::UnifiedBattery))
+  {
+    // A device with a unified battery can send a battery status event spontaneously.
+    registerNotificationCallback(this, ubIndex, makeSafeCallback([this](Message&& msg) {
+      setBatteryInfo(BatteryInfo{msg[4], 0, toBatteryStatus1004(msg[6])});
+    }), 0 /* event 0 */);
+  }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -843,6 +924,18 @@ HIDPP::ProtocolVersion SubHidppConnection::protocolVersion() const {
 void SubHidppConnection::triggerBattyerInfoUpdate()
 {
   using namespace HIDPP;
+
+  if (m_featureSet.featureCodeSupported(FeatureCode::UnifiedBattery)) {
+    getUnifiedBatteryLevel(makeSafeCallback([this](MsgResult res, BatteryInfo&& bi)
+    {
+      if (res != MsgResult::Ok) {
+        return;
+      }
+      setBatteryInfo(bi);
+    }));
+    return;
+  }
+
   getBatteryLevelStatus(makeSafeCallback([this](MsgResult res, BatteryInfo&& bi)
   {
     if (res != MsgResult::Ok) {
@@ -862,8 +955,8 @@ const HIDPP::BatteryInfo& SubHidppConnection::batteryInfo() const {
 void SubHidppConnection::sendPing(RequestResultCallback cb)
 {
   using namespace HIDPP;
-  // Ping wireless device 1 - same as requesting protocol version
-  Message pingMsg(Message::Type::Short, DeviceIndex::WirelessDevice1, 0, 1, getRandomPingPayload());
+  // Ping wireless device - same as requesting protocol version
+  Message pingMsg(Message::Type::Short, m_deviceIndex, 0, 1, getRandomPingPayload());
   sendRequest(std::move(pingMsg), std::move(cb));
 }
 
@@ -884,19 +977,71 @@ void SubHidppConnection::getProtocolVersion(std::function<void(MsgResult, HIDPP:
 }
 
 // -------------------------------------------------------------------------------------------------
+void SubHidppConnection::discoverDeviceIndex(std::function<void(bool, HIDPP::ProtocolVersion)> cb)
+{
+  using namespace HIDPP;
+
+  postSelf([this, cb=std::move(cb)]() mutable
+  {
+    // For bluetooth connections the device is always the default wireless device.
+    if (busType() != BusType::Usb)
+    {
+      m_deviceIndex = DeviceIndex::WirelessDevice1;
+      getProtocolVersion(makeSafeCallback(
+      [cb=std::move(cb)](MsgResult res, HIDPP::Error err, HIDPP::ProtocolVersion pv) mutable
+      {
+        if (cb) {
+          cb(MsgResult::Ok == res && err == HIDPP::Error::NoError, std::move(pv));
+        }
+      }));
+      return;
+    }
+
+    // Probe all wireless device slots of the usb receiver with a ping request.
+    // Only the slot that has an online device will answer with an error free reply.
+    RequestBatch batch;
+    auto responses = std::make_shared<std::vector<std::pair<uint8_t, ProtocolVersion>>>();
+    for (uint8_t idx = DeviceIndex::WirelessDevice1; idx <= DeviceIndex::WirelessDevice6; ++idx)
+    {
+      batch.emplace(RequestBatchItem{
+        Message(Message::Type::Short, idx, 0, 1, getRandomPingPayload()),
+        [responses, idx](MsgResult res, Message&& msg)
+        {
+          if (res == MsgResult::Ok)
+          {
+            responses->emplace_back(idx, ProtocolVersion{msg[4], msg[5]});
+          }
+        }
+      });
+    }
+
+    sendRequestBatch(std::move(batch), makeSafeCallback(
+    [this, responses, cb=std::move(cb)](std::vector<MsgResult>&& results) mutable
+    {
+      Q_UNUSED(results);
+      if (!responses->empty())
+      {
+        const auto deviceIndex = responses->front().first;
+        const auto pv = responses->front().second;
+        m_deviceIndex = deviceIndex;
+        logInfo(hid) << tr("Found HID++ wireless device at device index %1 (%2).")
+                        .arg(m_deviceIndex).arg(path());
+        if (cb) { cb(true, pv); }
+        return;
+      }
+      if (cb) { cb(false, ProtocolVersion{}); }
+    }), true /* continueOnError */);
+  });
+}
+
+// -------------------------------------------------------------------------------------------------
 void SubHidppConnection::checkPresenterOnline(std::function<void(bool, HIDPP::ProtocolVersion)> cb)
 {
-  getProtocolVersion(
-  [cb=std::move(cb)](MsgResult res, HIDPP::Error err, HIDPP::ProtocolVersion pv) {
-    if (!cb) return;
-    const bool deviceOnline = MsgResult::Ok == res && err == HIDPP::Error::NoError;
-    if (!deviceOnline && err != HIDPP::Error::Unsupported) {
-      // Unsupported is send as error if the device is offline
-      logWarn(hid) << tr("Unexpected error for offline device (%1, %2)")
-        .arg(toString(res)).arg(toString(err));
-    }
-    cb(deviceOnline, std::move(pv));
-  });
+  discoverDeviceIndex(makeSafeCallback(
+  [cb=std::move(cb)](bool deviceOnline, HIDPP::ProtocolVersion pv) mutable
+  {
+    if (cb) { cb(deviceOnline, std::move(pv)); }
+  }));
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -1039,7 +1184,7 @@ void SubHidppConnection::onHidppDataAvailable(int fd)
   else if (msg.softwareId() == 0 || msg.subId() < 0x80)
   {
     // Event/Notification
-    // logDebug(hid) << tr("Received notification (%1) on %2").arg(msg.hex()).arg(path());
+    logDebug(hid) << tr("Received notification (%1) on %2").arg(msg.hex()).arg(path());
 
     // Notify subscribers
     const auto& callbackList = m_notificationSubscribers[msg.featureIndex()];
