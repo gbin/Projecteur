@@ -8,6 +8,8 @@
 #include "nativekeyseqedit.h"
 #include "projecteur-icons-def.h"
 
+#include <KLocalizedString>
+
 #include <QEvent>
 #include <QMenu>
 #include <QPainter>
@@ -28,13 +30,8 @@ namespace  {
       constexpr int verticalMargin = 3;
       constexpr int horizontalMargin = 3;
       const int h = opt.fontMetrics.height() + 2 * verticalMargin;
-    #if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
-      const int w = std::max(opt.fontMetrics.horizontalAdvance(ActionDelegate::tr("None")) + 2 * horizontalMargin,
+      const int w = std::max(opt.fontMetrics.horizontalAdvance(i18n("None")) + 2 * horizontalMargin,
                              opt.fontMetrics.horizontalAdvance(action->keySequence.toString()));
-    #else
-      const int w = std::max(opt.fontMetrics.width(ActionDelegate::tr("None")) + 2 * horizontalMargin,
-                             opt.fontMetrics.width(action->keySequence.toString()));
-    #endif
       return { w, h };
     }
   } // end namespace keysequence
@@ -45,7 +42,7 @@ namespace  {
     {
       const auto& fm = option.fontMetrics;
       const int xPos = (option.rect.height()-fm.height()) / 2;
-      NativeKeySeqEdit::drawText(xPos, *p, option, ActionDelegate::tr("Cycle Presets"));
+      NativeKeySeqEdit::drawText(xPos, *p, option, i18n("Cycle Presets"));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -60,7 +57,7 @@ namespace  {
     {
       const auto& fm = option.fontMetrics;
       const int xPos = (option.rect.height()-fm.height()) / 2;
-      NativeKeySeqEdit::drawText(xPos, *p, option, ActionDelegate::tr("Toggle Spotlight"));
+      NativeKeySeqEdit::drawText(xPos, *p, option, i18n("Toggle Spotlight"));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -75,7 +72,7 @@ namespace  {
     {
       const auto& fm = option.fontMetrics;
       const int xPos = (option.rect.height()-fm.height()) / 2;
-      NativeKeySeqEdit::drawText(xPos, *p, option, ActionDelegate::tr("Scroll Horizontal"));
+      NativeKeySeqEdit::drawText(xPos, *p, option, i18n("Scroll Horizontal"));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -90,7 +87,7 @@ namespace  {
     {
       const auto& fm = option.fontMetrics;
       const int xPos = (option.rect.height()-fm.height()) / 2;
-      NativeKeySeqEdit::drawText(xPos, *p, option, ActionDelegate::tr("Scroll Vertical"));
+      NativeKeySeqEdit::drawText(xPos, *p, option, i18n("Scroll Vertical"));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -105,7 +102,7 @@ namespace  {
     {
       const auto& fm = option.fontMetrics;
       const int xPos = (option.rect.height()-fm.height()) / 2;
-      NativeKeySeqEdit::drawText(xPos, *p, option, ActionDelegate::tr("Volume Control"));
+      NativeKeySeqEdit::drawText(xPos, *p, option, i18n("Volume Control"));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -315,12 +312,12 @@ void ActionTypeDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
 
   const auto symbol = [&item]() -> QChar {
     switch(item.action->type()) {
-    case Action::Type::KeySequence: return QChar(Font::Icon::keyboard_4);
-    case Action::Type::CyclePresets: return QChar(Font::Icon::connection_8);
-    case Action::Type::ToggleSpotlight: return QChar(Font::Icon::power_on_off_11);
-    case Action::Type::ScrollHorizontal: return QChar(Font::Icon::cursor_21_rotated);
-    case Action::Type::ScrollVertical: return QChar(Font::Icon::cursor_21);
-    case Action::Type::VolumeControl: return QChar(Font::Icon::audio_6);
+    case Action::Type::KeySequence: return QChar(static_cast<char16_t>(Font::Icon::keyboard_4));
+    case Action::Type::CyclePresets: return QChar(static_cast<char16_t>(Font::Icon::connection_8));
+    case Action::Type::ToggleSpotlight: return QChar(static_cast<char16_t>(Font::Icon::power_on_off_11));
+    case Action::Type::ScrollHorizontal: return QChar(static_cast<char16_t>(Font::Icon::cursor_21_rotated));
+    case Action::Type::ScrollVertical: return QChar(static_cast<char16_t>(Font::Icon::cursor_21));
+    case Action::Type::VolumeControl: return QChar(static_cast<char16_t>(Font::Icon::audio_6));
     }
     return QChar(0);
   }();
@@ -352,12 +349,12 @@ void ActionTypeDelegate::actionContextMenu(QWidget* parent, InputMapConfigModel*
   };
 
   static std::vector<actionEntry> items {
-    {Action::Type::KeySequence, QChar(Font::Icon::keyboard_4), tr("Key Sequence"), false},
-    {Action::Type::CyclePresets, QChar(Font::Icon::connection_8), tr("Cycle Presets"), false},
-    {Action::Type::ToggleSpotlight, QChar(Font::Icon::power_on_off_11), tr("Toggle Spotlight"), false},
-    {Action::Type::ScrollHorizontal, QChar(Font::Icon::cursor_21_rotated), tr("Scroll Horizontal"), true},
-    {Action::Type::ScrollVertical, QChar(Font::Icon::cursor_21), tr("Scroll Vertical"), true},
-    {Action::Type::VolumeControl, QChar(Font::Icon::audio_6), tr("Volume Control"), true},
+    {Action::Type::KeySequence, QChar(static_cast<char16_t>(Font::Icon::keyboard_4)), i18n("Key Sequence"), false},
+    {Action::Type::CyclePresets, QChar(static_cast<char16_t>(Font::Icon::connection_8)), i18n("Cycle Presets"), false},
+    {Action::Type::ToggleSpotlight, QChar(static_cast<char16_t>(Font::Icon::power_on_off_11)), i18n("Toggle Spotlight"), false},
+    {Action::Type::ScrollHorizontal, QChar(static_cast<char16_t>(Font::Icon::cursor_21_rotated)), i18n("Scroll Horizontal"), true},
+    {Action::Type::ScrollVertical, QChar(static_cast<char16_t>(Font::Icon::cursor_21)), i18n("Scroll Vertical"), true},
+    {Action::Type::VolumeControl, QChar(static_cast<char16_t>(Font::Icon::audio_6)), i18n("Volume Control"), true},
   };
 
   static bool initIcons = []()

@@ -12,6 +12,7 @@
 #include <vector>
 #include <tuple>
 
+#include <QObject>
 #include <QString>
 
 // Hidpp specific functionality
@@ -43,6 +44,8 @@ namespace HIDPP {
     Reset                = 0x0020,
     DFUControlSigned     = 0x00c2,
     BatteryStatus        = 0x1000,
+    UnifiedBattery       = 0x1004,
+    Haptic               = 0x19b0,
     PresenterControl     = 0x1a00,
     Sensor3D             = 0x1a01,
     ReprogramControlsV4  = 0x1b04,
@@ -246,6 +249,7 @@ public:
   using RequestResultCallback = std::function<void(MsgResult, HIDPP::Message&&)>;
 
   virtual BusType busType() const = 0;
+  virtual uint8_t deviceIndex() const = 0;
 
   // --- synchronous versions
   virtual ssize_t sendData(std::vector<uint8_t> msg) = 0;
@@ -384,11 +388,11 @@ const char* toString(HIDPP::BatteryStatus bs);
 const char* toString(HIDPP::Notification n);
 
 // -------------------------------------------------------------------------------------------------
-Q_DECLARE_METATYPE(HIDPP::FeatureSet::FeatureTable);
 QDataStream& operator<<(QDataStream& s, const HIDPP::FeatureSet::FeatureTable& ft);
 QDataStream& operator>>(QDataStream& s, HIDPP::FeatureSet::FeatureTable& ft);
+Q_DECLARE_METATYPE(HIDPP::FeatureSet::FeatureTable);
 
 // -------------------------------------------------------------------------------------------------
-Q_DECLARE_METATYPE(HIDPP::FirmwareInfo);
 QDataStream& operator<<(QDataStream& s, const HIDPP::FirmwareInfo& fi);
 QDataStream& operator>>(QDataStream& s, HIDPP::FirmwareInfo& fi);
+Q_DECLARE_METATYPE(HIDPP::FirmwareInfo);

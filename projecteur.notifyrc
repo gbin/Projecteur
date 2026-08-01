@@ -1,0 +1,35 @@
+[Global]
+IconName=projecteur
+DesktopEntry=org.projecteur.Projecteur
+Name=Projecteur
+Comment=KDE Plasma spotlight for presenter devices
+
+[Event/presentationTimerFinished]
+Name=Presentation timer finished
+Comment=The configured presentation time has elapsed
+Action=Popup
+
+[Event/presenterConnected]
+Name=Presenter connected
+Comment=A supported presenter became available
+Action=Popup
+
+[Event/presenterDisconnected]
+Name=Presenter disconnected
+Comment=A connected presenter became unavailable
+Action=Popup
+
+[Event/presenterBatteryLow]
+Name=Presenter battery low
+Comment=A presenter battery has reached a low level
+Action=Popup
+
+[Event/presenterBatteryError]
+Name=Presenter battery error
+Comment=A presenter reported a battery or charging problem
+Action=Popup
+
+[Event/deviceAccessError]
+Name=Presenter access failed
+Comment=Projecteur could not access a supported presenter device
+Action=Popup

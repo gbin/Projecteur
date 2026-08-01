@@ -5,6 +5,8 @@
 
 #include "enum-helper.h"
 
+#include <KLocalizedString>
+
 #include <linux/input.h>
 
 #include <unordered_map>
@@ -38,9 +40,9 @@ const QString& lookup(const DeviceId& dId, const DeviceInputEvent& die)
   using KeyNameMap = std::unordered_map<uint32_t, const QString>;
 
   static const KeyNameMap logitechSpotlightMapping = {
-    { eHash(EV_KEY, BTN_LEFT), QObject::tr("Click") },
-    { eHash(EV_KEY, KEY_RIGHT), QObject::tr("Next") },
-    { eHash(EV_KEY, KEY_LEFT), QObject::tr("Back") },
+    { eHash(EV_KEY, BTN_LEFT), i18n("Click") },
+    { eHash(EV_KEY, KEY_RIGHT), i18n("Next") },
+    { eHash(EV_KEY, KEY_LEFT), i18n("Back") },
     { eHash(EV_KEY, to_integral(SpecialKeys::Key::NextHold)),
        SpecialKeys::eventSequenceInfo(SpecialKeys::Key::NextHold).name },
     { eHash(EV_KEY, to_integral(SpecialKeys::Key::BackHold)),
@@ -48,15 +50,16 @@ const QString& lookup(const DeviceId& dId, const DeviceInputEvent& die)
   };
 
   static const KeyNameMap avattoH100Mapping = {
-    { eHash(EV_KEY, BTN_LEFT), QObject::tr("Click") },
-    { eHash(EV_KEY, KEY_PAGEDOWN), QObject::tr("Down") },
-    { eHash(EV_KEY, KEY_PAGEUP), QObject::tr("Up") },
+    { eHash(EV_KEY, BTN_LEFT), i18n("Click") },
+    { eHash(EV_KEY, KEY_PAGEDOWN), i18n("Down") },
+    { eHash(EV_KEY, KEY_PAGEUP), i18n("Up") },
   };
 
   static const std::unordered_map<uint32_t, const KeyNameMap&> map =
   {
     {dHash({0x046d, 0xc53e}), logitechSpotlightMapping}, // Spotlight USB
     {dHash({0x046d, 0xb503}), logitechSpotlightMapping}, // Spotlight Bluetooth
+    {dHash({0x046d, 0xb506}), logitechSpotlightMapping}, // Spotlight 2 Bluetooth
     {dHash({0x0c45, 0x8101}), avattoH100Mapping},        // Avatto H100, August WP200
   };
 

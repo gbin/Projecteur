@@ -6,7 +6,8 @@
 #include "device-key-lookup.h"
 #include "deviceinput.h"
 #include "inputmapconfig.h"
-#include "logging.h"
+
+#include <KLocalizedString>
 
 #include <QApplication>
 #include <QMenu>
@@ -183,20 +184,11 @@ QSize InputSeqEdit::sizeHint() const
   constexpr int verticalMargin = 3;
   constexpr int horizontalMargin = 3;
   const int h = fm.height() + 2 * verticalMargin;
-  #if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
-    const int w = fm.horizontalAdvance(QLatin1Char('x')) * 17 + 2 * horizontalMargin;
-  #else
-    const int w = fm.width(QLatin1Char('x')) * 17 + 2 * horizontalMargin;
-  #endif
+  const int w = fm.horizontalAdvance(QLatin1Char('x')) * 17 + 2 * horizontalMargin;
 
   const QStyleOptionFrame option = styleOption();
 
-  #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-  return (style()->sizeFromContents(QStyle::CT_LineEdit, &option, QSize(w, h).
-                                    expandedTo(QApplication::globalStrut()), this));
-  #else
   return style()->sizeFromContents(QStyle::CT_LineEdit, &option, QSize(w, h), this);
-  #endif
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -217,7 +209,7 @@ void InputSeqEdit::paintEvent(QPaintEvent* /* paintEvent */)
     const auto spacingX = QStaticText(" ").size().width();
     xPos += drawRecordingSymbol(xPos, p, option) + spacingX;
     if (m_recordedSequence.empty()) {
-      drawPlaceHolderText(xPos, p, option, tr("Press device button(s)..."));
+      drawPlaceHolderText(xPos, p, option, i18n("Press device button(s)..."));
     } else {
       drawKeyEventSequence(xPos, p, option, m_recordedSequence, m_deviceId, false);
     }
@@ -389,7 +381,7 @@ int InputSeqEdit::drawEmptyIndicator(int startX, QPainter& p, const QStyleOption
     p.setPen(option.palette.color(QPalette::Disabled, QPalette::Text));
   }
 
-  static const QStaticText textNone(InputSeqEdit::tr("None"));
+  static const QStaticText textNone(i18n("None"));
   const auto top = static_cast<int>((option.rect.height() - textNone.size().height()) / 2);
   p.drawStaticText(startX + option.rect.left(), option.rect.top() + top, textNone);
   p.restore();

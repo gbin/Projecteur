@@ -5,21 +5,32 @@
 
 #include "device.h"
 #include "deviceinput.h"
-#include "logging.h"
+#include "projecteurconfig.h"
+#include "projecteur_settings_debug.h"
 
 #include <algorithm>
 #include <utility>
+
+#include <KConfig>
+#include <KConfigGroup>
+#include <KLocalizedString>
 
 #include <QFileInfo>
 #include <QFont>
 #include <QGuiApplication>
 #include <QPalette>
 #include <QQmlPropertyMap>
-#include <QSettings>
-
-LOGGING_CATEGORY(lcSettings, "settings")
 
 namespace {
+  QQmlPropertyMap* createQmlPropertyMap(QObject* parent)
+  {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 11, 0)
+    return QQmlPropertyMap::create(parent);
+#else
+    return new QQmlPropertyMap(parent);
+#endif
+  }
+
   // -----------------------------------------------------------------------------------------------
   namespace settings {
     constexpr char showSpotShade[] = "showSpotShade";
@@ -39,15 +50,14 @@ namespace {
     constexpr char borderOpacity[] = "borderOpacity";
     constexpr char zoomEnabled[] = "enableZoom";
     constexpr char zoomFactor[] = "zoomFactor";
+    constexpr char zoomMode[] = "zoomMode";
     constexpr char multiScreenOverlay[] = "multiScreenOverlay";
+    constexpr char presentationTimerEnabled[] = "presentationTimerEnabled";
+    constexpr char presentationTimerDurationSeconds[] = "presentationTimerDurationSeconds";
 
     // -- device specific
     constexpr char inputSequenceInterval[] = "inputSequenceInterval";
-    constexpr char inputMapConfig[] = "inputMapConfig";
-    constexpr char timerEnabled[] = "timer%1enabled";
-    constexpr char timerSeconds[] = "timer%1seconds";
-    constexpr char vibrationLength[] = "vibrationLength";
-    constexpr char vibrationIntensity[] = "vibrationIntensity";
+    constexpr char presentationTimerHapticStrength[] = "presentationTimerHapticStrength";
 
     namespace defaultValue {
       constexpr bool showSpotShade = true;
@@ -67,12 +77,14 @@ namespace {
       constexpr double borderOpacity = 0.8;
       constexpr bool zoomEnabled = false;
       constexpr double zoomFactor = 2.0;
+      constexpr char zoomMode[] = "smooth";
       constexpr bool multiScreenOverlay = false;
+      constexpr bool presentationTimerEnabled = false;
+      constexpr int presentationTimerDurationSeconds = 15 * 60;
 
       // -- device specific defaults
       constexpr int inputSequenceInterval = 250;
-      constexpr uint8_t vibrationLength = 0;
-      constexpr uint8_t vibrationIntensity = 128;
+      constexpr int presentationTimerHapticStrength = 50;
     } // end namespace defaultValue
 
     namespace ranges {
@@ -95,6 +107,13 @@ namespace {
   }
 
   // -----------------------------------------------------------------------------------------------
+  bool isZoomMode(const QString& mode) {
+    return mode == QStringLiteral("smooth")
+        || mode == QStringLiteral("text")
+        || mode == QStringLiteral("pixel");
+  }
+
+  // -----------------------------------------------------------------------------------------------
   #define SETTINGS_PRESET_PREFIX "Preset_"
   QString presetSection(const QString& preset, bool withSeparator = true) {
      return QString(SETTINGS_PRESET_PREFIX "%1%2").arg(preset).arg(withSeparator ? "/" : "");
@@ -103,14 +122,55 @@ namespace {
   // -----------------------------------------------------------------------------------------------
   QString settingsKey(const DeviceId& dId, const QString& key) {
     return QString("Device_%1_%2/%3")
-      .arg(logging::hexId(dId.vendorId), logging::hexId(dId.productId), key);
+      .arg(formatHexId(dId.vendorId), formatHexId(dId.productId), key);
+  }
+
+  struct ConfigEntry {
+    KConfigGroup group;
+    QString key;
+  };
+
+  ConfigEntry configEntry(KConfig* config, const QString& path)
+  {
+    auto parts = path.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    if (parts.size() == 1) {
+      return {KConfigGroup(config, QStringLiteral("General")), parts.constFirst()};
+    }
+
+    KConfigGroup group(config, parts.takeFirst());
+    while (parts.size() > 1) {
+      group = group.group(parts.takeFirst());
+    }
+    return {group, parts.constFirst()};
+  }
+
+  void writeConfigValue(KConfig* config, const QString& path, const QVariant& value)
+  {
+    auto entry = configEntry(config, path);
+    if (value.metaType().id() == QMetaType::QByteArray) {
+      entry.group.writeEntry(entry.key, value.toByteArray());
+    } else {
+      entry.group.writeEntry(entry.key, value);
+    }
+  }
+
+  constexpr quint32 inputMapFormatVersion = 1;
+  constexpr auto inputMapConfigDataKey = "inputMapConfigData";
+
+  std::unique_ptr<KConfig> createConfig(const QString& configFile)
+  {
+    if (configFile.isEmpty()) {
+      return std::make_unique<KConfig>(
+        QStringLiteral("projecteurrc"), KConfig::SimpleConfig);
+    }
+    return std::make_unique<KConfig>(configFile, KConfig::SimpleConfig);
   }
 
   // -------------------------------------------------------------------------------------------------
-  auto loadPresets(QSettings* settings)
+  auto loadPresets(KConfig* config)
   {
     std::vector<QString> presets;
-    for (const auto& group: settings->childGroups()) {
+    for (const auto& group: config->groupList()) {
       if (group.startsWith(SETTINGS_PRESET_PREFIX)) {
         presets.emplace_back(group.mid(sizeof(SETTINGS_PRESET_PREFIX)-1));
       }
@@ -124,21 +184,22 @@ namespace {
 // -------------------------------------------------------------------------------------------------
 Settings::Settings(QObject* parent)
   : QObject(parent)
-  , m_settings(new QSettings(QCoreApplication::applicationName(),
-                             QCoreApplication::applicationName(), this))
-  , m_presetModel(new PresetModel(loadPresets(m_settings), this))
-  , m_shapeSettingsRoot(new QQmlPropertyMap(this))
+  , m_shapeSettingsRoot(createQmlPropertyMap(this))
 {
+  auto config = createConfig({});
+  m_config = std::make_unique<ProjecteurConfig>(std::move(config));
+  m_presetModel = new PresetModel(loadPresets(m_config->config()), this);
   init();
 }
 
 // -------------------------------------------------------------------------------------------------
 Settings::Settings(const QString& configFile, QObject* parent)
   : QObject(parent)
-  , m_settings(new QSettings(configFile, QSettings::NativeFormat, this))
-  , m_presetModel(new PresetModel(loadPresets(m_settings), this))
-  , m_shapeSettingsRoot(new QQmlPropertyMap(this))
+  , m_shapeSettingsRoot(createQmlPropertyMap(this))
 {
+  auto config = createConfig(configFile);
+  m_config = std::make_unique<ProjecteurConfig>(std::move(config));
+  m_presetModel = new PresetModel(loadPresets(m_config->config()), this);
   init();
 }
 
@@ -146,16 +207,72 @@ Settings::Settings(const QString& configFile, QObject* parent)
 Settings::~Settings() = default;
 
 // -------------------------------------------------------------------------------------------------
+QVariant Settings::readValue(const QString& path, const QVariant& defaultValue) const
+{
+  const auto entry = configEntry(m_config->config(), path);
+  return entry.group.readEntry(entry.key, defaultValue);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::writeValue(const QString& path, const QVariant& value)
+{
+  writeConfigValue(m_config->config(), path, value);
+  sync();
+}
+
+// -------------------------------------------------------------------------------------------------
+bool Settings::contains(const QString& path) const
+{
+  const auto entry = configEntry(m_config->config(), path);
+  return entry.group.hasKey(entry.key);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::remove(const QString& path)
+{
+  if (!path.contains(QLatin1Char('/'))) {
+    KConfigGroup(m_config->config(), path).deleteGroup();
+    sync();
+    return;
+  }
+  auto entry = configEntry(m_config->config(), path);
+  entry.group.deleteEntry(entry.key);
+  sync();
+}
+
+// -------------------------------------------------------------------------------------------------
+QString Settings::configFileName() const
+{
+  return m_config->config()->name();
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::save()
+{
+  if (!m_config->save()) {
+    qCWarning(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Could not save settings to '%1'.").arg(configFileName());
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::sync()
+{
+  if (!m_config->config()->sync()) {
+    qCWarning(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Could not save settings to '%1'.").arg(configFileName());
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
 void Settings::init()
 {
-  const QFileInfo fi(m_settings->fileName());
+  const QFileInfo fi(configFileName());
 
   if (!fi.isReadable()) {
-    logError(lcSettings) << tr("Settings file '%1' not readable.").arg(m_settings->fileName());
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Settings file '%1' does not exist yet.").arg(configFileName());
   }
 
-  if (!fi.isWritable()) {
-    logWarning(lcSettings) << tr("Settings file '%1' not writable.").arg(m_settings->fileName());
+  if (fi.exists() && !fi.isWritable()) {
+    qCWarning(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Settings file '%1' not writable.").arg(configFileName());
   }
 
   shapeSettingsInitialize();
@@ -198,11 +315,7 @@ void Settings::initializeStringProperties()
       const auto pm = shapeSettings(shape.name());
       if (!pm || !pm->property(shapeSetting.settingsKey().toLocal8Bit()).isValid()) { continue; }
 
-      #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-      if (shapeSetting.defaultValue().type() != QVariant::Int) { continue; }
-      #else
       if (shapeSetting.defaultValue().metaType().id() != QMetaType::Int) { continue; }
-      #endif
 
       const auto stringProperty = QString("spot.shape.%1.%2").arg(shape.name().toLower())
                                                              .arg(shapeSetting.settingsKey().toLower());
@@ -252,6 +365,9 @@ void Settings::initializeStringProperties()
   map.emplace_back( "zoom.factor", StringProperty{ StringProperty::Double,
                     {::settings::ranges::zoomFactor.min, ::settings::ranges::zoomFactor.max},
                     [this](const QString& value){ setZoomFactor(value.toDouble()); } } );
+  map.emplace_back( "zoom.mode", StringProperty{ StringProperty::StringEnum,
+                    {QStringLiteral("smooth"), QStringLiteral("text"), QStringLiteral("pixel")},
+                    [this](const QString& value){ setZoomMode(value); } } );
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -275,15 +391,132 @@ const Settings::SettingRange<int>& Settings::inputSequenceIntervalRange() { retu
 const QList<Settings::SpotShape>& Settings::spotShapes()
 {
   static const QList<SpotShape> shapes{
-    SpotShape(::settings::defaultValue::spotShape, "Circle", tr("Circle"), false),
-    SpotShape("spotshapes/Square.qml", "Square", tr("(Rounded) Square"), true,
-      {SpotShapeSetting(tr("Border-radius (%)"), "radius", 20, 0, 100, 0)} ),
-    SpotShape("spotshapes/Star.qml", "Star", tr("Star"), true,
-      {SpotShapeSetting(tr("Star points"), "points", 5, 3, 100, 0),
-       SpotShapeSetting(tr("Inner radius (%)"), "innerRadius", 50, 5, 100, 0)} ),
-    SpotShape("spotshapes/Ngon.qml", "Ngon", tr("N-gon"), true,
-      {SpotShapeSetting(tr("Sides"), "sides", 3, 3, 100, 0)} ) };
+    SpotShape(::settings::defaultValue::spotShape, "Circle", i18n("Circle"), false),
+    SpotShape("spotshapes/Square.qml", "Square", i18n("(Rounded) Square"), true,
+      {SpotShapeSetting(i18n("Border-radius (%)"), "radius", 20, 0, 100, 0)} ),
+    SpotShape("spotshapes/Star.qml", "Star", i18n("Star"), true,
+      {SpotShapeSetting(i18n("Star points"), "points", 5, 3, 100, 0),
+       SpotShapeSetting(i18n("Inner radius (%)"), "innerRadius", 50, 5, 100, 0)} ),
+    SpotShape("spotshapes/Ngon.qml", "Ngon", i18n("N-gon"), true,
+      {SpotShapeSetting(i18n("Sides"), "sides", 3, 3, 100, 0)} ) };
   return shapes;
+}
+
+// -------------------------------------------------------------------------------------------------
+Settings::SpotlightSettings Settings::spotlightSettings() const
+{
+  SpotlightSettings values{
+    {::settings::showSpotShade, m_showSpotShade},
+    {::settings::spotSize, m_spotSize},
+    {::settings::showCenterDot, m_showCenterDot},
+    {::settings::dotSize, m_dotSize},
+    {::settings::dotColor, m_dotColor},
+    {::settings::dotOpacity, m_dotOpacity},
+    {::settings::shadeColor, m_shadeColor},
+    {::settings::shadeOpacity, m_shadeOpacity},
+    {::settings::cursor, static_cast<int>(m_cursor)},
+    {::settings::spotShape, m_spotShape},
+    {::settings::spotRotation, m_spotRotation},
+    {::settings::showBorder, m_showBorder},
+    {::settings::borderColor, m_borderColor},
+    {::settings::borderSize, m_borderSize},
+    {::settings::borderOpacity, m_borderOpacity},
+    {::settings::zoomEnabled, m_zoomEnabled},
+    {::settings::zoomFactor, m_zoomFactor},
+    {::settings::zoomMode, m_zoomMode},
+    {::settings::multiScreenOverlay, m_multiScreenOverlayEnabled},
+  };
+
+  for (const auto& shape : spotShapes())
+  {
+    const auto propertyMap = m_shapeSettings.find(shape.name());
+    if (propertyMap == m_shapeSettings.cend()) { continue; }
+
+    for (const auto& setting : shape.shapeSettings()) {
+      values.insert(QString("Shape.%1/%2").arg(shape.name(), setting.settingsKey()),
+                    propertyMap->second->property(setting.settingsKey().toLocal8Bit()));
+    }
+  }
+  return values;
+}
+
+// -------------------------------------------------------------------------------------------------
+Settings::SpotlightSettings Settings::defaultSpotlightSettings()
+{
+  SpotlightSettings values{
+    {::settings::showSpotShade, ::settings::defaultValue::showSpotShade},
+    {::settings::spotSize, ::settings::defaultValue::spotSize},
+    {::settings::showCenterDot, ::settings::defaultValue::showCenterDot},
+    {::settings::dotSize, ::settings::defaultValue::dotSize},
+    {::settings::dotColor, QColor(::settings::defaultValue::dotColor)},
+    {::settings::dotOpacity, ::settings::defaultValue::dotOpacity},
+    {::settings::shadeColor, QColor(::settings::defaultValue::shadeColor)},
+    {::settings::shadeOpacity, ::settings::defaultValue::shadeOpacity},
+    {::settings::cursor, static_cast<int>(::settings::defaultValue::cursor)},
+    {::settings::spotShape, QString(::settings::defaultValue::spotShape)},
+    {::settings::spotRotation, ::settings::defaultValue::spotRotation},
+    {::settings::showBorder, ::settings::defaultValue::showBorder},
+    {::settings::borderColor, QColor(::settings::defaultValue::borderColor)},
+    {::settings::borderSize, ::settings::defaultValue::borderSize},
+    {::settings::borderOpacity, ::settings::defaultValue::borderOpacity},
+    {::settings::zoomEnabled, ::settings::defaultValue::zoomEnabled},
+    {::settings::zoomFactor, ::settings::defaultValue::zoomFactor},
+    {::settings::zoomMode, QString(::settings::defaultValue::zoomMode)},
+    {::settings::multiScreenOverlay, ::settings::defaultValue::multiScreenOverlay},
+  };
+
+  for (const auto& shape : spotShapes()) {
+    for (const auto& setting : shape.shapeSettings()) {
+      values.insert(QString("Shape.%1/%2").arg(shape.name(), setting.settingsKey()),
+                    setting.defaultValue());
+    }
+  }
+  return values;
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setSpotlightSettings(const SpotlightSettings& values)
+{
+  setShowSpotShade(values.value(::settings::showSpotShade, m_showSpotShade).toBool());
+  setSpotSize(values.value(::settings::spotSize, m_spotSize).toInt());
+  setShowCenterDot(values.value(::settings::showCenterDot, m_showCenterDot).toBool());
+  setDotSize(values.value(::settings::dotSize, m_dotSize).toInt());
+  setDotColor(values.value(::settings::dotColor, m_dotColor).value<QColor>());
+  setDotOpacity(values.value(::settings::dotOpacity, m_dotOpacity).toDouble());
+  setShadeColor(values.value(::settings::shadeColor, m_shadeColor).value<QColor>());
+  setShadeOpacity(values.value(::settings::shadeOpacity, m_shadeOpacity).toDouble());
+  setCursor(static_cast<Qt::CursorShape>(
+    values.value(::settings::cursor, static_cast<int>(m_cursor)).toInt()));
+  setSpotShape(values.value(::settings::spotShape, m_spotShape).toString());
+  setSpotRotation(values.value(::settings::spotRotation, m_spotRotation).toDouble());
+  setShowBorder(values.value(::settings::showBorder, m_showBorder).toBool());
+  setBorderColor(values.value(::settings::borderColor, m_borderColor).value<QColor>());
+  setBorderSize(values.value(::settings::borderSize, m_borderSize).toInt());
+  setBorderOpacity(values.value(::settings::borderOpacity, m_borderOpacity).toDouble());
+  setZoomEnabled(values.value(::settings::zoomEnabled, m_zoomEnabled).toBool());
+  setZoomFactor(values.value(::settings::zoomFactor, m_zoomFactor).toDouble());
+  setZoomMode(values.value(::settings::zoomMode, m_zoomMode).toString());
+  setMultiScreenOverlayEnabled(
+    values.value(::settings::multiScreenOverlay, m_multiScreenOverlayEnabled).toBool());
+
+  for (const auto& shape : spotShapes())
+  {
+    auto* propertyMap = shapeSettings(shape.name());
+    if (!propertyMap) { continue; }
+
+    for (const auto& setting : shape.shapeSettings()) {
+      const auto key = QString("Shape.%1/%2").arg(shape.name(), setting.settingsKey());
+      propertyMap->setProperty(
+        setting.settingsKey().toLocal8Bit(),
+        values.value(key, propertyMap->property(setting.settingsKey().toLocal8Bit())));
+    }
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
+KCoreConfigSkeleton* Settings::configSkeleton() const
+{
+  return m_config.get();
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -306,6 +539,7 @@ void Settings::setDefaults()
   setBorderOpacity(settings::defaultValue::borderOpacity);
   setZoomEnabled(settings::defaultValue::zoomEnabled);
   setZoomFactor(settings::defaultValue::zoomFactor);
+  setZoomMode(settings::defaultValue::zoomMode);
   setMultiScreenOverlayEnabled(settings::defaultValue::multiScreenOverlay);
   shapeSettingsSetDefaults();
 }
@@ -344,19 +578,12 @@ void Settings::shapeSettingsLoad(const QString& preset)
       {
         const QString& key = settingDefinition.settingsKey();
         const QString settingsKey = section + QString("Shape.%1/%2").arg(shape.name()).arg(key);
-        const QVariant loadedValue = m_settings->value(settingsKey, settingDefinition.defaultValue());
+        const QVariant loadedValue = readValue(settingsKey, settingDefinition.defaultValue());
 
-        #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-        if (settingDefinition.defaultValue().type() == QVariant::Int // Currently only int shape settings supported
-            && settingDefinition.defaultValue() != loadedValue) {
-          logDebug(lcSettings) << QString("spot.shape.%1.%2 = ").arg(shape.name().toLower(), key) << loadedValue.toInt();
-        }
-        #else
         if (settingDefinition.defaultValue().metaType().id() == QMetaType::Int // Currently only int shape settings supported
             && settingDefinition.defaultValue() != loadedValue) {
-          logDebug(lcSettings) << QString("spot.shape.%1.%2 = ").arg(shape.name().toLower(), key) << loadedValue.toInt();
+          qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << QString("spot.shape.%1.%2 = ").arg(shape.name().toLower(), key) << loadedValue.toInt();
         }
-        #endif
 
         if (propertyMap->property(key.toLocal8Bit()).isValid()) {
           propertyMap->setProperty(key.toLocal8Bit(), loadedValue);
@@ -382,7 +609,7 @@ void Settings::shapeSettingsSavePreset(const QString& preset)
       {
         const QString& key = settingDefinition.settingsKey();
         const QString settingsKey = section + QString("Shape.%1/%2").arg(shape.name()).arg(key);
-        m_settings->setValue(settingsKey, propertyMap->property(key.toLocal8Bit()));
+        writeValue(settingsKey, propertyMap->property(key.toLocal8Bit()));
       }
     }
   }
@@ -395,7 +622,7 @@ void Settings::shapeSettingsInitialize()
   {
     if (shape.shapeSettings().size() && m_shapeSettings.count(shape.name()) == 0)
     {
-      auto pm = new QQmlPropertyMap(this);
+      auto pm = createQmlPropertyMap(this);
       connect(pm, &QQmlPropertyMap::valueChanged, this,
       [this, shape, pm](const QString& key, const QVariant& value)
       {
@@ -406,11 +633,7 @@ void Settings::shapeSettingsInitialize()
 
         if (it != s.cend())
         {
-          #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-          if (it->defaultValue().type() == QVariant::Int) // Currently only int shape settings supported
-          #else
           if (it->defaultValue().metaType().id() == QMetaType::Int)
-          #endif
           {
             const auto setValue = value.toInt();
             const auto min = it->minValue().toInt();
@@ -419,9 +642,9 @@ void Settings::shapeSettingsInitialize()
             if (newValue != setValue) {
               pm->setProperty(key.toLocal8Bit(), newValue);
             }
-            logDebug(lcSettings) << QString("spot.shape.%1.%2 = ").arg(shape.name().toLower(), it->settingsKey())
+            qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << QString("spot.shape.%1.%2 = ").arg(shape.name().toLower(), it->settingsKey())
                                  << setValue;
-            m_settings->setValue(QString("Shape.%1/%2").arg(shape.name()).arg(key), newValue);
+            writeValue(QString("Shape.%1/%2").arg(shape.name()).arg(key), newValue);
           }
         }
       });
@@ -445,7 +668,7 @@ void Settings::loadPreset(const QString& preset)
 void Settings::removePreset(const QString& preset)
 {
   m_presetModel->removePreset(preset);
-  m_settings->remove(presetSection(preset, false));
+  remove(presetSection(preset, false));
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -463,28 +686,54 @@ PresetModel* Settings::presetModel()
 // -------------------------------------------------------------------------------------------------
 void Settings::load(const QString& preset)
 {
-  logDebug(lcSettings) << tr("Loading values from config:") << m_settings->fileName()
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Loading values from config:") << configFileName()
                        << (preset.size() ? QString("(%1)").arg(preset) : "");
 
+  if (preset.isEmpty())
+  {
+    setShowSpotShade(m_config->showSpotShade());
+    setSpotSize(m_config->spotSize());
+    setShowCenterDot(m_config->showCenterDot());
+    setDotSize(m_config->dotSize());
+    setDotColor(m_config->dotColor());
+    setDotOpacity(m_config->dotOpacity());
+    setShadeColor(m_config->shadeColor());
+    setShadeOpacity(m_config->shadeOpacity());
+    setCursor(static_cast<Qt::CursorShape>(m_config->cursor()));
+    setSpotShape(m_config->spotShape());
+    setSpotRotation(m_config->spotRotation());
+    setShowBorder(m_config->showBorder());
+    setBorderColor(m_config->borderColor());
+    setBorderSize(m_config->borderSize());
+    setBorderOpacity(m_config->borderOpacity());
+    setZoomEnabled(m_config->zoomEnabled());
+    setZoomFactor(m_config->zoomFactor());
+    setZoomMode(m_config->zoomMode());
+    setMultiScreenOverlayEnabled(m_config->multiScreenOverlay());
+    shapeSettingsLoad();
+    return;
+  }
+
   const auto s = preset.size() ? presetSection(preset) : "";
-  setShowSpotShade(m_settings->value(s+::settings::showSpotShade, settings::defaultValue::showSpotShade).toBool());
-  setSpotSize(m_settings->value(s+::settings::spotSize, settings::defaultValue::spotSize).toInt());
-  setShowCenterDot(m_settings->value(s+::settings::showCenterDot, settings::defaultValue::showCenterDot).toBool());
-  setDotSize(m_settings->value(s+::settings::dotSize, settings::defaultValue::dotSize).toInt());
-  setDotColor(m_settings->value(s+::settings::dotColor, QColor(settings::defaultValue::dotColor)).value<QColor>());
-  setDotOpacity(m_settings->value(s+::settings::dotOpacity, settings::defaultValue::dotOpacity).toDouble());
-  setShadeColor(m_settings->value(s+::settings::shadeColor, QColor(settings::defaultValue::shadeColor)).value<QColor>());
-  setShadeOpacity(m_settings->value(s+::settings::shadeOpacity, settings::defaultValue::shadeOpacity).toDouble());
-  setCursor(static_cast<Qt::CursorShape>(m_settings->value(s+::settings::cursor, static_cast<int>(settings::defaultValue::cursor)).toInt()));
-  setSpotShape(m_settings->value(s+::settings::spotShape, settings::defaultValue::spotShape).toString());
-  setSpotRotation(m_settings->value(s+::settings::spotRotation, settings::defaultValue::spotRotation).toDouble());
-  setShowBorder(m_settings->value(s+::settings::showBorder, settings::defaultValue::showBorder).toBool());
-  setBorderColor(m_settings->value(s+::settings::borderColor, QColor(settings::defaultValue::borderColor)).value<QColor>());
-  setBorderSize(m_settings->value(s+::settings::borderSize, settings::defaultValue::borderSize).toInt());
-  setBorderOpacity(m_settings->value(s+::settings::borderOpacity, settings::defaultValue::borderOpacity).toDouble());
-  setZoomEnabled(m_settings->value(s+::settings::zoomEnabled, settings::defaultValue::zoomEnabled).toBool());
-  setZoomFactor(m_settings->value(s+::settings::zoomFactor, settings::defaultValue::zoomFactor).toDouble());
-  setMultiScreenOverlayEnabled(m_settings->value(s+::settings::multiScreenOverlay, settings::defaultValue::multiScreenOverlay).toBool());
+  setShowSpotShade(readValue(s+::settings::showSpotShade, settings::defaultValue::showSpotShade).toBool());
+  setSpotSize(readValue(s+::settings::spotSize, settings::defaultValue::spotSize).toInt());
+  setShowCenterDot(readValue(s+::settings::showCenterDot, settings::defaultValue::showCenterDot).toBool());
+  setDotSize(readValue(s+::settings::dotSize, settings::defaultValue::dotSize).toInt());
+  setDotColor(readValue(s+::settings::dotColor, QColor(settings::defaultValue::dotColor)).value<QColor>());
+  setDotOpacity(readValue(s+::settings::dotOpacity, settings::defaultValue::dotOpacity).toDouble());
+  setShadeColor(readValue(s+::settings::shadeColor, QColor(settings::defaultValue::shadeColor)).value<QColor>());
+  setShadeOpacity(readValue(s+::settings::shadeOpacity, settings::defaultValue::shadeOpacity).toDouble());
+  setCursor(static_cast<Qt::CursorShape>(readValue(s+::settings::cursor, static_cast<int>(settings::defaultValue::cursor)).toInt()));
+  setSpotShape(readValue(s+::settings::spotShape, settings::defaultValue::spotShape).toString());
+  setSpotRotation(readValue(s+::settings::spotRotation, settings::defaultValue::spotRotation).toDouble());
+  setShowBorder(readValue(s+::settings::showBorder, settings::defaultValue::showBorder).toBool());
+  setBorderColor(readValue(s+::settings::borderColor, QColor(settings::defaultValue::borderColor)).value<QColor>());
+  setBorderSize(readValue(s+::settings::borderSize, settings::defaultValue::borderSize).toInt());
+  setBorderOpacity(readValue(s+::settings::borderOpacity, settings::defaultValue::borderOpacity).toDouble());
+  setZoomEnabled(readValue(s+::settings::zoomEnabled, settings::defaultValue::zoomEnabled).toBool());
+  setZoomFactor(readValue(s+::settings::zoomFactor, settings::defaultValue::zoomFactor).toDouble());
+  setZoomMode(readValue(s+::settings::zoomMode, settings::defaultValue::zoomMode).toString());
+  setMultiScreenOverlayEnabled(readValue(s+::settings::multiScreenOverlay, settings::defaultValue::multiScreenOverlay).toBool());
   shapeSettingsLoad(preset);
 }
 
@@ -493,24 +742,25 @@ void Settings::savePreset(const QString& preset)
 {
   const auto section = presetSection(preset);
 
-  m_settings->setValue(section+::settings::showSpotShade, m_showSpotShade);
-  m_settings->setValue(section+::settings::spotSize, m_spotSize);
-  m_settings->setValue(section+::settings::showCenterDot, m_showCenterDot);
-  m_settings->setValue(section+::settings::dotSize, m_dotSize);
-  m_settings->setValue(section+::settings::dotColor, m_dotColor);
-  m_settings->setValue(section+::settings::dotOpacity, m_dotOpacity);
-  m_settings->setValue(section+::settings::shadeColor, m_shadeColor);
-  m_settings->setValue(section+::settings::shadeOpacity, m_shadeOpacity);
-  m_settings->setValue(section+::settings::cursor, static_cast<int>(m_cursor));
-  m_settings->setValue(section+::settings::spotShape, m_spotShape);
-  m_settings->setValue(section+::settings::spotRotation, m_spotRotation);
-  m_settings->setValue(section+::settings::showBorder, m_showBorder);
-  m_settings->setValue(section+::settings::borderColor, m_borderColor);
-  m_settings->setValue(section+::settings::borderSize, m_borderSize);
-  m_settings->setValue(section+::settings::borderOpacity, m_borderOpacity);
-  m_settings->setValue(section+::settings::zoomEnabled, m_zoomEnabled);
-  m_settings->setValue(section+::settings::zoomFactor, m_zoomFactor);
-  m_settings->setValue(section+::settings::multiScreenOverlay, m_multiScreenOverlayEnabled);
+  writeValue(section+::settings::showSpotShade, m_showSpotShade);
+  writeValue(section+::settings::spotSize, m_spotSize);
+  writeValue(section+::settings::showCenterDot, m_showCenterDot);
+  writeValue(section+::settings::dotSize, m_dotSize);
+  writeValue(section+::settings::dotColor, m_dotColor);
+  writeValue(section+::settings::dotOpacity, m_dotOpacity);
+  writeValue(section+::settings::shadeColor, m_shadeColor);
+  writeValue(section+::settings::shadeOpacity, m_shadeOpacity);
+  writeValue(section+::settings::cursor, static_cast<int>(m_cursor));
+  writeValue(section+::settings::spotShape, m_spotShape);
+  writeValue(section+::settings::spotRotation, m_spotRotation);
+  writeValue(section+::settings::showBorder, m_showBorder);
+  writeValue(section+::settings::borderColor, m_borderColor);
+  writeValue(section+::settings::borderSize, m_borderSize);
+  writeValue(section+::settings::borderOpacity, m_borderOpacity);
+  writeValue(section+::settings::zoomEnabled, m_zoomEnabled);
+  writeValue(section+::settings::zoomFactor, m_zoomFactor);
+  writeValue(section+::settings::zoomMode, m_zoomMode);
+  writeValue(section+::settings::multiScreenOverlay, m_multiScreenOverlayEnabled);
   shapeSettingsSavePreset(preset);
 
   m_presetModel->addPreset(preset);
@@ -523,8 +773,9 @@ void Settings::setShowSpotShade(bool show)
   if (show == m_showSpotShade) { return; }
 
   m_showSpotShade = show;
-  m_settings->setValue(::settings::showSpotShade, m_showSpotShade);
-  logDebug(lcSettings) << "shade =" << m_showSpotShade;
+  m_config->setShowSpotShade(m_showSpotShade);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "shade =" << m_showSpotShade;
   emit showSpotShadeChanged(m_showSpotShade);
 }
 
@@ -534,8 +785,9 @@ void Settings::setSpotSize(int size)
   if (size == m_spotSize) { return; }
 
   m_spotSize = qMin(qMax(::settings::ranges::spotSize.min, size), ::settings::ranges::spotSize.max);
-  m_settings->setValue(::settings::spotSize, m_spotSize);
-  logDebug(lcSettings) << "spot.size =" << m_spotSize;
+  m_config->setSpotSize(m_spotSize);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "spot.size =" << m_spotSize;
   emit spotSizeChanged(m_spotSize);
 }
 
@@ -545,8 +797,9 @@ void Settings::setShowCenterDot(bool show)
   if (show == m_showCenterDot) { return; }
 
   m_showCenterDot = show;
-  m_settings->setValue(::settings::showCenterDot, m_showCenterDot);
-  logDebug(lcSettings) << "dot =" << m_showCenterDot;
+  m_config->setShowCenterDot(m_showCenterDot);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "dot =" << m_showCenterDot;
   emit showCenterDotChanged(m_showCenterDot);
 }
 
@@ -556,8 +809,9 @@ void Settings::setDotSize(int size)
   if (size == m_dotSize) { return; }
 
   m_dotSize = qMin(qMax(::settings::ranges::dotSize.min, size), ::settings::ranges::dotSize.max);
-  m_settings->setValue(::settings::dotSize, m_dotSize);
-  logDebug(lcSettings) << "dot.size =" << m_dotSize;
+  m_config->setDotSize(m_dotSize);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "dot.size =" << m_dotSize;
   emit dotSizeChanged(m_dotSize);
 }
 
@@ -567,8 +821,9 @@ void Settings::setDotColor(const QColor& color)
   if (color == m_dotColor) { return; }
 
   m_dotColor = color;
-  m_settings->setValue(::settings::dotColor, m_dotColor);
-  logDebug(lcSettings) << "dot.color =" << m_dotColor.name();
+  m_config->setDotColor(m_dotColor);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "dot.color =" << m_dotColor.name();
   emit dotColorChanged(m_dotColor);
 }
 
@@ -578,8 +833,9 @@ void Settings::setDotOpacity(double opacity)
   if (opacity > m_dotOpacity || opacity < m_dotOpacity)
   {
     m_dotOpacity = qMin(qMax(::settings::ranges::dotOpacity.min, opacity), ::settings::ranges::dotOpacity.max);
-    m_settings->setValue(::settings::dotOpacity, m_dotOpacity);
-    logDebug(lcSettings) << "dot.opacity = " << m_dotOpacity;
+    m_config->setDotOpacity(m_dotOpacity);
+    save();
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "dot.opacity = " << m_dotOpacity;
     emit dotOpacityChanged(m_dotOpacity);
   }
 }
@@ -590,8 +846,9 @@ void Settings::setShadeColor(const QColor& color)
   if (color == m_shadeColor) { return; }
 
   m_shadeColor = color;
-  m_settings->setValue(::settings::shadeColor, m_shadeColor);
-  logDebug(lcSettings) << "shade.color =" << m_shadeColor.name();
+  m_config->setShadeColor(m_shadeColor);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "shade.color =" << m_shadeColor.name();
   emit shadeColorChanged(m_shadeColor);
 }
 
@@ -601,8 +858,9 @@ void Settings::setShadeOpacity(double opacity)
   if (opacity > m_shadeOpacity || opacity < m_shadeOpacity)
   {
     m_shadeOpacity = qMin(qMax(::settings::ranges::shadeOpacity.min, opacity), ::settings::ranges::shadeOpacity.max);
-    m_settings->setValue(::settings::shadeOpacity, m_shadeOpacity);
-    logDebug(lcSettings) << "shade.opacity = " << m_shadeOpacity;
+    m_config->setShadeOpacity(m_shadeOpacity);
+    save();
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "shade.opacity = " << m_shadeOpacity;
     emit shadeOpacityChanged(m_shadeOpacity);
   }
 }
@@ -613,8 +871,9 @@ void Settings::setCursor(Qt::CursorShape cursor)
   if (cursor == m_cursor) { return; }
 
   m_cursor = qMin(qMax(static_cast<Qt::CursorShape>(0), cursor), Qt::LastCursor);
-  m_settings->setValue(::settings::cursor, static_cast<int>(m_cursor));
-  logDebug(lcSettings) << "cursor = " << m_cursor;
+  m_config->setCursor(static_cast<int>(m_cursor));
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "cursor = " << m_cursor;
   emit cursorChanged(m_cursor);
 }
 
@@ -630,8 +889,9 @@ void Settings::setSpotShape(const QString& spotShapeQmlComponent)
 
   if (it != spotShapes().cend()) {
     m_spotShape = it->qmlComponent();
-    m_settings->setValue(::settings::spotShape, m_spotShape);
-    logDebug(lcSettings) << "spot.shape = " << m_spotShape;
+    m_config->setSpotShape(m_spotShape);
+    save();
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "spot.shape = " << m_spotShape;
     emit spotShapeChanged(m_spotShape);
     setSpotRotationAllowed(it->allowRotation());
   }
@@ -643,8 +903,9 @@ void Settings::setSpotRotation(double rotation)
   if (rotation > m_spotRotation || rotation < m_spotRotation)
   {
     m_spotRotation = qMin(qMax(::settings::ranges::spotRotation.min, rotation), ::settings::ranges::spotRotation.max);
-    m_settings->setValue(::settings::spotRotation, m_spotRotation);
-    logDebug(lcSettings) << "spot.rotation = " << m_spotRotation;
+    m_config->setSpotRotation(m_spotRotation);
+    save();
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "spot.rotation = " << m_spotRotation;
     emit spotRotationChanged(m_spotRotation);
   }
 }
@@ -699,8 +960,9 @@ void Settings::setShowBorder(bool show)
   if (show == m_showBorder) { return; }
 
   m_showBorder = show;
-  m_settings->setValue(::settings::showBorder, m_showBorder);
-  logDebug(lcSettings) << "border = " << m_showBorder;
+  m_config->setShowBorder(m_showBorder);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "border = " << m_showBorder;
   emit showBorderChanged(m_showBorder);
 }
 
@@ -710,8 +972,9 @@ void Settings::setBorderColor(const QColor& color)
   if (color == m_borderColor) { return; }
 
   m_borderColor = color;
-  m_settings->setValue(::settings::borderColor, m_borderColor);
-  logDebug(lcSettings) << "border.color = " << m_borderColor.name();
+  m_config->setBorderColor(m_borderColor);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "border.color = " << m_borderColor.name();
   emit borderColorChanged(m_borderColor);
 }
 
@@ -721,8 +984,9 @@ void Settings::setBorderSize(int size)
   if (size == m_borderSize) { return; }
 
   m_borderSize = qMin(qMax(::settings::ranges::borderSize.min, size), ::settings::ranges::borderSize.max);
-  m_settings->setValue(::settings::borderSize, m_borderSize);
-  logDebug(lcSettings) << "border.size = " << m_borderSize;
+  m_config->setBorderSize(m_borderSize);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "border.size = " << m_borderSize;
   emit borderSizeChanged(m_borderSize);
 }
 
@@ -732,8 +996,9 @@ void Settings::setBorderOpacity(double opacity)
   if (opacity > m_borderOpacity || opacity < m_borderOpacity)
   {
     m_borderOpacity = qMin(qMax(::settings::ranges::borderOpacity.min, opacity), ::settings::ranges::borderOpacity.max);
-    m_settings->setValue(::settings::borderOpacity, m_borderOpacity);
-    logDebug(lcSettings) << "border.opacity = " << m_borderOpacity;
+    m_config->setBorderOpacity(m_borderOpacity);
+    save();
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "border.opacity = " << m_borderOpacity;
     emit borderOpacityChanged(m_borderOpacity);
   }
 }
@@ -744,8 +1009,9 @@ void Settings::setZoomEnabled(bool enabled)
   if (enabled == m_zoomEnabled) { return; }
 
   m_zoomEnabled = enabled;
-  m_settings->setValue(::settings::zoomEnabled, m_zoomEnabled);
-  logDebug(lcSettings) << "zoom = " << m_zoomEnabled;
+  m_config->setZoomEnabled(m_zoomEnabled);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "zoom = " << m_zoomEnabled;
   emit zoomEnabledChanged(m_zoomEnabled);
 }
 
@@ -755,10 +1021,24 @@ void Settings::setZoomFactor(double factor)
   if (factor > m_zoomFactor || factor < m_zoomFactor)
   {
     m_zoomFactor = qMin(qMax(::settings::ranges::zoomFactor.min, factor), ::settings::ranges::zoomFactor.max);
-    m_settings->setValue(::settings::zoomFactor, m_zoomFactor);
-    logDebug(lcSettings) << "zoom.factor = " << m_zoomFactor;
+    m_config->setZoomFactor(m_zoomFactor);
+    save();
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "zoom.factor = " << m_zoomFactor;
     emit zoomFactorChanged(m_zoomFactor);
   }
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setZoomMode(const QString& mode)
+{
+  const auto normalizedMode = mode.trimmed().toLower();
+  if (!isZoomMode(normalizedMode) || normalizedMode == m_zoomMode) { return; }
+
+  m_zoomMode = normalizedMode;
+  m_config->setZoomMode(m_zoomMode);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "zoom.mode = " << m_zoomMode;
+  emit zoomModeChanged(m_zoomMode);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -766,8 +1046,9 @@ void Settings::setMultiScreenOverlayEnabled(bool enabled)
 {
     if (m_multiScreenOverlayEnabled == enabled) { return; }
     m_multiScreenOverlayEnabled = enabled;
-    m_settings->setValue(::settings::multiScreenOverlay, m_multiScreenOverlayEnabled);
-    logDebug(lcSettings) << "multi-screen-overlay = " << m_multiScreenOverlayEnabled;
+    m_config->setMultiScreenOverlay(m_multiScreenOverlayEnabled);
+    save();
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "multi-screen-overlay = " << m_multiScreenOverlayEnabled;
     emit multiScreenOverlayEnabledChanged(m_multiScreenOverlayEnabled);
 }
 
@@ -797,13 +1078,13 @@ void Settings::setDeviceInputSeqInterval(const DeviceId& dId, int intervalMs)
 {
   const auto v = qMin(qMax(::settings::ranges::inputSequenceInterval.min, intervalMs),
                            ::settings::ranges::inputSequenceInterval.max);
-  m_settings->setValue(settingsKey(dId, ::settings::inputSequenceInterval), v);
+  writeValue(settingsKey(dId, ::settings::inputSequenceInterval), v);
 }
 
 // -------------------------------------------------------------------------------------------------
 int Settings::deviceInputSeqInterval(const DeviceId& dId) const
 {
-  const auto value = m_settings->value(settingsKey(dId, ::settings::inputSequenceInterval),
+  const auto value = readValue(settingsKey(dId, ::settings::inputSequenceInterval),
                                        ::settings::defaultValue::inputSequenceInterval).toInt();
   return qMin(qMax(::settings::ranges::inputSequenceInterval.min, value),
                    ::settings::ranges::inputSequenceInterval.max);
@@ -812,24 +1093,15 @@ int Settings::deviceInputSeqInterval(const DeviceId& dId) const
 // -------------------------------------------------------------------------------------------------
 void Settings::setDeviceInputMapConfig(const DeviceId& dId, const InputMapConfig& imc)
 {
-  const int sizeBefore = m_settings->value(settingsKey(dId, ::settings::inputMapConfig)
-                                           + "/size", 0).toInt();
-  m_settings->beginWriteArray(settingsKey(dId, ::settings::inputMapConfig), imc.size());
-  int index = 0;
+  QByteArray serialized;
+  QDataStream stream(&serialized, QIODevice::WriteOnly);
+  stream.setVersion(QDataStream::Qt_6_0);
+  stream << inputMapFormatVersion << quint32(imc.size());
   for (const auto& item : imc)
   {
-    m_settings->setArrayIndex(index++);
-    m_settings->setValue("deviceSequence", QVariant::fromValue(item.first));
-    m_settings->setValue("mappedAction", QVariant::fromValue(item.second));
+    stream << item.first << item.second;
   }
-  m_settings->endArray();
-
-  // Remove old entries...
-  m_settings->beginGroup(settingsKey(dId, ::settings::inputMapConfig));
-  for (; index < sizeBefore; ++index) {
-    m_settings->remove(QString::number(index+1));
-  }
-  m_settings->endGroup();
+  writeValue(settingsKey(dId, inputMapConfigDataKey), serialized);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -837,15 +1109,31 @@ InputMapConfig Settings::getDeviceInputMapConfig(const DeviceId& dId)
 {
   InputMapConfig cfg;
 
-  const int size = m_settings->beginReadArray(settingsKey(dId, ::settings::inputMapConfig));
-  for (int i = 0; i < size; ++i)
+  const auto serialized =
+    readValue(settingsKey(dId, inputMapConfigDataKey), QByteArray()).toByteArray();
+  if (serialized.isEmpty()) {
+    return cfg;
+  }
+
+  QDataStream stream(serialized);
+  stream.setVersion(QDataStream::Qt_6_0);
+  quint32 version = 0;
+  quint32 size = 0;
+  stream >> version >> size;
+  if (version != inputMapFormatVersion || size > 1024) {
+    qCWarning(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Ignoring unsupported device input mapping data.");
+    return cfg;
+  }
+
+  for (quint32 i = 0; i < size; ++i)
   {
-    m_settings->setArrayIndex(i);
-    const auto seq = m_settings->value("deviceSequence");
-    if (!seq.canConvert<KeyEventSequence>()) { continue; }
-    const auto conf = m_settings->value("mappedAction");
-    if (!conf.canConvert<MappedAction>()) { continue; }
-    auto mappedAction = qvariant_cast<MappedAction>(conf);
+    KeyEventSequence sequence;
+    MappedAction mappedAction;
+    stream >> sequence >> mappedAction;
+    if (stream.status() != QDataStream::Ok || !mappedAction.action) {
+      qCWarning(PROJECTEUR_SETTINGS_LOG).noquote() << QStringLiteral("Ignoring invalid device input mapping data.");
+      return {};
+    }
     if (mappedAction.action->type() == Action::Type::ScrollHorizontal) {
       mappedAction.action = GlobalActions::scrollHorizontal();
     } else if (mappedAction.action->type() == Action::Type::ScrollVertical) {
@@ -853,50 +1141,57 @@ InputMapConfig Settings::getDeviceInputMapConfig(const DeviceId& dId)
     } else if (mappedAction.action->type() == Action::Type::VolumeControl) {
       mappedAction.action = GlobalActions::volumeControl();
     }
-    cfg.emplace(qvariant_cast<KeyEventSequence>(seq), std::move(mappedAction));
+    cfg.emplace(std::move(sequence), std::move(mappedAction));
   }
-  m_settings->endArray();
 
   return cfg;
 }
 
 // -------------------------------------------------------------------------------------------------
-void Settings::setTimerSettings(const DeviceId& dId, int timerId, bool enabled, int seconds)
+void Settings::setDevicePresentationTimerHapticStrength(const DeviceId& dId, int strength)
 {
-  m_settings->setValue(settingsKey(dId, QString(::settings::timerEnabled).arg(timerId)), enabled);
-  m_settings->setValue(settingsKey(dId, QString(::settings::timerSeconds).arg(timerId)), seconds);
+  writeValue(
+    settingsKey(dId, ::settings::presentationTimerHapticStrength),
+    std::clamp(strength, 0, 100));
 }
 
 // -------------------------------------------------------------------------------------------------
-std::pair<bool, int> Settings::timerSettings(const DeviceId& dId, int timerId) const
+int Settings::devicePresentationTimerHapticStrength(const DeviceId& dId) const
 {
-  const auto enabled = m_settings->value(
-    settingsKey(dId, QString(::settings::timerEnabled).arg(timerId)), false).toBool();
-  const auto seconds = m_settings->value(
-    settingsKey(dId, QString(::settings::timerSeconds).arg(timerId)), 900 + 900 * timerId).toInt();
-  return std::make_pair(enabled, seconds);
+  const auto deviceKey = settingsKey(dId, ::settings::presentationTimerHapticStrength);
+  if (contains(deviceKey)) {
+    return std::clamp(readValue(deviceKey).toInt(), 0, 100);
+  }
+
+  return ::settings::defaultValue::presentationTimerHapticStrength;
 }
 
 // -------------------------------------------------------------------------------------------------
-void Settings::setVibrationSettings(const DeviceId& dId, uint8_t len, uint8_t intensity)
+void Settings::setPresentationTimerEnabled(bool enabled)
 {
-  m_settings->setValue(settingsKey(dId, ::settings::vibrationLength), len);
-  m_settings->setValue(settingsKey(dId, ::settings::vibrationIntensity), intensity);
+  m_config->setPresentationTimerEnabled(enabled);
+  save();
 }
 
 // -------------------------------------------------------------------------------------------------
-std::pair<uint8_t, uint8_t> Settings::vibrationSettings(const DeviceId& dId) const
+bool Settings::presentationTimerEnabled() const
 {
-  const auto len = m_settings->value(
-    settingsKey(dId, ::settings::vibrationLength),
-    ::settings::defaultValue::vibrationLength).toUInt();
-  const auto intensity = m_settings->value(
-    settingsKey(dId, ::settings::vibrationIntensity),
-    ::settings::defaultValue::vibrationIntensity).toUInt();
-  return std::make_pair(len, intensity);
+  return m_config->presentationTimerEnabled();
 }
 
 // -------------------------------------------------------------------------------------------------
+void Settings::setPresentationTimerDurationSeconds(int seconds)
+{
+  m_config->setPresentationTimerDurationSeconds(seconds);
+  save();
+}
+
+// -------------------------------------------------------------------------------------------------
+int Settings::presentationTimerDurationSeconds() const
+{
+  return m_config->presentationTimerDurationSeconds();
+}
+
 // -------------------------------------------------------------------------------------------------
 PresetModel::PresetModel(QObject* parent)
   : PresetModel({}, parent)
@@ -926,7 +1221,7 @@ QVariant PresetModel::data(const QModelIndex& index, int role) const
   if (role == Qt::DisplayRole)
   {
     if (index.row() == 0) {
-      return tr("Current Settings");
+      return i18n("Current Settings");
     }
 
     return m_presets[index.row()-1];
@@ -977,5 +1272,3 @@ void PresetModel::removePreset(const QString& preset)
   m_presets.erase(r.first, r.second);
   endRemoveRows();
 }
-
-

@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QPixmap>
 
+class KWinScreencast;
 class QScreen;
 
 class LinuxDesktop : public QObject
@@ -12,18 +13,21 @@ class LinuxDesktop : public QObject
   Q_OBJECT
 
 public:
-  enum class Type : uint8_t { KDE, Gnome, Other };
+  enum class Type : uint8_t { KDE, Other };
 
   explicit LinuxDesktop(QObject* parent = nullptr);
+  ~LinuxDesktop() override;
 
   bool isWayland() const { return m_wayland; };
   Type type() const { return m_type; };
 
   QPixmap grabScreen(QScreen* screen) const;
+  QObject* streamScreen(QScreen* screen, QObject* parent = nullptr);
+  void setShakeCursorEffectSuppressed(bool suppressed);
 
 private:
   bool m_wayland = false;
   Type m_type = Type::Other;
-
-  QPixmap grabScreenWayland(QScreen* screen) const;
+  bool m_shakeCursorEffectSuppressed = false;
+  KWinScreencast* m_screencast = nullptr;
 };

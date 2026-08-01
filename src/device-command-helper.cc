@@ -24,29 +24,43 @@ bool DeviceCommandHelper::sendVibrateCommand(uint8_t intensity, uint8_t length)
     return false;
   }
 
-  for ( auto const& dev : m_spotlight->connectedDevices()) {
-    if (auto connection = m_spotlight->deviceConnection(dev.id)) {
-      if (!connection->hasHidppSupport()) {
-        continue;
-      }
+  bool commandSent = false;
+  for (const auto& device : m_spotlight->connectedDevices()) {
+    commandSent = sendVibrateCommand(device.id, intensity, length) || commandSent;
+  }
+  return commandSent;
+}
 
-      for (auto const& subInfo : connection->subDevices()) {
-        auto const& subConn = subInfo.second;
-        if (!subConn || !subConn->hasFlags(DeviceFlag::Vibrate)) {
-          continue;
-        }
+// -------------------------------------------------------------------------------------------------
+bool DeviceCommandHelper::sendVibrateCommand(const DeviceId& deviceId, uint8_t intensity,
+                                             uint8_t length)
+{
+  if (m_spotlight.isNull()) {
+    return false;
+  }
 
-        if (auto hidppConn = std::dynamic_pointer_cast<SubHidppConnection>(subConn))
-        {
-          hidppConn->sendVibrateCommand(intensity, length,
-          [](HidppConnectionInterface::MsgResult, HIDPP::Message&&) {
-              // logDebug(hid) << tr("Vibrate command returned: %1 (%2)")
-              //        .arg(toString(result)).arg(msg.hex());
-          });
-        }
-      }
+  const auto connection = m_spotlight->deviceConnection(deviceId);
+  if (!connection || !connection->hasHidppSupport()) {
+    return false;
+  }
+
+  bool commandSent = false;
+  for (const auto& subInfo : connection->subDevices())
+  {
+    const auto& subConnection = subInfo.second;
+    if (!subConnection || !subConnection->hasFlags(DeviceFlag::Vibrate)) {
+      continue;
+    }
+
+    if (const auto hidppConnection =
+          std::dynamic_pointer_cast<SubHidppConnection>(subConnection))
+    {
+      hidppConnection->sendVibrateCommand(intensity, length,
+      [](HidppConnectionInterface::MsgResult, HIDPP::Message&&) {
+      });
+      commandSent = true;
     }
   }
 
-  return true;
+  return commandSent;
 }

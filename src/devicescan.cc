@@ -3,6 +3,8 @@
 
 #include "devicescan.h"
 
+#include <KLocalizedString>
+
 #include <array>
 
 #include <QDirIterator>
@@ -16,13 +18,13 @@ bool isExtraDeviceSupported(quint16 vendorId, quint16 productId);
 QString getExtraDeviceName(quint16 vendorId, quint16 productId);
 
 namespace {
-  class DeviceScan_ : public QObject {}; // for i18n and logging
-
   // -----------------------------------------------------------------------------------------------
   // List of supported devices
-  const std::array<SupportedDevice, 2> supportedDefaultDevices {{
+  const std::array<SupportedDevice, 4> supportedDefaultDevices {{
     {0x46d, 0xc53e, false, "Logitech Spotlight (USB)"},
     {0x46d, 0xb503, true, "Logitech Spotlight (Bluetooth)"},
+    {0x46d, 0xc548, false, "Logitech Spotlight 2 (USB-C receiver)"},
+    {0x46d, 0xb506, true, "Logitech Spotlight 2 (Bluetooth)"},
   }};
 
   // -----------------------------------------------------------------------------------------------
@@ -165,18 +167,19 @@ namespace DeviceScan {
   // -----------------------------------------------------------------------------------------------
   ScanResult getDevices(const std::vector<SupportedDevice>& additionalDevices)
   {
-    constexpr char hidDevicePath[] = "/sys/bus/hid/devices";
+    const QString hidDevicePath = QStringLiteral("/sys/bus/hid/devices");
 
     ScanResult result;
     const QFileInfo dpInfo(hidDevicePath);
 
     if (!dpInfo.exists()) {
-      result.errorMessages.push_back(DeviceScan_::tr("HID device path '%1' does not exist.").arg(hidDevicePath));
+      result.errorMessages.push_back(i18n("HID device path '%1' does not exist.", hidDevicePath));
       return result;
     }
 
     if (!dpInfo.isExecutable()) {
-      result.errorMessages.push_back(DeviceScan_::tr("HID device path '%1': Cannot list files.").arg(hidDevicePath));
+      result.errorMessages.push_back(
+        i18n("HID device path '%1': Cannot list files.", hidDevicePath));
       return result;
     }
 

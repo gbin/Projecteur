@@ -1,61 +1,41 @@
-list(APPEND _PkgDeps_Projecteur_opensuse
-  "libqt5-qtgraphicaleffects >= 5.7"
-  "libQt5Widgets5 >= 5.7"
-  "libQt5X11Extras5 >= 5.7"
-  "libQt5DBus5 >= 5.7"
-  "shadow"
-  "udev"
-)
-
-list(APPEND _PkgDeps_Projecteur_fedora
-  "qt5-qtbase >= 5.7"
-  "qt5-qtdeclarative >= 5.7"
-  "qt5-qtgraphicaleffects >= 5.7"
-  "qt5-qtx11extras >= 5.7"
-  "passwd"
-  "udev"
-)
-
-list(APPEND _PkgDeps_Projecteur_centos
-  "qt5-qtbase >= 5.7"
-  "qt5-qtdeclarative >= 5.7"
-  "qt5-qtgraphicaleffects >= 5.7"
-  "qt5-qtx11extras >= 5.7"
-  "passwd"
-  "udev"
-)
-
-list(APPEND _PkgDeps_Projecteur_debian
-  "qml-module-qtgraphicaleffects (>= 5.7)"
-  "libqt5widgets5 (>= 5.7)"
-  "libqt5x11extras5 (>= 5.7)"
-  "passwd"
-  "udev"
-  "libc6"
-)
-
 list(APPEND _PkgDeps_Projecteur_archlinux
-  "qt5-base>=5.7"
-  "qt5-declarative>=5.7"
-  "qt5-graphicaleffects>=5.7"
-  "qt5-x11extras>=5.7"
+  "qt6-base>=6.10"
+  "qt6-declarative>=6.10"
+  "qt6-wayland>=6.10"
+  "layer-shell-qt>=6.7"
+  "kconfig>=6.7"
+  "kconfigwidgets>=6.7"
+  "kcoreaddons>=6.7"
+  "kdbusaddons>=6.7"
+  "kglobalaccel>=6.7"
+  "ki18n>=6.7"
+  "kpipewire>=6.7"
+  "knotifications>=6.7"
+  "kwidgetsaddons>=6.7"
+  "kwindowsystem>=6.7"
+  "kxmlgui>=6.7"
+  "libplasma>=6.7"
   "udev"
 )
 
 list(APPEND _PkgDepsMake_Projecteur_archlinux
-  "fakeroot" "awk" "cmake" "make" "lsb-release" "tar" "pkg-config" "qt5-tools"
+  "fakeroot" "awk" "cmake>=3.20" "extra-cmake-modules>=6.7" "gettext" "make" "lsb-release"
+  "tar" "pkg-config" "qt6-shadertools>=6.10"
 )
 
+set(_PkgDeps_Projecteur_debian "udev")
+set(_PkgDeps_Projecteur_ubuntu "udev")
+set(_PkgDeps_Projecteur_fedora "systemd-udev")
+set(_PkgDeps_Projecteur_opensuse "udev")
+
 list(APPEND PkgDependencies_MAP_Projecteur
-  "debian::_PkgDeps_Projecteur_debian"
-  "ubuntu::_PkgDeps_Projecteur_debian"
-  "fedora::_PkgDeps_Projecteur_fedora"
-  "centos::_PkgDeps_Projecteur_centos"
-  "rhel::_PkgDeps_Projecteur_centos"
-  "opensuse::_PkgDeps_Projecteur_opensuse"
-  "opensuse-leap::_PkgDeps_Projecteur_opensuse"
   "archlinux::_PkgDeps_Projecteur_archlinux"
   "arch::_PkgDeps_Projecteur_archlinux"
+  "debian::_PkgDeps_Projecteur_debian"
+  "ubuntu::_PkgDeps_Projecteur_ubuntu"
+  "fedora::_PkgDeps_Projecteur_fedora"
+  "opensuse::_PkgDeps_Projecteur_opensuse"
+  "opensuse-tumbleweed::_PkgDeps_Projecteur_opensuse"
 )
 
 list(APPEND PkgDependenciesMake_MAP_Projecteur

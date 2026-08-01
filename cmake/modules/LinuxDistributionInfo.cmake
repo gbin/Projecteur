@@ -1,5 +1,5 @@
 # This file is part of Projecteur - https://github.com/jahnf/projecteur - See LICENSE.md and README.md
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.20)
 
 # Try to get the Linux distribution and version as a string (host system)
 # When cross compiling this function won't work to get the target distribution.
@@ -35,7 +35,7 @@ function(get_linux_distribution VAR_DIST_NAME VAR_DIST_VERSION)
   endforeach()
 
   # Get distribution version/release - try different keys
-  foreach(var VERSION_ID DISTRIB_RELEASE VERSION)
+  foreach(var VERSION_ID VERSION_CODENAME UBUNTU_CODENAME DISTRIB_RELEASE VERSION)
     foreach(line IN LISTS rel_info_all)
       if( "${line}" MATCHES "^${var}=[\"]?([^ \"]*)")
         string(STRIP "${CMAKE_MATCH_1}" DIST_VERSION)

@@ -41,6 +41,7 @@ public:
   // --- HidppConnectionInterface implementation:
 
   BusType busType() const override { return m_details.deviceId.busType; }
+  uint8_t deviceIndex() const override { return m_deviceIndex; }
   ssize_t sendData(std::vector<uint8_t> msg) override;
   ssize_t sendData(HIDPP::Message msg) override;
   void sendData(std::vector<uint8_t> msg, SendResultCallback resultCb) override;
@@ -106,6 +107,8 @@ private:
   void checkAndUpdatePresenterState(std::function<void(PresenterState)> cb);
 
   void clearTimedOutRequests();
+  void findPresenterDeviceIndex(uint8_t candidate, std::function<void(bool)> cb);
+  void sendPing(uint8_t deviceIndex, RequestResultCallback cb);
 
   void sendDataBatch(DataBatch dataBatch, DataBatchResultCallback cb, bool continueOnError,
                      std::vector<MsgResult> results);
@@ -115,6 +118,8 @@ private:
   HIDPP::FeatureSet m_featureSet;
   HIDPP::ProtocolVersion m_protocolVersion;
   HIDPP::BatteryInfo m_batteryInfo;
+  uint8_t m_deviceIndex = HIDPP::DeviceIndex::WirelessDevice1;
+  bool m_deviceIndexKnown = true;
 
   ReceiverState m_receiverState = ReceiverState::Uninitialized;
   PresenterState m_presenterState = PresenterState::Uninitialized;
