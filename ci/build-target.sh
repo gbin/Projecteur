@@ -6,6 +6,11 @@ build_dir="build/ci-${target}"
 # Package managers require an absolute path for locally built packages.
 asset_dir="$(pwd)/release-assets/${target}"
 
+# Container jobs run as root while actions/checkout creates the worktree as the
+# runner user. Trust this exact checkout so versioning and source archives can
+# inspect Git history in subsequent container steps.
+git config --global --add safe.directory "$(pwd)"
+
 case "$target" in
   fedora-rawhide|debian-sid)
     package_target=0
