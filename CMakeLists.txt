@@ -309,7 +309,7 @@ install(FILES src/org.projecteur.Projecteur.xml DESTINATION ${KDE_INSTALL_DBUSIN
 # Set variables for file configurations
 get_target_property(VERSION_STRING projecteur VERSION_STRING)
 get_target_property(VERSION_DATE_MONTH_YEAR projecteur VERSION_DATE_MONTH_YEAR)
-set(HOMEPAGE "https://github.com/gbin/Projecteur-kde")
+set(HOMEPAGE "https://github.com/gbin/Projecteur")
 
 set(PROJECTEUR_APPLICATION_ID "org.projecteur.Projecteur")
 configure_file("${TMPLDIR}/projecteur.desktop.in"

@@ -9,14 +9,15 @@ straight to a pull request.
 
 ## Project scope
 
-This edition of Projecteur targets:
+The current Projecteur development line targets:
 
 - KDE Plasma 6.7 or newer on Wayland
 - Qt 6.11 or newer
 - LayerShellQt and KPipeWire 6.7 or newer
 - Linux presenter devices exposed through evdev and hidraw
 
-Qt 5 and X11 support are outside the scope of this fork.
+Qt 5, X11, and non-Plasma support are maintained only for critical fixes on the
+[`legacy/qt5`](https://github.com/gbin/Projecteur/tree/legacy/qt5) branch.
 
 ## Requirements
 
@@ -39,8 +40,8 @@ Package names vary by distribution. The CI workflow and
 ## Build from source
 
 ```sh
-git clone https://github.com/gbin/Projecteur-kde.git
-cd Projecteur-kde
+git clone https://github.com/gbin/Projecteur.git
+cd Projecteur
 cmake -S . -B build \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/usr \

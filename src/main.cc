@@ -38,15 +38,15 @@ namespace {
       i18n("A KDE Plasma spotlight for Logitech presenter devices."),
       KAboutLicense::MIT,
       i18n("Copyright 2018–2021 Jahn Fuchs\n"
-               "Fork modifications copyright 2026 Guillaume Binet"),
+               "Current development copyright 2026 Guillaume Binet"),
       {},
-      QStringLiteral("https://github.com/gbin/Projecteur-kde"),
-      QStringLiteral("https://github.com/gbin/Projecteur-kde/issues"));
+      QStringLiteral("https://github.com/gbin/Projecteur"),
+      QStringLiteral("https://github.com/gbin/Projecteur/issues"));
 
     aboutData.setOrganizationDomain("projecteur.org");
     aboutData.setDesktopFileName(QStringLiteral("org.projecteur.Projecteur"));
     aboutData.setOtherText(
-      i18n("Independent, unofficial KDE/Wayland fork based on Projecteur.\n\n"
+      i18n("Official KDE Plasma/Wayland edition of Projecteur.\n\n"
                "Build information:\n"
                "Git branch: %1\n"
                "Git hash: %2\n"
@@ -56,7 +56,7 @@ namespace {
              QString::fromUtf8(projecteur::version_buildtype())));
 
     aboutData.addAuthor(
-      QStringLiteral("Guillaume Binet"), i18n("KDE/Wayland fork maintainer"), {},
+      QStringLiteral("Guillaume Binet"), i18n("Projecteur maintainer"), {},
       QStringLiteral("https://github.com/gbin"));
     aboutData.addAuthor(
       QStringLiteral("Jahn Fuchs"), i18n("Original Projecteur author"), {},

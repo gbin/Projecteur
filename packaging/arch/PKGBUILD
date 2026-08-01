@@ -8,7 +8,7 @@ pkgver=0
 pkgrel=1
 pkgdesc='Virtual laser pointer for inertial pointer devices on KDE Plasma Wayland'
 arch=('x86_64')
-url='https://github.com/gbin/Projecteur-kde'
+url='https://github.com/gbin/Projecteur'
 license=('MIT')
 depends=(
   'gcc-libs'

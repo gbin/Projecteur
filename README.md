@@ -2,7 +2,7 @@
 
 **A virtual laser pointer and live magnifier built for KDE Plasma presentations.**
 
-[![Build status](https://github.com/gbin/Projecteur-kde/actions/workflows/ci-build.yml/badge.svg?branch=develop)](https://github.com/gbin/Projecteur-kde/actions/workflows/ci-build.yml?query=branch%3Adevelop)
+[![Build status](https://github.com/gbin/Projecteur/actions/workflows/ci-build.yml/badge.svg?branch=develop)](https://github.com/gbin/Projecteur/actions/workflows/ci-build.yml?query=branch%3Adevelop)
 ![KDE Plasma 6.7+](https://img.shields.io/badge/KDE_Plasma-6.7%2B-1d99f3?logo=kde&logoColor=white)
 ![Wayland only](https://img.shields.io/badge/display-Wayland_only-5c6bc0)
 [![MIT license](https://img.shields.io/badge/license-MIT-2ea44f)](./LICENSE.md)
@@ -15,8 +15,10 @@ close at hand in Plasma.
 [<img src="doc/screenshot-spot.png" alt="Projecteur highlighting and magnifying part of a presentation slide" width="900">](./doc/screenshot-spot.png)
 
 > [!NOTE]
-> This KDE/Wayland edition requires **KDE Plasma 6.7 or newer**, **Qt 6.11 or
-> newer**, and a **Wayland session**. Qt 5 and X11 are not supported.
+> The current development line requires **KDE Plasma 6.7 or newer**, **Qt 6.11
+> or newer**, and a **Wayland session**. The previous Qt 5, X11, and
+> cross-desktop codebase is maintained for critical fixes on the
+> [`legacy/qt5`](https://github.com/gbin/Projecteur/tree/legacy/qt5) branch.
 
 ## Why Projecteur?
 
@@ -57,8 +59,8 @@ with native KDE controls.
 
 ## Install
 
-Projecteur-kde is under active development and currently distributed from
-source. The install step is important: KWin grants zoom access using Projecteur's
+Projecteur is under active development and currently distributed from source.
+The install step is important: KWin grants zoom access using Projecteur's
 installed desktop metadata, and the presenter needs the installed udev rules.
 
 ### Arch Linux and Arch-based distributions
@@ -69,8 +71,8 @@ installs it with `pacman`.
 
 ```sh
 sudo pacman -S --needed just
-git clone https://github.com/gbin/Projecteur-kde.git
-cd Projecteur-kde
+git clone https://github.com/gbin/Projecteur.git
+cd Projecteur
 just install
 ```
 
@@ -79,8 +81,8 @@ just install
 Install the [build dependencies](./CONTRIBUTING.md#requirements), then:
 
 ```sh
-git clone https://github.com/gbin/Projecteur-kde.git
-cd Projecteur-kde
+git clone https://github.com/gbin/Projecteur.git
+cd Projecteur
 cmake -S . -B build \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/usr \
@@ -135,7 +137,7 @@ Projecteur can also accept an additional device at runtime with
   system tray configuration.
 
 The [troubleshooting guide](./doc/TROUBLESHOOTING.md) has detailed checks. If the
-problem remains, [open an issue](https://github.com/gbin/Projecteur-kde/issues)
+problem remains, [open an issue](https://github.com/gbin/Projecteur/issues)
 with the output of `projecteur --fullversion` and `projecteur --device-scan`.
 
 ## Documentation
@@ -148,20 +150,16 @@ with the output of `projecteur --fullversion` and `projecteur --device-scan`.
 - [Contributing and development setup](./CONTRIBUTING.md)
 - Command-line reference: `man projecteur`
 
-## About this edition
+## About Projecteur
 
-This is an independent, unofficial KDE Plasma/Wayland fork of
-[Jahn Fuchs' Projecteur](https://github.com/jahnf/Projecteur). It adds a native
-Plasma 6 experience, a Wayland-native overlay and live zoom pipeline, and
-Logitech Spotlight 2 support.
-
-Please report issues that affect this edition in
-[this repository](https://github.com/gbin/Projecteur-kde/issues). Report upstream
-only when the same problem also occurs in the original project.
+Projecteur was created by Jahn Fuchs and transferred to Guillaume Binet in 2026.
+The current development line adds a native Plasma 6 experience, a
+Wayland-native overlay and live zoom pipeline, and Logitech Spotlight 2 support.
+Please report problems in the [Projecteur issue tracker](https://github.com/gbin/Projecteur/issues).
 
 ## License
 
 Projecteur is available under the [MIT License](./LICENSE.md).
 
-Copyright © 2018–2021 Jahn Fuchs. Fork modifications copyright © 2026 Guillaume
-Binet and Projecteur contributors.
+Copyright © 2018–2021 Jahn Fuchs. Current development copyright © 2026
+Guillaume Binet and Projecteur contributors.

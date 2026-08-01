@@ -1,7 +1,7 @@
 # Troubleshooting Projecteur
 
 Start with the checks below. If you still need help, open an issue in the
-[Projecteur-kde issue tracker](https://github.com/gbin/Projecteur-kde/issues) and
+[Projecteur issue tracker](https://github.com/gbin/Projecteur/issues) and
 include:
 
 ```sh
@@ -14,7 +14,7 @@ model, and whether it is connected over USB or Bluetooth.
 
 ## Confirm the supported desktop
 
-This edition requires KDE Plasma on Wayland. Check the session:
+The current development line requires KDE Plasma on Wayland. Check the session:
 
 ```sh
 printf '%s\n' "$XDG_CURRENT_DESKTOP"
@@ -22,7 +22,7 @@ printf '%s\n' "$XDG_SESSION_TYPE"
 ```
 
 The session type must report `wayland`. Do not force
-`QT_QPA_PLATFORM=xcb`; X11 is not supported by this fork.
+`QT_QPA_PLATFORM=xcb`; X11 is not supported by the current development line.
 
 ## Presenter is not connected
 

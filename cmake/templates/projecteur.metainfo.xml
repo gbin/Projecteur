@@ -29,7 +29,7 @@
     <screenshots>
         <screenshot type="default">
             <caption>Highlight virtual pointer effect</caption>
-            <image type="source" width="867" height="775">https://raw.githubusercontent.com/gbin/Projecteur-kde/develop/doc/screenshot-spot.png</image>
+            <image type="source" width="867" height="775">https://raw.githubusercontent.com/gbin/Projecteur/develop/doc/screenshot-spot.png</image>
         </screenshot>
     </screenshots>
     <categories>
