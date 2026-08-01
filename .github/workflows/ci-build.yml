@@ -2,35 +2,79 @@ name: ci-build
 
 on:
   push:
-    branches: [master, develop]
+    branches: [develop, master]
   pull_request:
-    branches: [master, develop, "feature/**"]
+    branches: [develop, master]
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  LC_ALL: C.UTF-8
+  # GitVersion predates GitHub Actions and uses this value for detached checkouts.
+  TRAVIS_BRANCH: ${{ github.base_ref || github.ref_name }}
+
 jobs:
-  archlinux:
+  build:
+    name: ${{ matrix.id }}
     runs-on: ubuntu-latest
-    container: archlinux:latest
+    continue-on-error: ${{ matrix.moving && github.base_ref != 'master' && github.ref_name != 'master' }}
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: archlinux
+            image: archlinux:latest
+            moving: false
+            package: true
+          - id: fedora-44
+            image: fedora:44
+            moving: false
+            package: true
+          - id: tumbleweed
+            image: opensuse/tumbleweed:latest
+            moving: true
+            package: true
+          - id: debian-testing
+            image: debian:testing-slim
+            moving: true
+            package: true
+          - id: ubuntu-26.10
+            image: ubuntu:devel
+            moving: true
+            package: true
+          - id: fedora-rawhide
+            image: fedora:rawhide
+            moving: true
+            package: false
+          - id: debian-sid
+            image: debian:sid-slim
+            moving: true
+            package: false
 
     steps:
-      - name: Install build dependencies
-        run: >-
-          pacman -Syu --noconfirm
-          base-devel cmake extra-cmake-modules gettext git kconfig kconfigwidgets kcoreaddons kdbusaddons
-          kglobalaccel ki18n knotifications kpipewire kwidgetsaddons kwindowsystem kxmlgui
-          layer-shell-qt libplasma qt6-base qt6-declarative qt6-wayland
-
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
-      - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DPACKAGE_TARGETS=OFF
+      - name: Install dependencies
+        run: ./ci/install-dependencies.sh "${{ matrix.id }}"
 
-      - name: Build
-        run: cmake --build build --parallel 2
+      - name: Build, package, and smoke test
+        run: ./ci/build-target.sh "${{ matrix.id }}"
 
-      - name: Smoke test
-        run: |
-          ./build/projecteur --version
-          ./build/projecteur --help
+      - name: Preserve package for one day
+        if: matrix.package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: package-${{ matrix.id }}
+          path: release-assets/${{ matrix.id }}/
+          if-no-files-found: error
+          retention-days: 1
