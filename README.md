@@ -7,7 +7,7 @@
 ![Wayland only](https://img.shields.io/badge/display-Wayland_only-5c6bc0)
 [![MIT license](https://img.shields.io/badge/license-MIT-2ea44f)](./LICENSE.md)
 
-Projecteur turns a Logitech Spotlight—or another supported presenter—into an
+Projecteur turns a Logitech Spotlight 1/2 and another supported presenter into an
 on-screen spotlight your audience can see in the room, in a screen share, and in
 the recording. Point, magnify, change slides, run a timer, and keep everything
 close at hand in Plasma.
@@ -35,7 +35,7 @@ close at hand in Plasma.
 
 ## See it in action
 
-### Magnify the content, not the pixels
+### Magnify the content
 
 Choose smooth scaling for images, edge-enhanced **Text and UI** mode for
 documents and application demos, or pixel-perfect scaling for source pixels.
