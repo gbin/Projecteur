@@ -26,7 +26,7 @@ case "$target" in
   tumbleweed)
     zypper -qn refresh
     zypper -qn install -y \
-      gcc-c++ cmake extra-cmake-modules gettext-tools git-core \
+      gcc-c++ cmake extra-cmake-modules gettext-tools git-core gawk \
       pkgconf-pkg-config libudev-devel rpm-build qt6-base-devel \
       qt6-declarative-devel qt6-shadertools-devel qt6-wayland-devel \
       kf6-kconfig-devel kf6-kconfigwidgets-devel kf6-kcoreaddons-devel \

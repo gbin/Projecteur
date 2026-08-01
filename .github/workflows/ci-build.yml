@@ -42,7 +42,7 @@ jobs:
             package: true
           - id: tumbleweed
             image: opensuse/tumbleweed:latest
-            bootstrap: zypper -qn refresh && zypper -qn install -y git-core
+            bootstrap: zypper -qn refresh && zypper -qn install -y git-core gawk
             moving: true
             package: true
           - id: debian-testing
