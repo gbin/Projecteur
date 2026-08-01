@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<node>
+  <interface name="org.projecteur.Projecteur">
+    <property name="TrayVisible" type="b" access="read"/>
+    <property name="OverlayEnabled" type="b" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="SpotlightActive" type="b" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="ConnectedDevices" type="as" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="ConnectedDeviceBatteryLevels" type="ai" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName" value="QList&lt;int&gt;"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QList&lt;int&gt;"/>
+    </property>
+    <property name="ConnectedDeviceBatteryStatuses" type="as" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="Presets" type="as" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="CurrentPreset" type="s" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="TimerEnabled" type="b" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="TimerState" type="s" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="TimerDurationSeconds" type="i" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="TimerRemainingSeconds" type="i" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+
+    <method name="SetOverlayEnabled">
+      <arg name="enabled" type="b" direction="in"/>
+    </method>
+    <method name="SetSpotlightActive">
+      <arg name="active" type="b" direction="in"/>
+    </method>
+    <method name="LoadPreset">
+      <arg name="preset" type="s" direction="in"/>
+      <arg name="loaded" type="b" direction="out"/>
+    </method>
+    <method name="SetTimerEnabled">
+      <arg name="enabled" type="b" direction="in"/>
+    </method>
+    <method name="StartTimer"/>
+    <method name="RestartTimer"/>
+    <method name="ResetTimer"/>
+    <method name="SetTimerDurationSeconds">
+      <arg name="seconds" type="i" direction="in"/>
+    </method>
+    <method name="ShowPreferences"/>
+    <method name="ShowAbout"/>
+    <method name="ApplyCommands">
+      <arg name="commands" type="as" direction="in"/>
+    </method>
+    <method name="Quit"/>
+
+    <signal name="overlayEnabledChanged">
+      <arg name="enabled" type="b"/>
+    </signal>
+    <signal name="spotlightActiveChanged">
+      <arg name="active" type="b"/>
+    </signal>
+    <signal name="connectedDevicesChanged">
+      <arg name="devices" type="as"/>
+    </signal>
+    <signal name="connectedDeviceBatteryLevelsChanged">
+      <arg name="levels" type="ai"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="QList&lt;int&gt;"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QList&lt;int&gt;"/>
+    </signal>
+    <signal name="connectedDeviceBatteryStatusesChanged">
+      <arg name="statuses" type="as"/>
+    </signal>
+    <signal name="presetsChanged">
+      <arg name="presets" type="as"/>
+    </signal>
+    <signal name="currentPresetChanged">
+      <arg name="preset" type="s"/>
+    </signal>
+    <signal name="timerEnabledChanged">
+      <arg name="enabled" type="b"/>
+    </signal>
+    <signal name="timerStateChanged">
+      <arg name="state" type="s"/>
+    </signal>
+    <signal name="timerDurationSecondsChanged">
+      <arg name="seconds" type="i"/>
+    </signal>
+    <signal name="timerRemainingSecondsChanged">
+      <arg name="seconds" type="i"/>
+    </signal>
+  </interface>
+</node>

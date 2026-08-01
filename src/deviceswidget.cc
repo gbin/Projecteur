@@ -4,17 +4,19 @@
 #include "deviceswidget.h"
 
 #include "device-hidpp.h"
-#include "device-vibration.h"
 #include "deviceinput.h"
 #include "iconwidgets.h"
 #include "inputmapconfig.h"
-#include "logging.h"
 #include "settings.h"
 #include "spotlight.h"
 
+#include <KLocalizedString>
+
 #include <QComboBox>
+#include <QGroupBox>
 #include <QLabel>
 #include <QLayout>
+#include <QSignalBlocker>
 #include <QShortcut>
 #include <QSpinBox>
 #include <QStackedLayout>
@@ -24,11 +26,9 @@
 #include <QTextList>
 #include <QTimer>
 
-DECLARE_LOGGING_CATEGORY(preferences)
-
 // -------------------------------------------------------------------------------------------------
 namespace {
-  const auto hexId = logging::hexId;
+  const auto hexId = formatHexId;
 
   QString descriptionString(const QString& name, const DeviceId& id) {
     return QString("%1 (%2:%3) [%4]").arg(name, hexId(id.vendorId), hexId(id.productId), id.phys);
@@ -36,15 +36,6 @@ namespace {
 
   const auto invalidDeviceId = DeviceId(); // vendorId = 0, productId = 0
 
-  bool removeTab(QTabWidget* tabWidget, QWidget* widget)
-  {
-    const auto idx = tabWidget->indexOf(widget);
-    if (idx >= 0) {
-      tabWidget->removeTab(idx);
-      return true;
-    }
-    return false;
-  }
 } // end anonymous namespace
 
 // -------------------------------------------------------------------------------------------------
@@ -79,20 +70,6 @@ DeviceId DevicesWidget::currentDeviceId() const
 }
 
 // -------------------------------------------------------------------------------------------------
-TimerTabWidget* DevicesWidget::createTimerTabWidget(Settings* settings, Spotlight* spotlight)
-{
-  Q_UNUSED(spotlight);
-  const auto w = new TimerTabWidget(settings, this);
-  w->loadSettings(currentDeviceId());
-
-  connect(this, &DevicesWidget::currentDeviceChanged, this, [this](const DeviceId& dId) {
-    if (m_timerTabWidget) { m_timerTabWidget->loadSettings(dId); }
-  });
-
-  return w;
-}
-
-// -------------------------------------------------------------------------------------------------
 QWidget* DevicesWidget::createDevicesWidget(Settings* settings, Spotlight* spotlight)
 {
   const auto dw = new QWidget(this);
@@ -100,7 +77,7 @@ QWidget* DevicesWidget::createDevicesWidget(Settings* settings, Spotlight* spotl
   const auto devHLayout = new QHBoxLayout();
   vLayout->addLayout(devHLayout);
 
-  devHLayout->addWidget(new QLabel(tr("Device"), dw));
+  devHLayout->addWidget(new QLabel(i18n("Device"), dw));
   devHLayout->addWidget(m_devicesCombo);
   devHLayout->setStretch(1, 1);
 
@@ -109,19 +86,106 @@ QWidget* DevicesWidget::createDevicesWidget(Settings* settings, Spotlight* spotl
   m_tabWidget = new QTabWidget(dw);
   vLayout->addWidget(m_tabWidget);
 
-  m_tabWidget->addTab(createInputMapperWidget(settings, spotlight), tr("Input Mapping"));
-  m_timerTabWidget = createTimerTabWidget(settings, spotlight);
+  m_tabWidget->addTab(createInputMapperWidget(settings, spotlight), i18n("Input Mapping"));
 
-  updateTimerTab(spotlight);
+  m_timerFeedbackWidget = createTimerFeedbackWidget(settings);
 
   m_deviceDetailsTabWidget = createDeviceInfoWidget(spotlight);
-  m_tabWidget->addTab(m_deviceDetailsTabWidget, tr("Details"));
+  m_tabWidget->addTab(m_deviceDetailsTabWidget, i18n("Details"));
 
-  // Update the timer tab when the current device has changed
+  updateTimerFeedbackTab(spotlight);
   connect(this, &DevicesWidget::currentDeviceChanged, this,
-  [spotlight, this]() { updateTimerTab(spotlight); });
+  [this, settings, spotlight](const DeviceId& deviceId) {
+    loadTimerFeedbackSettings(settings, deviceId);
+    updateTimerFeedbackTab(spotlight);
+  });
 
   return dw;
+}
+
+// -------------------------------------------------------------------------------------------------
+QWidget* DevicesWidget::createTimerFeedbackWidget(Settings* settings)
+{
+  const auto widget = new QWidget(this);
+  const auto group = new QGroupBox(i18n("Presentation timer feedback"), widget);
+  m_timerFeedbackStrength = new QSpinBox(group);
+  m_timerFeedbackStrength->setRange(0, 100);
+  m_timerFeedbackStrength->setSingleStep(5);
+  m_timerFeedbackStrength->setSuffix(i18n("%"));
+  m_timerFeedbackStrength->setToolTip(i18n("Set to 0% to disable completion vibration."));
+
+  const auto groupLayout = new QGridLayout(group);
+  groupLayout->addWidget(new QLabel(i18n("Completion vibration strength"), group), 0, 0);
+  groupLayout->addWidget(m_timerFeedbackStrength, 0, 1);
+  groupLayout->addWidget(
+    new QLabel(i18n("Vibrates this presenter when the presentation timer finishes."), group),
+    1, 0, 1, 2);
+  groupLayout->setColumnStretch(1, 1);
+
+  const auto layout = new QVBoxLayout(widget);
+  layout->addWidget(group);
+  layout->addStretch(1);
+
+  loadTimerFeedbackSettings(settings, currentDeviceId());
+  connect(m_timerFeedbackStrength,
+          static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+          this, [this, settings](int strength) {
+    settings->setDevicePresentationTimerHapticStrength(currentDeviceId(), strength);
+  });
+
+  return widget;
+}
+
+// -------------------------------------------------------------------------------------------------
+void DevicesWidget::loadTimerFeedbackSettings(Settings* settings, const DeviceId& deviceId)
+{
+  if (!m_timerFeedbackStrength) { return; }
+  const QSignalBlocker blocker(m_timerFeedbackStrength);
+  m_timerFeedbackStrength->setValue(
+    settings->devicePresentationTimerHapticStrength(deviceId));
+}
+
+// -------------------------------------------------------------------------------------------------
+void DevicesWidget::updateTimerFeedbackTab(Spotlight* spotlight)
+{
+  const auto connection = spotlight->deviceConnection(currentDeviceId());
+  bool supportsVibration = false;
+  if (connection)
+  {
+    for (const auto& item : connection->subDevices())
+    {
+      const auto& subDevice = item.second;
+      if (subDevice && subDevice->hasFlags(DeviceFlag::Vibrate)) {
+        supportsVibration = true;
+        break;
+      }
+
+      const auto hidpp = qobject_cast<SubHidppConnection*>(subDevice.get());
+      if (hidpp
+          && (hidpp->featureSet().featureCodeSupported(HIDPP::FeatureCode::PresenterControl)
+              || hidpp->featureSet().featureCodeSupported(HIDPP::FeatureCode::Haptic))) {
+        supportsVibration = true;
+        break;
+      }
+    }
+  }
+
+  const int tabIndex = m_tabWidget->indexOf(m_timerFeedbackWidget);
+  if (supportsVibration && tabIndex < 0) {
+    m_tabWidget->insertTab(1, m_timerFeedbackWidget, i18n("Timer Feedback"));
+  } else if (!supportsVibration && tabIndex >= 0) {
+    m_tabWidget->removeTab(tabIndex);
+  }
+
+  if (m_timerFeedbackContext) { m_timerFeedbackContext->deleteLater(); }
+  if (connection)
+  {
+    m_timerFeedbackContext = new QObject(this);
+    connect(connection.get(), &DeviceConnection::subDeviceFlagsChanged, m_timerFeedbackContext,
+    [this, spotlight](const DeviceId& id, const QString&) {
+      if (id == currentDeviceId()) { updateTimerFeedbackTab(spotlight); }
+    });
+  }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -148,15 +212,15 @@ QWidget* DevicesWidget::createInputMapperWidget(Settings* settings, Spotlight* /
   const auto intervalLayout = new QHBoxLayout();
 
   const auto addBtn = new IconButton(Font::Icon::plus_5, imWidget);
-  addBtn->setToolTip(tr("Add a new input mapping entry."));
+  addBtn->setToolTip(i18n("Add a new input mapping entry."));
   const auto delBtn = new IconButton(Font::Icon::trash_can_1, imWidget);
-  delBtn->setToolTip(tr("Delete the selected input mapping entries (%1).", "%1=shortcut")
-                       .arg(delShortcut->key().toString()));
+  delBtn->setToolTip(i18nc("%1=shortcut", "Delete the selected input mapping entries (%1).",
+                           delShortcut->key().toString()));
   delBtn->setEnabled(false);
 
-  const auto intervalLbl = new QLabel(tr("Input Sequence Interval"), imWidget);
+  const auto intervalLbl = new QLabel(i18n("Input Sequence Interval"), imWidget);
   const auto intervalSb = new QSpinBox(this);
-  const auto intervalUnitLbl = new QLabel(tr("ms"), imWidget);
+  const auto intervalUnitLbl = new QLabel(i18n("ms"), imWidget);
   intervalSb->setMaximum(settings->inputSequenceIntervalRange().max);
   intervalSb->setMinimum(settings->inputSequenceIntervalRange().min);
   intervalSb->setValue(m_inputMapper ? m_inputMapper->keyEventInterval()
@@ -234,7 +298,7 @@ QWidget* DevicesWidget::createInputMapperWidget(Settings* settings, Spotlight* /
 void DevicesWidget::createDeviceComboBox(Spotlight* spotlight)
 {
   m_devicesCombo = new QComboBox(this);
-  m_devicesCombo->setToolTip(tr("List of connected devices."));
+  m_devicesCombo->setToolTip(i18n("List of connected devices."));
 
   for (const auto& dev : spotlight->connectedDevices()) {
     const auto data = QVariant::fromValue(dev.id);
@@ -287,7 +351,7 @@ QWidget* DevicesWidget::createDisconnectedStateWidget()
 {
   const auto stateWidget = new QWidget(this);
   const auto hbox = new QHBoxLayout(stateWidget);
-  const auto label = new QLabel(tr("No devices connected."), stateWidget);
+  const auto label = new QLabel(i18n("No devices connected."), stateWidget);
   label->setToolTip(label->text());
   auto icon = style()->standardIcon(QStyle::SP_MessageBoxWarning);
   const auto iconLabel = new QLabel(stateWidget);
@@ -297,111 +361,6 @@ QWidget* DevicesWidget::createDisconnectedStateWidget()
   hbox->addWidget(label);
   hbox->addStretch();
   return stateWidget;
-}
-
-// -------------------------------------------------------------------------------------------------
-TimerTabWidget::TimerTabWidget(Settings* settings, QWidget* parent)
-  : QWidget(parent)
-  , m_settings(settings)
-  , m_multiTimerWidget(new MultiTimerWidget(this))
-  , m_vibrationSettingsWidget(new VibrationSettingsWidget(this))
-{
-  const auto layout = new QVBoxLayout(this);
-
-  layout->addWidget(m_multiTimerWidget);
-  layout->addWidget(m_vibrationSettingsWidget);
-
-  connect(m_multiTimerWidget, &MultiTimerWidget::timerValueChanged, this,
-  [this](int id, int secs) {
-    m_settings->setTimerSettings(m_deviceId, id, m_multiTimerWidget->timerEnabled(id), secs);
-  });
-
-  connect(m_multiTimerWidget, &MultiTimerWidget::timerEnabledChanged, this,
-  [this](int id, bool enabled) {
-    m_settings->setTimerSettings(m_deviceId, id, enabled, m_multiTimerWidget->timerValue(id));
-  });
-
-  connect(m_vibrationSettingsWidget, &VibrationSettingsWidget::intensityChanged, this,
-  [this](uint8_t intensity) {
-    m_settings->setVibrationSettings(m_deviceId, m_vibrationSettingsWidget->length(), intensity);
-  });
-
-  connect(m_vibrationSettingsWidget, &VibrationSettingsWidget::lengthChanged, this,
-  [this](uint8_t len) {
-    m_settings->setVibrationSettings(m_deviceId, len, m_vibrationSettingsWidget->intensity());
-  });
-
-  connect(m_multiTimerWidget, &MultiTimerWidget::timeout,
-          m_vibrationSettingsWidget, &VibrationSettingsWidget::sendVibrateCommand);
-}
-
-// -------------------------------------------------------------------------------------------------
-void DevicesWidget::updateTimerTab(Spotlight* spotlight)
-{
-    // Helper method to return the first subconnection that supports vibrate.
-  auto getVibrateConnection = [](const std::shared_ptr<DeviceConnection>& conn) {
-    if (conn) {
-      for (const auto& item : conn->subDevices()) {
-        if (item.second->hasFlags(DeviceFlag::Vibrate)) { return item.second; }
-      }
-    }
-    return std::shared_ptr<SubDeviceConnection>{};
-  };
-
-  const auto currentConn = spotlight->deviceConnection(currentDeviceId());
-  const auto vibrateConn = getVibrateConnection(currentConn);
-
-  if (m_timerTabContext) { m_timerTabContext->deleteLater(); }
-
-  if (vibrateConn)
-  {
-    if (m_tabWidget->indexOf(m_timerTabWidget) < 0) {
-      m_tabWidget->insertTab(1, m_timerTabWidget, tr("Vibration Timer"));
-    }
-    m_timerTabWidget->setSubDeviceConnection(vibrateConn.get());
-  }
-  else if (m_timerTabWidget) {
-    removeTab(m_tabWidget, m_timerTabWidget);
-    m_timerTabWidget->setSubDeviceConnection(nullptr);
-  }
-
-  if (currentConn) {
-    m_timerTabContext = QPointer<QObject>(new QObject(this));
-    connect(&*currentConn, &DeviceConnection::subDeviceFlagsChanged, m_timerTabContext,
-    [currId=currentDeviceId(), spotlight, this](const DeviceId& id, const QString& /* path */) {
-      if (currId != id) { return; }
-      updateTimerTab(spotlight);
-    });
-  }
-
-}
-
-// -------------------------------------------------------------------------------------------------
-void TimerTabWidget::loadSettings(const DeviceId& deviceId)
-{
-  m_multiTimerWidget->stopAllTimers();
-  m_multiTimerWidget->blockSignals(true);
-  m_vibrationSettingsWidget->blockSignals(true);
-
-  m_deviceId = deviceId;
-
-  for (int i = 0; i < m_multiTimerWidget->timerCount(); ++i) {
-    const auto ts = m_settings->timerSettings(deviceId, i);
-    m_multiTimerWidget->setTimerEnabled(i, ts.first);
-    m_multiTimerWidget->setTimerValue(i, ts.second);
-  }
-
-  const auto vs = m_settings->vibrationSettings(deviceId);
-  m_vibrationSettingsWidget->setLength(vs.first);
-  m_vibrationSettingsWidget->setIntensity(vs.second);
-
-  m_vibrationSettingsWidget->blockSignals(false);
-  m_multiTimerWidget->blockSignals(false);
-}
-
-// -------------------------------------------------------------------------------------------------
-void TimerTabWidget::setSubDeviceConnection(SubDeviceConnection* sdc) {
-  m_vibrationSettingsWidget->setSubDeviceConnection(sdc);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -590,7 +549,7 @@ void DeviceInfoWidget::updateTextEdit()
   { // Insert list of sub devices
     cursor.insertBlock();
     cursor.insertBlock();
-    cursor.insertText(tr("Sub devices:"), underlineFormat);
+    cursor.insertText(i18n("Sub devices:"), underlineFormat);
     cursor.insertText(" ", normalFormat);
     cursor.insertBlock();
     cursor.movePosition(QTextCursor::PreviousBlock);
@@ -615,7 +574,7 @@ void DeviceInfoWidget::updateTextEdit()
 
   if (!m_batteryInfo.isEmpty()) {
     cursor.insertBlock();
-    cursor.insertText(tr("Battery Info:"), underlineFormat);
+    cursor.insertText(i18n("Battery Info:"), underlineFormat);
     cursor.insertText(" ", normalFormat);
     cursor.insertText(m_batteryInfo);
     cursor.insertBlock();
@@ -624,7 +583,7 @@ void DeviceInfoWidget::updateTextEdit()
   if (!m_hidppInfo.presenterState.isEmpty())
   {
     cursor.insertBlock();
-    cursor.insertText(tr("HID++ Info:"), underlineFormat);
+    cursor.insertText(i18n("HID++ Info:"), underlineFormat);
     cursor.insertText(" ", normalFormat);
     cursor.insertBlock();
     cursor.movePosition(QTextCursor::PreviousBlock);
@@ -636,23 +595,23 @@ void DeviceInfoWidget::updateTextEdit()
     cursor.insertList(listFormat);
 
     if (!m_hidppInfo.receiverState.isEmpty()) {
-      cursor.insertText(tr("Receiver state:"), italicFormat);
+      cursor.insertText(i18n("Receiver state:"), italicFormat);
       cursor.insertText(" ", normalFormat);
       cursor.insertText(m_hidppInfo.receiverState);
     }
 
     cursor.insertBlock();
-    cursor.insertText(tr("Presenter state:"), italicFormat);
+    cursor.insertText(i18n("Presenter state:"), italicFormat);
     cursor.insertText(" ", normalFormat);
     cursor.insertText(m_hidppInfo.presenterState);
 
     cursor.insertBlock();
-    cursor.insertText(tr("Protocol version:"), italicFormat);
+    cursor.insertText(i18n("Protocol version:"), italicFormat);
     cursor.insertText(" ", normalFormat);
     cursor.insertText(m_hidppInfo.protocolVersion);
 
     cursor.insertBlock();
-    cursor.insertText(tr("Supported features:"), italicFormat);
+    cursor.insertText(i18n("Supported features:"), italicFormat);
     cursor.insertText(" ", normalFormat);
     cursor.insertText(m_hidppInfo.hidppFlags.join(", "));
 
@@ -731,10 +690,15 @@ void DeviceInfoWidget::updateBatteryInfo(SubHidppConnection* hdc)
   const auto batteryInfo = hdc->batteryInfo();
   if (batteryInfo.status == HIDPP::BatteryStatus::Discharging)
   {
-    m_batteryInfo =  QString("%1% - %2% (%3)").arg(
-                QString::number(batteryInfo.currentLevel),
-                QString::number(batteryInfo.nextReportedLevel),
-                toString(batteryInfo.status));
+    if (batteryInfo.currentLevel == batteryInfo.nextReportedLevel) {
+      m_batteryInfo = QString("%1% (%2)").arg(
+        QString::number(batteryInfo.currentLevel), toString(batteryInfo.status));
+    } else {
+      m_batteryInfo = QString("%1% - %2% (%3)").arg(
+        QString::number(batteryInfo.currentLevel),
+        QString::number(batteryInfo.nextReportedLevel),
+        toString(batteryInfo.status));
+    }
   } else {
     m_batteryInfo = toString(batteryInfo.status);
   }

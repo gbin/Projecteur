@@ -20,6 +20,11 @@ const char* toString(BusType bt, bool withClass = true);
 const char* toString(ConnectionType ct, bool withClass = true);
 const char* toString(ConnectionMode cm, bool withClass = true);
 
+inline QString formatHexId(uint16_t id)
+{
+  return QStringLiteral("%1").arg(id, 4, 16, QLatin1Char('0'));
+}
+
 // -------------------------------------------------------------------------------------------------
 struct DeviceId
 {

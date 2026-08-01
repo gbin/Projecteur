@@ -4,31 +4,24 @@
 #include "hidpp.h"
 
 #include "enum-helper.h"
-#include "logging.h"
-
+#include "projecteur_hid_debug.h"
 #include <unistd.h>
 
 #include <memory>
 #include <random>
 
-#include <QDataStream>
-#include <QDir>
-#include <QSettings>
-#include <QStandardPaths>
+#include <KSharedDataCache>
 
-DECLARE_LOGGING_CATEGORY(hid)
+#include <QDataStream>
+#include <QIODevice>
 
 namespace {
-  // -----------------------------------------------------------------------------------------------
-  #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-  const auto registered_ = qRegisterMetaTypeStreamOperators<HIDPP::FirmwareInfo>()
-                             && qRegisterMetaTypeStreamOperators<HIDPP::FeatureSet::FeatureTable>();
-  #endif
+  const auto registeredMetaTypes_ = qRegisterMetaType<HIDPP::FirmwareInfo>()
+                                    && qRegisterMetaType<HIDPP::FeatureSet::FeatureTable>();
 
   // -----------------------------------------------------------------------------------------------
-  constexpr char featureSetFilename[] = "DeviceFeatureSet.conf";
-  constexpr char firmwareKey[] = "firmwareVersion";
-  constexpr char featureTableKey[] = "featureTable";
+  constexpr quint32 featureSetCacheFormatVersion = 1;
+  constexpr unsigned featureSetCacheSize = 1024 * 1024;
 
   // -----------------------------------------------------------------------------------------------
   namespace Defaults {
@@ -77,9 +70,56 @@ namespace {
   }
 
   // -----------------------------------------------------------------------------------------------
-  QString settingsKey(const DeviceId& dId, const QString& key) {
-    return QString("Device_%1_%2/%3")
-      .arg(logging::hexId(dId.vendorId), logging::hexId(dId.productId), key);
+  QString featureSetCacheKey(const DeviceId& dId) {
+    return QString("Device_%1_%2")
+      .arg(formatHexId(dId.vendorId), formatHexId(dId.productId));
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  KSharedDataCache& featureSetCache()
+  {
+    static KSharedDataCache cache(
+      QStringLiteral("projecteur-hidpp-features"), featureSetCacheSize);
+    return cache;
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  bool loadCachedFeatureSet(const DeviceId& dId, const HIDPP::FirmwareInfo& firmware,
+                            HIDPP::FeatureSet::FeatureTable& featureTable)
+  {
+    QByteArray data;
+    if (!featureSetCache().find(featureSetCacheKey(dId), &data)) {
+      return false;
+    }
+
+    QDataStream stream(data);
+    stream.setVersion(QDataStream::Qt_6_0);
+
+    quint32 formatVersion = 0;
+    HIDPP::FirmwareInfo cachedFirmware;
+    HIDPP::FeatureSet::FeatureTable cachedFeatureTable;
+    stream >> formatVersion >> cachedFirmware >> cachedFeatureTable;
+    if (stream.status() != QDataStream::Ok
+        || formatVersion != featureSetCacheFormatVersion
+        || !(cachedFirmware == firmware)) {
+      return false;
+    }
+
+    featureTable = std::move(cachedFeatureTable);
+    return true;
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  void cacheFeatureSet(const DeviceId& dId, const HIDPP::FirmwareInfo& firmware,
+                       const HIDPP::FeatureSet::FeatureTable& featureTable)
+  {
+    QByteArray data;
+    QDataStream stream(&data, QIODevice::WriteOnly);
+    stream.setVersion(QDataStream::Qt_6_0);
+    stream << featureSetCacheFormatVersion << firmware << featureTable;
+    if (stream.status() == QDataStream::Ok) {
+      featureSetCache().insert(featureSetCacheKey(dId), data);
+    }
   }
 }  // end anonymous namespace
 
@@ -370,14 +410,13 @@ void FeatureSet::getFeatureIndex(FeatureCode fc, std::function<void(MsgResult, u
     const auto fcLSB = static_cast<uint8_t>(to_integral(fc) >> 8);
     const auto fcMSB = static_cast<uint8_t>(to_integral(fc) & 0x00ff);
 
-    Message featureIndexReqMsg(Message::Type::Long, DeviceIndex::WirelessDevice1,
+    Message featureIndexReqMsg(Message::Type::Long, m_connection->deviceIndex(),
                                Message::Data{fcLSB, fcMSB});
 
     m_connection->sendRequest(std::move(featureIndexReqMsg),
     [cb=std::move(cb), fc](MsgResult result, Message&& msg)
     {
-      logDebug(hid) << tr("getFeatureIndex(%1) => %2, %3")
-                       .arg(to_integral(fc)).arg(toString(result)).arg(msg[4]);
+      qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("getFeatureIndex(%1) => %2, %3").arg(to_integral(fc)).arg(toString(result)).arg(msg[4]);
       if (cb) { cb(result, (result != MsgResult::Ok) ? 0 : msg[4]); }
     });
   });
@@ -395,7 +434,7 @@ void FeatureSet::getFeatureCount(std::function<void(MsgResult, uint8_t, uint8_t)
       return;
     }
 
-    Message featureCountReqMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, featureIndex);
+    Message featureCountReqMsg(Message::Type::Long, m_connection->deviceIndex(), featureIndex);
 
     m_connection->sendRequest(std::move(featureCountReqMsg),
     [featureIndex, cb=std::move(cb)](MsgResult result, Message&& msg) {
@@ -416,13 +455,12 @@ void FeatureSet::getFirmwareCount(std::function<void(MsgResult, uint8_t, uint8_t
       return;
     }
 
-    Message fwCountReqMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, featureIndex);
+    Message fwCountReqMsg(Message::Type::Long, m_connection->deviceIndex(), featureIndex);
 
     m_connection->sendRequest(std::move(fwCountReqMsg),
     [featureIndex, cb=std::move(cb)](MsgResult result, Message&& msg)
     {
-      logDebug(hid) << tr("getFirmwareCount() => %1, featureIndex = %2, count = %3")
-                       .arg(toString(result)).arg(featureIndex).arg(msg[4]);
+      qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("getFirmwareCount() => %1, featureIndex = %2, count = %3").arg(toString(result)).arg(featureIndex).arg(msg[4]);
       if (cb) { cb(result, featureIndex, (result != MsgResult::Ok) ? 0 : msg[4]); }
     });
   }));
@@ -438,7 +476,7 @@ void FeatureSet::getFirmwareInfo(uint8_t fwIndex, uint8_t entity,
     return;
   }
 
-  Message fwVerReqMessage(Message::Type::Long, DeviceIndex::WirelessDevice1, fwIndex, 1,
+  Message fwVerReqMessage(Message::Type::Long, m_connection->deviceIndex(), fwIndex, 1,
                           Message::Data{entity});
 
   m_connection->sendRequest(std::move(fwVerReqMessage),
@@ -469,9 +507,7 @@ void FeatureSet::getMainFirmwareInfo(uint8_t fwIndex, uint8_t max, uint8_t curre
   getFirmwareInfo(fwIndex, current, makeSafeCallback(
   [this, current, max, fwIndex, cb=std::move(cb)](MsgResult res, FirmwareInfo&& fi) mutable
   {
-    logDebug(hid) << tr("getFirmwareInfo(%1, %2, %3) => %4, fi.type = %5, fi.ver = %6, fi.pref = %7")
-                     .arg(fwIndex).arg(max).arg(current).arg(toString(res))
-                     .arg(to_integral(fi.firmwareType())).arg(fi.firmwareVersion()).arg(fi.firmwarePrefix());
+    qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("getFirmwareInfo(%1, %2, %3) => %4, fi.type = %5, fi.ver = %6, fi.pref = %7").arg(fwIndex).arg(max).arg(current).arg(toString(res)).arg(to_integral(fi.firmwareType())).arg(fi.firmwareVersion()).arg(fi.firmwarePrefix());
 
     if (res == MsgResult::Ok && fi.firmwareType() == FirmwareInfo::FirmwareType::MainApp)
     {
@@ -504,45 +540,28 @@ void FeatureSet::initFromDevice(DeviceId dId, std::function<void(State)> cb)
     getMainFirmwareInfo(makeSafeCallback(
     [this, dId, cb=std::move(cb)](MsgResult res, FirmwareInfo&& fi) mutable
     {
-      logDebug(hid) << tr("getMainFirmwareInfo() => %1, fi.type = %2").arg(toString(res))
-      .arg(to_integral(fi.firmwareType()));
+      qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("getMainFirmwareInfo() => %1, fi.type = %2").arg(toString(res)).arg(to_integral(fi.firmwareType()));
 
       if (fi.firmwareType() == FirmwareInfo::FirmwareType::MainApp) {
         m_mainFirmwareInfo = std::move(fi);
       }
 
-      // --- Try to load feature set from cache file
-      const auto cacheFile = QStandardPaths::locate(
-        QStandardPaths::StandardLocation::AppLocalDataLocation, featureSetFilename);
-
-      if (!cacheFile.isEmpty() && res == MsgResult::Ok && m_mainFirmwareInfo.isValid())
+      // --- Try to load the feature set from the KDE shared data cache.
+      if (res == MsgResult::Ok && m_mainFirmwareInfo.isValid()
+          && loadCachedFeatureSet(dId, m_mainFirmwareInfo, m_featureTable))
       {
-        // load feature set and return
-        QSettings settings(cacheFile, QSettings::NativeFormat);
-        const auto fw = settings.value(settingsKey(dId, firmwareKey));
-        if (fw.canConvert<FirmwareInfo>())
-        {
-          auto cacheFirmwareInfo = fw.value<FirmwareInfo>();
-          if (cacheFirmwareInfo == m_mainFirmwareInfo)
-          {
-            const auto table = settings.value(settingsKey(dId, featureTableKey));
-            if (table.canConvert<FeatureTable>())
-            {
-              m_featureTable = table.value<FeatureTable>();
-              logDebug(hid) << tr("Loaded feature set with %1 entries from local cache").arg(m_featureTable.size());
-              setState(State::Initialized);
-              if (cb) { cb(m_state); }
-              return;
-            }
-          }
-        }
+        qCDebug(PROJECTEUR_HID_LOG).noquote()
+          << QStringLiteral("Loaded feature set with %1 entries from local cache")
+               .arg(m_featureTable.size());
+        setState(State::Initialized);
+        if (cb) { cb(m_state); }
+        return;
       }
 
       getFeatureCount(makeSafeCallback(
       [this, dId, cb=std::move(cb)](MsgResult res, uint8_t featureIndex, uint8_t count) mutable
       {
-        logDebug(hid) << tr("getFeatureCount() => %1, featureIndex = %2, count = %3")
-                         .arg(toString(res)).arg(featureIndex).arg(count);
+        qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("getFeatureCount() => %1, featureIndex = %2, count = %3").arg(toString(res)).arg(featureIndex).arg(count);
 
         if (res != MsgResult::Ok)
         {
@@ -562,16 +581,8 @@ void FeatureSet::initFromDevice(DeviceId dId, std::function<void(State)> cb)
             m_featureTable = std::move(ft);
             setState(State::Initialized);
 
-            // Store feature table in cache file
-            const auto dataPath = QStandardPaths::writableLocation(
-              QStandardPaths::StandardLocation::AppLocalDataLocation);
-
-            if (!dataPath.isEmpty() && m_mainFirmwareInfo.isValid())
-            {
-              const auto cacheFile = QDir(dataPath).filePath(featureSetFilename);
-              QSettings settings(cacheFile, QSettings::NativeFormat);
-              settings.setValue(settingsKey(dId, firmwareKey), QVariant::fromValue(m_mainFirmwareInfo));
-              settings.setValue(settingsKey(dId, featureTableKey), QVariant::fromValue(m_featureTable));
+            if (m_mainFirmwareInfo.isValid()) {
+              cacheFeatureSet(dId, m_mainFirmwareInfo, m_featureTable);
             }
           }
 
@@ -604,7 +615,7 @@ void FeatureSet::getFeatureIds(uint8_t featureSetIndex, uint8_t count,
   for (uint8_t featureIndex = 1; featureIndex <= count; ++featureIndex)
   {
     batch.emplace(HidppConnectionInterface::RequestBatchItem {
-      Message(Message::Type::Long, DeviceIndex::WirelessDevice1, featureSetIndex, 1,
+      Message(Message::Type::Long, m_connection->deviceIndex(), featureSetIndex, 1,
               Message::Data{featureIndex}),
       [featureTable, featureIndex](MsgResult res, Message&& msg)
       {
@@ -732,6 +743,8 @@ const char* toString(HIDPP::FeatureCode fc)
     ENUM_CASE_STRINGIFY(FeatureCode::Reset);
     ENUM_CASE_STRINGIFY(FeatureCode::DFUControlSigned);
     ENUM_CASE_STRINGIFY(FeatureCode::BatteryStatus);
+    ENUM_CASE_STRINGIFY(FeatureCode::UnifiedBattery);
+    ENUM_CASE_STRINGIFY(FeatureCode::Haptic);
     ENUM_CASE_STRINGIFY(FeatureCode::PresenterControl);
     ENUM_CASE_STRINGIFY(FeatureCode::Sensor3D);
     ENUM_CASE_STRINGIFY(FeatureCode::ReprogramControlsV4);

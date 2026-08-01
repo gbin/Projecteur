@@ -13,16 +13,14 @@
 
 class DeviceConnection;
 class InputMapper;
-class MultiTimerWidget;
 class QComboBox;
+class QSpinBox;
 class QTabWidget;
 class QTextEdit;
 class Settings;
 class Spotlight;
-class VibrationSettingsWidget;
 class SubDeviceConnection;
 class SubHidppConnection;
-class TimerTabWidget;
 
 // -------------------------------------------------------------------------------------------------
 class DevicesWidget : public QWidget
@@ -41,36 +39,19 @@ private:
   void createDeviceComboBox(Spotlight* spotlight);
   QWidget* createDevicesWidget(Settings* settings, Spotlight* spotlight);
   QWidget* createInputMapperWidget(Settings* settings, Spotlight* spotlight);
+  QWidget* createTimerFeedbackWidget(Settings* settings);
   QWidget* createDeviceInfoWidget(Spotlight* spotlight);
-  TimerTabWidget* createTimerTabWidget(Settings* settings, Spotlight* spotlight);
-  void updateTimerTab(Spotlight* spotlight);
+  void updateTimerFeedbackTab(Spotlight* spotlight);
+  void loadTimerFeedbackSettings(Settings* settings, const DeviceId& deviceId);
 
   QComboBox* m_devicesCombo = nullptr;
   QTabWidget* m_tabWidget = nullptr;
-  TimerTabWidget* m_timerTabWidget = nullptr;
-  QPointer<QObject> m_timerTabContext;
+  QWidget* m_timerFeedbackWidget = nullptr;
+  QSpinBox* m_timerFeedbackStrength = nullptr;
   QWidget* m_deviceDetailsTabWidget = nullptr;
+  QPointer<QObject> m_timerFeedbackContext;
 
   QPointer<InputMapper> m_inputMapper;
-};
-
-// -------------------------------------------------------------------------------------------------
-class TimerTabWidget : public QWidget
-{
-  Q_OBJECT
-
-public:
-  TimerTabWidget(Settings* settings, QWidget* parent = nullptr);
-  VibrationSettingsWidget* vibrationSettingsWidget();
-
-  void loadSettings(const DeviceId& deviceId);
-  void setSubDeviceConnection(SubDeviceConnection* sdc);
-
-private:
-  DeviceId m_deviceId;
-  Settings* const m_settings = nullptr;
-  MultiTimerWidget* m_multiTimerWidget = nullptr;
-  VibrationSettingsWidget* m_vibrationSettingsWidget = nullptr;
 };
 
 // -------------------------------------------------------------------------------------------------

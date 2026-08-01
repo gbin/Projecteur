@@ -5,7 +5,8 @@
 
 #include "actiondelegate.h"
 #include "inputseqedit.h"
-#include "logging.h"
+
+#include <KLocalizedString>
 
 #include <QHeaderView>
 #include <QKeyEvent>
@@ -60,9 +61,9 @@ QVariant InputMapConfigModel::headerData(int section, Qt::Orientation orientatio
   {
     switch(section)
     {
-    case InputSeqCol: return tr("Input Sequence");
+    case InputSeqCol: return i18n("Input Sequence");
     case ActionTypeCol: return "Type";
-    case ActionCol: return tr("Mapped Action");
+    case ActionCol: return i18n("Mapped Action");
     default: return "Invalid";
     }
   }
@@ -412,4 +413,3 @@ void InputMapConfigView::keyPressEvent(QKeyEvent* e)
 
   QTableView::keyPressEvent(e);
 }
-

@@ -5,14 +5,26 @@
 
 #include "deviceinput.h"
 #include "enum-helper.h"
-#include "logging.h"
+#include "projecteur_hid_debug.h"
 
 #include <unistd.h>
 
 #include <QSocketNotifier>
 #include <QTimer>
 
-DECLARE_LOGGING_CATEGORY(hid)
+namespace {
+  // The HAPTIC feature uses a percentage, while Projecteur's existing vibration
+  // interface uses the original Spotlight's byte-sized intensity.
+  constexpr uint8_t hapticLevelFromIntensity(uint8_t intensity)
+  {
+    return static_cast<uint8_t>(
+      (static_cast<uint16_t>(intensity) * 100U + 127U) / 255U);
+  }
+
+  static_assert(hapticLevelFromIntensity(0) == 0);
+  static_assert(hapticLevelFromIntensity(128) == 50);
+  static_assert(hapticLevelFromIntensity(255) == 100);
+}
 
 // -------------------------------------------------------------------------------------------------
 SubHidppConnection::SubHidppConnection(SubHidrawConnection::Token token,
@@ -21,6 +33,10 @@ SubHidppConnection::SubHidppConnection(SubHidrawConnection::Token token,
   , m_featureSet(this)
   , m_requestCleanupTimer(new QTimer(this))
 {
+  // A Bolt receiver can have the presenter paired in any of its six slots.
+  // Other supported connections have historically used slot 1.
+  m_deviceIndexKnown = id.busType != BusType::Usb || id.productId != 0xc548;
+
   constexpr int cleanUpTimerInterval = 500;
   m_requestCleanupTimer->setInterval(cleanUpTimerInterval);
   m_requestCleanupTimer->setSingleShot(false);
@@ -81,8 +97,8 @@ ssize_t SubHidppConnection::sendData(HIDPP::Message msg)
   if (busType() == BusType::Bluetooth)
   {
     if (msg.deviceIndex() == HIDPP::DeviceIndex::DefaultDevice) {
-      logWarn(hid) << tr("Invalid message device index in data '%1' for device connected "
-                         "via bluetooth.").arg(msg.hex());
+      qCWarning(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Invalid message device index in data '%1' for device connected "
+                           "via bluetooth.").arg(msg.hex());
       return errorResult;
     }
 
@@ -138,19 +154,16 @@ void SubHidppConnection::sendRequest(HIDPP::Message msg, RequestResultCallback r
     }
 
     // Device index sanity check
-    static const std::array<uint8_t, 3> validDeviceIndexes {
-      HIDPP::DeviceIndex::CordedDevice,
-      HIDPP::DeviceIndex::DefaultDevice,
-      HIDPP::DeviceIndex::WirelessDevice1,
-    };
+    const auto index = msg.deviceIndex();
+    const bool validDeviceIndex =
+      index == HIDPP::DeviceIndex::CordedDevice
+      || index == HIDPP::DeviceIndex::DefaultDevice
+      || (index >= HIDPP::DeviceIndex::WirelessDevice1
+          && index <= HIDPP::DeviceIndex::WirelessDevice6);
 
-    const auto deviceIndexIt
-      = std::find(validDeviceIndexes.cbegin(), validDeviceIndexes.cend(), msg.deviceIndex());
-
-    if (deviceIndexIt == validDeviceIndexes.cend())
+    if (!validDeviceIndex)
     {
-      logWarn(hid) << tr("Invalid device index (%1) in message for '%2'")
-                      .arg(msg.deviceIndex()).arg(path());
+      qCWarning(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Invalid device index (%1) in message for '%2'").arg(msg.deviceIndex()).arg(path());
       if (cb) { cb(MsgResult::InvalidFormat, HIDPP::Message()); }
       return;
     }
@@ -171,7 +184,7 @@ void SubHidppConnection::sendRequest(HIDPP::Message msg, RequestResultCallback r
                              [&msg](const RequestEntry& entry) { return entry.request == msg; });
 
       if (it == m_requests.end()) {
-        logDebug(hid) << "Send request write error without matching request queue entry.";
+        qCDebug(PROJECTEUR_HID_LOG).noquote() << "Send request write error without matching request queue entry.";
         return;
       }
 
@@ -367,26 +380,56 @@ void SubHidppConnection::sendVibrateCommand(uint8_t intensity, uint8_t length,
 {
   const uint8_t pcIndex = m_featureSet.featureIndex(HIDPP::FeatureCode::PresenterControl);
 
-  if (pcIndex == 0)
+  if (pcIndex != 0)
   {
-    if (cb) { cb(MsgResult::FeatureNotSupported, HIDPP::Message()); }
+    // Original Logitech Spotlight vibration protocol.
+    length = length > 10 ? 10 : length; // length should be between 0 to 10.
+
+    using namespace HIDPP;
+    Message vibrateMsg(Message::Type::Long, m_deviceIndex, pcIndex, 1, {
+      length, 0xe8, intensity
+    });
+
+    sendRequest(std::move(vibrateMsg), std::move(cb));
     return;
   }
 
-  // Logitech Spotlight:
-  //                                        present
-  //                                        controlID   len         intensity
-  // unsigned char vibrate[] = {0x10, 0x01, 0x09, 0x1d, 0x00, 0xe8, 0x80};
-
-  length = length > 10 ? 10 : length; // length should be between 0 to 10.
-
   using namespace HIDPP;
+  const uint8_t hapticIndex = m_featureSet.featureIndex(FeatureCode::Haptic);
+  if (hapticIndex == 0)
+  {
+    if (cb) { cb(MsgResult::FeatureNotSupported, Message()); }
+    return;
+  }
 
-  Message vibrateMsg(Message::Type::Long, DeviceIndex::WirelessDevice1, pcIndex, 1, {
-    length, 0xe8, intensity
+  // Spotlight 2 uses the newer HAPTIC feature. Its level is a global percentage
+  // (setHapticLevel, function 2), and feedback is produced by asking the device
+  // to play one of its built-in waveforms (playWaveform, function 4).
+  //
+  // "Completed" (0x07) is a concise notification waveform suitable for the
+  // existing vibration timers. The legacy length has no HAPTIC equivalent.
+  constexpr uint8_t completedWaveform = 0x07;
+  constexpr uint8_t defaultDisabledLevel = 50;
+  const bool enabled = intensity != 0;
+  const uint8_t level = enabled ? hapticLevelFromIntensity(intensity)
+                                : defaultDisabledLevel;
+
+  Message setLevelMsg(Message::Type::Long, m_deviceIndex, hapticIndex, 2, {
+    static_cast<uint8_t>(enabled), level
   });
 
-  sendRequest(std::move(vibrateMsg), std::move(cb));
+  sendRequest(std::move(setLevelMsg), makeSafeCallback(
+  [this, hapticIndex, cb=std::move(cb)](MsgResult result, Message&& response) mutable
+  {
+    if (result != MsgResult::Ok) {
+      if (cb) { cb(result, std::move(response)); }
+      return;
+    }
+
+    Message playMsg(Message::Type::Long, m_deviceIndex, hapticIndex, 4,
+                    Message::Data{completedWaveform});
+    sendRequest(std::move(playMsg), std::move(cb));
+  }));
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -395,22 +438,32 @@ void SubHidppConnection::getBatteryLevelStatus(
 {
   using namespace HIDPP;
 
-  const auto batteryIndex = m_featureSet.featureIndex(FeatureCode::BatteryStatus);
+  const auto batteryStatusIndex = m_featureSet.featureIndex(FeatureCode::BatteryStatus);
+  const auto unifiedBatteryIndex = m_featureSet.featureIndex(FeatureCode::UnifiedBattery);
+  const auto batteryIndex = batteryStatusIndex != 0 ? batteryStatusIndex : unifiedBatteryIndex;
   if (batteryIndex == 0)
   {
     if (cb) { cb(MsgResult::FeatureNotSupported, {}); }
     return;
   }
 
-  Message batteryReqMsg(Message::Type::Short, DeviceIndex::WirelessDevice1, batteryIndex, 0);
-  sendRequest(std::move(batteryReqMsg), [cb=std::move(cb)](MsgResult res, Message&& msg) mutable
+  // BATTERY_STATUS uses getBatteryLevelStatus (function 0), whereas
+  // UNIFIED_BATTERY uses getStatus (function 1).
+  const uint8_t function = batteryStatusIndex != 0 ? 0 : 1;
+  Message batteryReqMsg(
+    Message::Type::Short, m_deviceIndex, batteryIndex, function);
+  sendRequest(std::move(batteryReqMsg),
+  [cb=std::move(cb), unified=unifiedBatteryIndex != 0 && batteryStatusIndex == 0]
+  (MsgResult res, Message&& msg) mutable
   {
     if (!cb) { return; }
 
-    auto batteryInfo = (res != MsgResult::Ok) ? BatteryInfo{}
-                                              : BatteryInfo{msg[4],
-                                                            msg[5],
-                                                            to_enum<BatteryStatus>(msg[6])};
+    // UNIFIED_BATTERY returns the exact discharge percentage, an approximate
+    // level, and the same status byte as BATTERY_STATUS. It has no "next
+    // reported percentage", so use the current percentage for both fields.
+    auto batteryInfo = (res != MsgResult::Ok)
+      ? BatteryInfo{}
+      : BatteryInfo{msg[4], unified ? msg[4] : msg[5], to_enum<BatteryStatus>(msg[6])};
     cb(res, std::move(batteryInfo));
   });
 }
@@ -431,7 +484,7 @@ void SubHidppConnection::setPointerSpeed(uint8_t speed,
   const uint8_t pointerSpeed = 0x10 & speed;
 
   sendRequest(
-    HIDPP::Message(HIDPP::Message::Type::Long, HIDPP::DeviceIndex::WirelessDevice1,
+    HIDPP::Message(HIDPP::Message::Type::Long, m_deviceIndex,
                    psIndex, 1, HIDPP::Message::Data{pointerSpeed}),
     std::move(cb)
   );
@@ -442,8 +495,7 @@ void SubHidppConnection::setReceiverState(ReceiverState rs)
 {
   if (rs == m_receiverState) { return; }
 
-  logDebug(hid) << tr("Receiver state (%1) changes from %3 to %4")
-                   .arg(path()).arg(toString(m_receiverState), toString(rs));
+  qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Receiver state (%1) changes from %2 to %3").arg(path()).arg(toString(m_receiverState)).arg(toString(rs));
   m_receiverState = rs;
   emit receiverStateChanged(m_receiverState);
 }
@@ -453,8 +505,7 @@ void SubHidppConnection::setPresenterState(PresenterState ps)
 {
   if (ps == m_presenterState) { return; }
 
-  logDebug(hid) << tr("Presenter state (%1) changes from %2 to %3")
-                   .arg(path()).arg(toString(m_presenterState), toString(ps));
+  qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Presenter state (%1) changes from %2 to %3").arg(path()).arg(toString(m_presenterState)).arg(toString(ps));
   m_presenterState = ps;
   emit presenterStateChanged(m_presenterState);
 }
@@ -475,7 +526,7 @@ void SubHidppConnection::initReceiver(std::function<void(ReceiverState)> cb)
     if (m_receiverState == ReceiverState::Initializing
         || m_receiverState == ReceiverState::Initialized)
     {
-      logDebug(hid) << "Cannot init receiver when initializing or already initialized.";
+      qCDebug(PROJECTEUR_HID_LOG).noquote() << "Cannot init receiver when initializing or already initialized.";
       if (cb) { cb(m_receiverState); }
       return;
     }
@@ -501,8 +552,7 @@ void SubHidppConnection::initReceiver(std::function<void(ReceiverState)> cb)
         Message(Type::Short, DeviceIndex::DefaultDevice, Commands::GetRegister, 0, 0, {}),
         [index=++index](MsgResult result, HIDPP::Message&& /* msg */) {
           if (result == MsgResult::Ok) { return; }
-          logWarn(hid) << tr("Usb receiver init error; step %1: %2")
-            .arg(index).arg(toString(result));
+          qCWarning(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Usb receiver init error; step %1: %2").arg(index).arg(toString(result));
         }
       },
       RequestBatchItem{
@@ -511,8 +561,7 @@ void SubHidppConnection::initReceiver(std::function<void(ReceiverState)> cb)
                 {0x00, 0x01, 0x00}),
         [index=++index](MsgResult result, HIDPP::Message&& /* msg */) {
           if (result == MsgResult::Ok) { return; }
-          logWarn(hid) << tr("Usb receiver init error; step %1: %2")
-            .arg(index).arg(toString(result));
+          qCWarning(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Usb receiver init error; step %1: %2").arg(index).arg(toString(result));
         }
       },
       RequestBatchItem{
@@ -520,8 +569,7 @@ void SubHidppConnection::initReceiver(std::function<void(ReceiverState)> cb)
         Message(Type::Short, DeviceIndex::DefaultDevice, Commands::GetRegister, 0, 2, {}),
         [index=++index](MsgResult result, HIDPP::Message&& /* msg */) {
           if (result == MsgResult::Ok) { return; }
-          logWarn(hid) << tr("Usb receiver init error; step %1: %2")
-            .arg(index).arg(toString(result));
+          qCWarning(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Usb receiver init error; step %1: %2").arg(index).arg(toString(result));
         }
       },
       RequestBatchItem{
@@ -530,8 +578,7 @@ void SubHidppConnection::initReceiver(std::function<void(ReceiverState)> cb)
                 {0x02, 0x00, 0x00}),
         [index=++index](MsgResult result, HIDPP::Message&& /* msg */) {
           if (result == MsgResult::Ok) { return; }
-          logWarn(hid) << tr("Usb receiver init error; step %1: %2")
-            .arg(index).arg(toString(result));
+          qCWarning(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Usb receiver init error; step %1: %2").arg(index).arg(toString(result));
         }
       },
       RequestBatchItem{
@@ -540,8 +587,7 @@ void SubHidppConnection::initReceiver(std::function<void(ReceiverState)> cb)
                 {0x00, 0x09, 0x00}),
         [index=++index](MsgResult result, HIDPP::Message&& /* msg */) {
           if (result == MsgResult::Ok) { return; }
-          logWarn(hid) << tr("Usb receiver init error; step %1: %2")
-            .arg(index).arg(toString(result));
+          qCWarning(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Usb receiver init error; step %1: %2").arg(index).arg(toString(result));
         }
       },
     }};
@@ -564,7 +610,7 @@ void SubHidppConnection::initPresenter(std::function<void(PresenterState)> cb)
         || m_presenterState == PresenterState::Initialized_Offline
         || m_presenterState == PresenterState::Initialized_Online)
     {
-      logDebug(hid) << "Cannot init presenter when offline, initializing or already initialized.";
+      qCDebug(PROJECTEUR_HID_LOG).noquote() << "Cannot init presenter when offline, initializing or already initialized.";
       if (cb) { cb(m_presenterState); }
       return;
     }
@@ -583,14 +629,16 @@ void SubHidppConnection::initPresenter(std::function<void(PresenterState)> cb)
         }
         case FState::Uninitialized:
         case FState::Initializing: {
-          logError(hid) << tr("Unexpected state from feature set.");
+          qCCritical(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Unexpected state from feature set.");
           setPresenterState(PresenterState::Error);
           break;
         }
         case FState::Initialized:
         {
-          logDebug(hid) << tr("Received %1 supported features from device. (%2)")
-                           .arg(m_featureSet.featureCount()).arg(path());
+          qCDebug(PROJECTEUR_HID_LOG).noquote()
+            << QStringLiteral("Received %1 supported features from device. (%2)")
+                 .arg(m_featureSet.featureCount())
+                 .arg(path());
 
           registerForFeatureNotifications();
           updateDeviceFlags();
@@ -599,7 +647,7 @@ void SubHidppConnection::initPresenter(std::function<void(PresenterState)> cb)
           {
             if (!resultMap.empty()) {
               for (const auto& res : resultMap) {
-                logDebug(hid) << tr("InitFeature result %1 => %2").arg(toString(res.first)).arg(toString(res.second));
+                qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("InitFeature result %1 => %2").arg(toString(res.first)).arg(toString(res.second));
               }
             }
             emit featureSetInitialized();
@@ -628,7 +676,7 @@ void SubHidppConnection::initFeatures(
   if (const auto resetFeatureIndex = m_featureSet.featureIndex(FeatureCode::Reset))
   {
     batch.emplace(RequestBatchItem {
-      Message(Message::Type::Long, DeviceIndex::WirelessDevice1, resetFeatureIndex, 1),
+      Message(Message::Type::Long, m_deviceIndex, resetFeatureIndex, 1),
       [resultMap](MsgResult res, Message&& /* msg */) {
         resultMap->emplace(FeatureCode::Reset, res);
       }
@@ -641,7 +689,7 @@ void SubHidppConnection::initFeatures(
     if (hasFlags(DeviceFlags::NextHold))
     {
       batch.emplace(RequestBatchItem {
-        Message(Message::Type::Long, DeviceIndex::WirelessDevice1, contrFeatureIndex, 3,
+        Message(Message::Type::Long, m_deviceIndex, contrFeatureIndex, 3,
                 Message::Data{0x00, 0xda, 0x33}),
         [resultMap](MsgResult res, Message&& /* msg */) {
           resultMap->emplace(FeatureCode::ReprogramControlsV4, res);
@@ -652,7 +700,7 @@ void SubHidppConnection::initFeatures(
     if (hasFlags(DeviceFlags::BackHold))
     {
       batch.emplace(RequestBatchItem {
-        Message(Message::Type::Long, DeviceIndex::WirelessDevice1, contrFeatureIndex, 3,
+        Message(Message::Type::Long, m_deviceIndex, contrFeatureIndex, 3,
                 Message::Data{0x00, 0xdc, 0x33}),
         [resultMap](MsgResult res, Message&& /* msg */) {
           resultMap->emplace(FeatureCode::ReprogramControlsV4, res);
@@ -665,7 +713,7 @@ void SubHidppConnection::initFeatures(
   {
     // Reset pointer speed to 0x14 - the device accepts values from 0x10 to 0x19
     batch.emplace(RequestBatchItem {
-      HIDPP::Message(HIDPP::Message::Type::Long, HIDPP::DeviceIndex::WirelessDevice1,
+      HIDPP::Message(HIDPP::Message::Type::Long, m_deviceIndex,
                      psFeatureIndex, 1, HIDPP::Message::Data{0x14}),
       [resultMap](MsgResult res, Message&& /* msg */) {
         resultMap->emplace(FeatureCode::PointerSpeed, res);
@@ -685,18 +733,28 @@ void SubHidppConnection::updateDeviceFlags()
   DeviceFlags featureFlagsSet = DeviceFlag::NoFlags;
   DeviceFlags featureFlagsUnset = DeviceFlag::NoFlags;
 
-  if (m_featureSet.featureCodeSupported(HIDPP::FeatureCode::PresenterControl)) {
+  const bool hasPresenterControl =
+    m_featureSet.featureCodeSupported(HIDPP::FeatureCode::PresenterControl);
+  const bool hasHaptic =
+    m_featureSet.featureCodeSupported(HIDPP::FeatureCode::Haptic);
+  if (hasPresenterControl || hasHaptic) {
     featureFlagsSet |= DeviceFlag::Vibrate;
-    logDebug(hid) << tr("Subdevice '%1' reported %2 support.")
-                     .arg(path()).arg(toString(HIDPP::FeatureCode::PresenterControl));
+    qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Subdevice '%1' reported %2 support.").arg(path()).arg(toString(hasPresenterControl
+                            ? HIDPP::FeatureCode::PresenterControl
+                            : HIDPP::FeatureCode::Haptic));
   } else {
     featureFlagsUnset |= DeviceFlag::Vibrate;
   }
 
-  if (m_featureSet.featureCodeSupported(HIDPP::FeatureCode::BatteryStatus)) {
+  const bool hasBatteryStatus =
+    m_featureSet.featureCodeSupported(HIDPP::FeatureCode::BatteryStatus);
+  const bool hasUnifiedBattery =
+    m_featureSet.featureCodeSupported(HIDPP::FeatureCode::UnifiedBattery);
+  if (hasBatteryStatus || hasUnifiedBattery) {
     featureFlagsSet |= DeviceFlag::ReportBattery;
-    logDebug(hid) << tr("Subdevice '%1' reported %2 support.")
-                     .arg(path()).arg(toString(HIDPP::FeatureCode::BatteryStatus));
+    qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Subdevice '%1' reported %2 support.").arg(path()).arg(toString(hasBatteryStatus
+                            ? HIDPP::FeatureCode::BatteryStatus
+                            : HIDPP::FeatureCode::UnifiedBattery));
   } else {
     featureFlagsUnset |= DeviceFlag::ReportBattery;
   }
@@ -707,8 +765,7 @@ void SubHidppConnection::updateDeviceFlags()
     featureFlagsSet |= DeviceFlags::BackHold;
     specialMoveInputs.emplace_back(SpecialKeys::eventSequenceInfo(SpecialKeys::Key::NextHoldMove));
     specialMoveInputs.emplace_back(SpecialKeys::eventSequenceInfo(SpecialKeys::Key::BackHoldMove));
-    logDebug(hid) << tr("Subdevice '%1' reported %2 support.")
-                     .arg(path()).arg(toString(HIDPP::FeatureCode::ReprogramControlsV4));
+    qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Subdevice '%1' reported %2 support.").arg(path()).arg(toString(HIDPP::FeatureCode::ReprogramControlsV4));
   }
   else {
     featureFlagsUnset |= DeviceFlags::NextHold;
@@ -718,8 +775,7 @@ void SubHidppConnection::updateDeviceFlags()
 
   if (m_featureSet.featureCodeSupported(HIDPP::FeatureCode::PointerSpeed)) {
     featureFlagsSet |= DeviceFlags::PointerSpeed;
-    logDebug(hid) << tr("Subdevice '%1' reported %2 support.")
-                     .arg(path()).arg(toString(HIDPP::FeatureCode::PointerSpeed));
+    qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Subdevice '%1' reported %2 support.").arg(path()).arg(toString(HIDPP::FeatureCode::PointerSpeed));
   }
   else {
     featureFlagsUnset |= DeviceFlags::BackHold;
@@ -749,8 +805,7 @@ void SubHidppConnection::registerForFeatureNotifications()
       constexpr uint8_t ButtonBack = 0xdc;
       const auto isNextPressed = msg[5] == ButtonNext || msg[7] == ButtonNext;
       const auto isBackPressed = msg[5] == ButtonBack || msg[7] == ButtonBack;
-      logDebug(hid) << tr("Buttons pressed: Next = %1, Back = %2")
-                       .arg(isNextPressed).arg(isBackPressed);
+      qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Buttons pressed: Next = %1, Back = %2").arg(isNextPressed).arg(isBackPressed);
 
     }), 0 /* function 0 */);
 
@@ -771,6 +826,13 @@ void SubHidppConnection::registerForFeatureNotifications()
     registerNotificationCallback(this, batIndex, makeSafeCallback([this](Message&& msg) {
       setBatteryInfo(BatteryInfo{msg[4], msg[5], to_enum<BatteryStatus>(msg[6])});
     }), 0 /* function 0 */);  }
+
+  if (const auto batIndex = m_featureSet.featureIndex(FeatureCode::UnifiedBattery))
+  {
+    registerNotificationCallback(this, batIndex, makeSafeCallback([this](Message&& msg) {
+      setBatteryInfo(BatteryInfo{msg[4], msg[4], to_enum<BatteryStatus>(msg[6])});
+    }), 0 /* function 0 */);
+  }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -780,15 +842,29 @@ void SubHidppConnection::registerForUsbNotifications()
   registerNotificationCallback(this, HIDPP::Notification::DeviceConnection, makeSafeCallback(
   [this](HIDPP::Message&& msg)
   {
+    const auto notificationDeviceIndex = msg.deviceIndex();
+    const auto deviceKind = msg[4] & 0x0f;
     const bool linkEstablished = !static_cast<bool>(msg[4] & (1<<6));
-    logDebug(hid) << tr("%1, link established = %2")
-      .arg(toString(HIDPP::Notification::DeviceConnection)).arg(linkEstablished);
+    qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("%1, device index = %2, device kind = %3, link established = %4").arg(toString(HIDPP::Notification::DeviceConnection)).arg(notificationDeviceIndex).arg(deviceKind).arg(linkEstablished);
+
+    if (!m_deviceIndexKnown && deviceKind == 0x04)
+    {
+      m_deviceIndex = notificationDeviceIndex;
+      m_deviceIndexKnown = true;
+      qCInfo(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Found presenter in Bolt receiver slot %1.").arg(m_deviceIndex);
+    }
+
+    // A Bolt receiver can carry several devices. Ignore notifications that do
+    // not belong to the presenter selected above.
+    if (!m_deviceIndexKnown || notificationDeviceIndex != m_deviceIndex) {
+      return;
+    }
 
     if (!linkEstablished) {
       if (m_presenterState == PresenterState::Initialized_Online) {
         setPresenterState(PresenterState::Initialized_Offline);
       }
-      logInfo(hid) << tr("HID++ device '%1' went offline.").arg(path());
+      qCInfo(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("HID++ device '%1' went offline.").arg(path());
       return;
     }
 
@@ -797,7 +873,7 @@ void SubHidppConnection::registerForUsbNotifications()
         || m_presenterState == PresenterState::Uninitialized
         || m_presenterState == PresenterState::Error)
     {
-      logInfo(hid) << tr("HID++ device '%1' came online.").arg(path());
+      qCInfo(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("HID++ device '%1' came online.").arg(path());
       checkAndUpdatePresenterState(makeSafeCallback([](PresenterState /* ps */) {
         //...
       }));
@@ -816,10 +892,13 @@ void SubHidppConnection::subDeviceInit()
   initReceiver(makeSafeCallback([this](ReceiverState rs)
   {
     Q_UNUSED(rs);
-    // Independent of the receiver init result, try to initialize the
-    // presenter device HID++ features and more
-    checkAndUpdatePresenterState(makeSafeCallback([](PresenterState /* ps */) {
-      //...
+    // Independent of the receiver init result, find the presenter slot and
+    // initialize the device HID++ features.
+    findPresenterDeviceIndex(HIDPP::DeviceIndex::WirelessDevice1,
+    makeSafeCallback([this](bool /* found */) {
+      checkAndUpdatePresenterState(makeSafeCallback([](PresenterState /* ps */) {
+        //...
+      }));
     }));
   }));
 }
@@ -861,10 +940,48 @@ const HIDPP::BatteryInfo& SubHidppConnection::batteryInfo() const {
 // -------------------------------------------------------------------------------------------------
 void SubHidppConnection::sendPing(RequestResultCallback cb)
 {
+  sendPing(m_deviceIndex, std::move(cb));
+}
+
+// -------------------------------------------------------------------------------------------------
+void SubHidppConnection::sendPing(uint8_t deviceIndex, RequestResultCallback cb)
+{
   using namespace HIDPP;
-  // Ping wireless device 1 - same as requesting protocol version
-  Message pingMsg(Message::Type::Short, DeviceIndex::WirelessDevice1, 0, 1, getRandomPingPayload());
+  // A HID++ root ping also returns the device protocol version.
+  Message pingMsg(Message::Type::Short, deviceIndex, 0, 1, getRandomPingPayload());
   sendRequest(std::move(pingMsg), std::move(cb));
+}
+
+// -------------------------------------------------------------------------------------------------
+void SubHidppConnection::findPresenterDeviceIndex(uint8_t candidate,
+                                                  std::function<void(bool)> cb)
+{
+  if (m_deviceIndexKnown)
+  {
+    if (cb) { cb(true); }
+    return;
+  }
+
+  if (candidate > HIDPP::DeviceIndex::WirelessDevice6)
+  {
+    if (cb) { cb(false); }
+    return;
+  }
+
+  sendPing(candidate, makeSafeCallback(
+  [this, candidate, cb=std::move(cb)](MsgResult result, HIDPP::Message&& /* msg */) mutable
+  {
+    if (result == MsgResult::Ok)
+    {
+      m_deviceIndex = candidate;
+      m_deviceIndexKnown = true;
+      qCInfo(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Found HID++ device in Bolt receiver slot %1.").arg(m_deviceIndex);
+      if (cb) { cb(true); }
+      return;
+    }
+
+    findPresenterDeviceIndex(candidate + 1, std::move(cb));
+  }));
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -875,8 +992,7 @@ void SubHidppConnection::getProtocolVersion(std::function<void(MsgResult, HIDPP:
     if (cb) {
       auto pv = (res == MsgResult::Ok) ? HIDPP::ProtocolVersion{ msg[4], msg[5] }
                                        : HIDPP::ProtocolVersion();
-      logDebug(hid) << tr("getProtocolVersion() => %1, version = %2.%3")
-                       .arg(toString(res)).arg(pv.major).arg(pv.minor);
+      qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("getProtocolVersion() => %1, version = %2.%3").arg(toString(res)).arg(pv.major).arg(pv.minor);
       cb(res, (res == MsgResult::HidppError) ? msg.errorCode()
                                              : HIDPP::Error::NoError, pv);
     }
@@ -892,8 +1008,7 @@ void SubHidppConnection::checkPresenterOnline(std::function<void(bool, HIDPP::Pr
     const bool deviceOnline = MsgResult::Ok == res && err == HIDPP::Error::NoError;
     if (!deviceOnline && err != HIDPP::Error::Unsupported) {
       // Unsupported is send as error if the device is offline
-      logWarn(hid) << tr("Unexpected error for offline device (%1, %2)")
-        .arg(toString(res)).arg(toString(err));
+      qCWarning(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Unexpected error for offline device (%1, %2)").arg(toString(res)).arg(toString(err));
     }
     cb(deviceOnline, std::move(pv));
   });
@@ -942,7 +1057,7 @@ void SubHidppConnection::checkAndUpdatePresenterState(std::function<void(Present
       {
         if (m_protocolVersion.smallerThan(2, 0))
         {
-          logWarn(hid) << tr("Hid++ version < 2.0 not supported. (%1)").arg(path());
+          qCWarning(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Hid++ version < 2.0 not supported. (%1)").arg(path());
           setPresenterState(PresenterState::Error);
           if (cb) { cb(m_presenterState); }
           return;
@@ -957,7 +1072,7 @@ void SubHidppConnection::checkAndUpdatePresenterState(std::function<void(Present
         {
           if (!resultMap.empty()) {
             for (const auto& res : resultMap) {
-              logDebug(hid) << tr("InitFeature result %1 => %2").arg(toString(res.first)).arg(toString(res.second));
+              qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("InitFeature result %1 => %2").arg(toString(res.first)).arg(toString(res.second));
             }
           }
           setPresenterState(PresenterState::Initialized_Online);
@@ -992,7 +1107,7 @@ void SubHidppConnection::onHidppDataAvailable(int fd)
       // just ignore regular HID reports from the Logitech Spotlight
     }
     else {
-      logDebug(hid) << tr("Received invalid HID++ message '%1' from %2").arg(msg.hex(), path());
+      qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Received invalid HID++ message '%1' from %2").arg(msg.hex()).arg(path());
     }
     return;
   }
@@ -1006,16 +1121,15 @@ void SubHidppConnection::onHidppDataAvailable(int fd)
 
     if (it != m_requests.end())
     {
-      logDebug(hid) << tr("Received hiddpp error with code = %1 on")
-                       .arg(to_integral(msg.errorCode())) << path() << "(" << msg.hex() << ")";
+      qCDebug(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Received hiddpp error with code = %1 on").arg(to_integral(msg.errorCode())) << path() << "(" << msg.hex() << ")";
       if (it->callBack) {
         it->callBack(MsgResult::HidppError, std::move(msg));
       }
       m_requests.erase(it);
     }
     else {
-      logWarn(hid) << tr("Received error hidpp message '%1' "
-                         "without matching request.").arg(qPrintable(msg.hex()));
+      qCWarning(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Received error hidpp message '%1' "
+                           "without matching request.").arg(msg.hex());
     }
     return;
   }
@@ -1029,8 +1143,8 @@ void SubHidppConnection::onHidppDataAvailable(int fd)
   if (it != m_requests.end())
   {
     // Found matching request
-    logDebug(hid) << tr("Received %1 bytes on").arg(msg.size()) << path()
-                  << "(" << msg.hex() << ")";
+    qCDebug(PROJECTEUR_HID_LOG).noquote() << "Received" << msg.size() << "bytes on" << path()
+                               << "(" << msg.hex() << ")";
     if (it->callBack) {
       it->callBack(MsgResult::Ok, std::move(msg));
     }
@@ -1039,7 +1153,6 @@ void SubHidppConnection::onHidppDataAvailable(int fd)
   else if (msg.softwareId() == 0 || msg.subId() < 0x80)
   {
     // Event/Notification
-    // logDebug(hid) << tr("Received notification (%1) on %2").arg(msg.hex()).arg(path());
 
     // Notify subscribers
     const auto& callbackList = m_notificationSubscribers[msg.featureIndex()];
@@ -1051,8 +1164,8 @@ void SubHidppConnection::onHidppDataAvailable(int fd)
   }
   else
   {
-    logWarn(hid) << tr("Received hidpp message "
-                       "'%1' without matching request.").arg(msg.hex());
+    qCWarning(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Received hidpp message "
+                         "'%1' without matching request.").arg(msg.hex());
   }
 }
 

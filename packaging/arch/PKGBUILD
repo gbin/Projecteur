@@ -1,0 +1,66 @@
+# Local development package for Projecteur.
+#
+# `just package` creates the two local sources below in a staging directory,
+# updates their checksums, and invokes makepkg there.
+
+pkgname=projecteur
+pkgver=0
+pkgrel=1
+pkgdesc='Virtual laser pointer for inertial pointer devices on KDE Plasma Wayland'
+arch=('x86_64')
+url='https://github.com/gbin/Projecteur'
+license=('MIT')
+depends=(
+  'gcc-libs'
+  'glibc'
+  'kconfig>=6.7'
+  'kconfigwidgets>=6.7'
+  'kcoreaddons>=6.7'
+  'kdbusaddons>=6.7'
+  'kglobalaccel>=6.7'
+  'ki18n>=6.7'
+  'kpipewire>=6.7'
+  'knotifications>=6.7'
+  'kwidgetsaddons>=6.7'
+  'kwindowsystem>=6.7'
+  'kxmlgui>=6.7'
+  'layer-shell-qt>=6.7'
+  'libplasma>=6.7'
+  'libglvnd'
+  'qt6-base>=6.11'
+  'qt6-declarative>=6.11'
+  'qt6-wayland>=6.11'
+)
+makedepends=(
+  'cmake>=3.20'
+  'extra-cmake-modules>=6.7'
+  'gettext'
+  'qt6-shadertools>=6.11'
+)
+source=(
+  'projecteur-local.tar.gz'
+  'projecteur-pkgver'
+)
+sha256sums=(
+  'SKIP'
+  'SKIP'
+)
+
+pkgver() {
+  cat "$srcdir/projecteur-pkgver"
+}
+
+build() {
+  cmake -S projecteur-local -B build \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_UDEVRULESDIR=/usr/lib/udev/rules.d \
+    -DPACKAGE_TARGETS=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 projecteur-local/LICENSE.md \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

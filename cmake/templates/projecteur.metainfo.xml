@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<component>
-    <id>projecteur</id>
-    <metadata_license>Expat</metadata_license>
-    <project_license>Expat</project_license>
+<component type="desktop-application">
+    <id>org.projecteur.Projecteur</id>
+    <metadata_license>FSFAP</metadata_license>
+    <project_license>MIT</project_license>
     <name>Projecteur</name>
     <summary>Virtual pointer for the Logitech Spotlight device</summary>
+    <developer id="io.github.gbin">
+        <name>Guillaume Binet and Projecteur contributors</name>
+    </developer>
+    <launchable type="desktop-id">org.projecteur.Projecteur.desktop</launchable>
+    <content_rating type="oars-1.1" />
     <url type="homepage">@HOMEPAGE@</url>
     <description>
         <p>
@@ -19,11 +24,12 @@
     </description>
     <provides>
         <modalias>usb:v046DpC53Ed*</modalias>
+        <modalias>usb:v046DpC548d*</modalias>
     </provides>
     <screenshots>
         <screenshot type="default">
             <caption>Highlight virtual pointer effect</caption>
-            <image type="source" width="867" height="775">https://raw.githubusercontent.com/jahnf/Projecteur/develop/doc/screenshot-spot.png</image>
+            <image type="source" width="867" height="775">https://raw.githubusercontent.com/gbin/Projecteur/develop/doc/screenshot-spot.png</image>
         </screenshot>
     </screenshots>
     <categories>

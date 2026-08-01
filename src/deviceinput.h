@@ -274,10 +274,9 @@ struct MappedAction
   bool operator==(const MappedAction& o) const;
   std::shared_ptr<Action> action;
 };
-Q_DECLARE_METATYPE(MappedAction);
-
 QDataStream& operator>>(QDataStream& s, MappedAction& mia);
 QDataStream& operator<<(QDataStream& s, const MappedAction& mia);
+Q_DECLARE_METATYPE(MappedAction);
 
 // -------------------------------------------------------------------------------------------------
 class InputMapConfig : public std::map<KeyEventSequence, MappedAction>{};

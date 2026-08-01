@@ -1,5 +1,5 @@
 # This file is part of Projecteur - https://github.com/jahnf/projecteur - See LICENSE.md and README.md
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.20)
 include(LinuxDistributionInfo)
 
 set(_LinuxPackaging_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}")

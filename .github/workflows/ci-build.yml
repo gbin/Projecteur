@@ -2,284 +2,35 @@ name: ci-build
 
 on:
   push:
-    branches:
-      - master
-      - develop
+    branches: [master, develop]
   pull_request:
-    branches:
-      - master
-      - develop
-      - 'feature/**'
+    branches: [master, develop, "feature/**"]
   workflow_dispatch:
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        docker_tag:
-        - archlinux
-        - fedora-31
-        - fedora-32
-        - fedora-33
-        - fedora-34
-        - fedora-37
-        - fedora-38
-        - debian-stretch
-        - debian-buster
-        - debian-bullseye
-        - debian-bookworm
-        - ubuntu-18.04
-        - ubuntu-20.04
-        - ubuntu-20.10
-        - ubuntu-21.04
-        - ubuntu-22.04
-        - ubuntu-23.04
-        - opensuse-15.0
-        - opensuse-15.1
-        - opensuse-15.2
-        - opensuse-15.3
-        - opensuse-15.4
-        - opensuse-15.5
-        - centos-8
-        os:
-        - ubuntu-latest
-
-    runs-on: ${{ matrix.os }}
-    env:
-      DOCKER_IMG: ghcr.io/jahnf/projecteur/projecteur
-      DOCKER_TAG: ${{ matrix.docker_tag }}
-      MAKEFLAGS: -j2
-      CLOUDSMITH_USER: jahnf
-      CLOUDSMITH_SUMMARY: ci-build from branch '${{ github.ref }}'
-      CLOUDSMITH_DESC: For more information visit https://github.com/jahnf/Projecteur
-
-    steps:
-    # ===================================================================================
-    # ---------- Add ~/.local/bin to PATH ----------
-    - run: |
-        export LOCAL_BIN=~/.local/bin
-        echo "${LOCAL_BIN}" >> $GITHUB_PATH
-
-    # ===================================================================================
-    # ---------- Checkout and build inside docker container ----------
-    - uses: actions/checkout@v4
-      with:
-        # unfortunately, currently we need all the history for a valid auto generated version
-        fetch-depth: 0
-
-    - run: |
-        export BRANCH=${GITHUB_REF/refs\/heads\//}
-        echo Detected branch: ${BRANCH}
-        echo "BRANCH=${BRANCH}" >> $GITHUB_ENV
-
-    - name: Pull ${{ matrix.docker_tag }} docker image
-      run: |
-        docker pull ${DOCKER_IMG}:${{ matrix.docker_tag }}
-    - name: docker create build container
-      run: |
-        docker run --name build --env MAKEFLAGS=${MAKEFLAGS} \
-          --env TRAVIS_BRANCH=${BRANCH} \
-          -d -v `pwd`:/source:ro -t ${DOCKER_IMG}:${{ matrix.docker_tag }}
-    - name: cmake configuration
-      run: docker exec build /bin/bash -c "mkdir -p /build/dist-pkg && cd /build && cmake /source"
-    - name: cmake build
-      run: docker exec build /bin/bash -c "cd /build && cmake --build ."
-    - name: create linux package
-      run: docker exec build /bin/bash -c "cd /build && cmake --build . --target dist-package"
-    - name: Run projecteur executable, print version
-      run: |
-        docker exec build /bin/bash -c "cd /build && ./projecteur --version"
-        docker exec build /bin/bash -c "cd /build && ./projecteur -f"
-
-    # ===================================================================================
-    # ---------- Gather artifacts and version information from container build ----------
-    - name: Get created artifacts from docker container
-      run: |
-        docker cp build:/build/dist-pkg .
-        docker cp build:/build/version-string .
-
-    - name: Set version environment variable
-      run: |
-        projecteur_version=`cat version-string`
-        echo "projecteur_version=${projecteur_version}" >> $GITHUB_ENV
-
-    - name: Move source package
-      if:  startsWith(matrix.docker_tag, 'archlinux')
-      run: mkdir -p source-pkg && mv dist-pkg/*source.tar.gz ./source-pkg || true
-
-    - name: Get source package filename for artifact uploads
-      run: |
-        src_pkg_artifact=`ls -1 source-pkg/* | head -n 1`
-        echo "src_pkg_artifact=${src_pkg_artifact}" >> $GITHUB_ENV
-
-    - name: Get binary package filename for artifact uploads
-      run: |
-        dist_pkg_artifact=`ls -1 dist-pkg/* | head -n 1`
-        echo "dist_pkg_artifact=${dist_pkg_artifact}" >> $GITHUB_ENV
-
-    - if:  startsWith(matrix.docker_tag, 'archlinux')
-      run: echo "${{ env.BRANCH }}" >> version-branch
-
-    # ===================================================================================
-    # ---------- Upload artifacts to github ----------
-    - name: Upload source-pkg artifact to github
-      if:  startsWith(matrix.docker_tag, 'archlinux')
-      uses: actions/upload-artifact@v4
-      with:
-        name: source-package
-        path: ${{ env.src_pkg_artifact }}
-
-    - name: Upload version-info to github
-      if:  startsWith(matrix.docker_tag, 'archlinux')
-      uses: actions/upload-artifact@v4
-      with:
-        name: version-info
-        path: |
-          ./version-string
-          ./version-branch
-
-    - name: Upload binary package artifact to github
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.docker_tag }}-package
-        path: ${{ env.dist_pkg_artifact }}
-
-    # ===================================================================================
-    # ---------- Set environment variables depending on branch ----------
-    - name: Set environment variable defaults
-      run: |
-        echo "upload_bin_pkg=${{ false }}" >> $GITHUB_ENV
-        echo "upload_src_pkg=${{ false }}" >> $GITHUB_ENV
-        echo "cloudsmith_upload_repo=projecteur-develop" >> $GITHUB_ENV
-        echo "REPO_UPLOAD=${{ false }}" >> $GITHUB_ENV
-
-    - name: Check for binary-pkg upload conditions
-      if: ${{ (env.BRANCH == 'develop' || env.BRANCH == 'master') && github.repository == 'jahnf/Projecteur' }}
-      run: |
-        echo "upload_bin_pkg=${{ true }}" >> $GITHUB_ENV
-        pip install --upgrade wheel
-        pip install --upgrade cloudsmith-cli
-
-    - name: Check for source-pkg upload conditions
-      if: ${{ env.upload_bin_pkg == 'true' && startsWith(matrix.docker_tag, 'archlinux') && github.repository == 'jahnf/Projecteur' }}
-      run: |
-        echo "upload_src_pkg=${{ true }}" >> $GITHUB_ENV
-
-    - if: env.BRANCH == 'master'
-      run: |
-        echo "cloudsmith_upload_repo=projecteur-stable" >> $GITHUB_ENV
-
-    # ===================================================================================
-    # ---------- Upload artifacts to cloudsmith ----------
-    - name: Upload raw binary-pkg to cloudsmith
-      if: env.upload_bin_pkg == 'true'
-      env:
-        CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
-        CLOUDSMITH_REPO: ${{ env.cloudsmith_upload_repo }}
-      run: |
-        cloudsmith push raw -W -k ${CLOUDSMITH_API_KEY} --name ${{ matrix.docker_tag }} --republish \
-          --version ${{ env.projecteur_version }} ${CLOUDSMITH_USER}/${CLOUDSMITH_REPO} \
-          --summary "${CLOUDSMITH_SUMMARY}" --description "${CLOUDSMITH_DESC}" ${{ env.dist_pkg_artifact }}
-
-    - name: Upload raw source-pkg to cloudsmith
-      if: ${{ env.upload_src_pkg == 'true' && github.repository == 'jahnf/Projecteur' }}
-      env:
-        CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
-        CLOUDSMITH_REPO: ${{ env.cloudsmith_upload_repo }}
-      run: |
-        cloudsmith push raw -W -k ${CLOUDSMITH_API_KEY} --name sources --republish \
-          --version ${{ env.projecteur_version }} ${CLOUDSMITH_USER}/${CLOUDSMITH_REPO} \
-          --summary "${CLOUDSMITH_SUMMARY}" --description "${CLOUDSMITH_DESC}" ${{ env.src_pkg_artifact }}
-
-    - name: Get package and repo type for upload
-      if: env.upload_bin_pkg == 'true'
-      run: |
-        filename=$(basename -- "${{ env.dist_pkg_artifact }}")
-        export PKG_TYPE="${filename##*.}"
-        declare -A distromap=( ["debian-stretch"]="debian/stretch" ["debian-buster"]="debian/buster" \
-          ["debian-bullseye"]="debian/bullseye" ["debian-bookworm"]="debian/bookworm" \
-          ["ubuntu-18.04"]="ubuntu/bionic" \
-          ["ubuntu-20.04"]="ubuntu/focal" ["ubuntu-21.04"]="ubuntu/hirsute" \
-          ["ubuntu-22.04"]="ubuntu/jammy" ["ubuntu-23.04"]="ubuntu/lunar" \
-          ["opensuse-15.1"]="opensuse/15.1" ["opensuse-15.2"]="opensuse/15.2" \
-          ["opensuse-15.3"]="opensuse/15.3" ["opensuse-15.4"]="opensuse/15.4" \
-          ["opensuse-15.5"]="opensuse/15.5" ["centos-8"]="el/8" \
-          ["fedora-31"]="fedora/31" \
-          ["fedora-32"]="fedora/32" ["fedora-33"]="fedora/33" \
-          ["fedora-34"]="fedora/34" ["fedora-37"]="fedora/37" ["fedora-38"]="fedora/38" )
-        export DISTRO=${distromap[${{ matrix.docker_tag }}]}
-        echo PKGTYPE=$PKG_TYPE
-        echo DISTRO=$DISTRO
-        echo "PKG_TYPE=${PKG_TYPE}" >> $GITHUB_ENV
-        echo "DISTRO=${DISTRO}" >> $GITHUB_ENV
-        if [ -z ${DISTRO} ] || [ -z ${PKG_TYPE} ]; then \
-          export REPO_UPLOAD=false; else export REPO_UPLOAD=true; fi;
-        echo "REPO_UPLOAD=${REPO_UPLOAD}" >> $GITHUB_ENV
-
-    - name: Linux repo upload on cloudsmith for ${{ env.DISTRO }}
-      if: env.REPO_UPLOAD == 'true'
-      env:
-        CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
-        CLOUDSMITH_REPO: ${{ env.cloudsmith_upload_repo }}
-      run: |
-        echo Uploading for ${DISTRO} - ${PKG_TYPE}: ${CLOUDSMITH_USER}/${CLOUDSMITH_REPO}/${DISTRO}
-        cloudsmith push ${PKG_TYPE} -W -k ${CLOUDSMITH_API_KEY} --republish \
-          ${CLOUDSMITH_USER}/${CLOUDSMITH_REPO}/${DISTRO} ${{ env.dist_pkg_artifact }}
-
-  # =====================================================================================
-  # ---------- Upload artifacts to projecteur server ------------
-  projecteur-bin-upload:
-    if: ${{ github.repository == 'jahnf/Projecteur' }}
-    needs: build
+  archlinux:
     runs-on: ubuntu-latest
+    container: archlinux:latest
 
     steps:
-    - name: Get version-info
-      uses: actions/download-artifact@v4.1.7
-      with:
-        name: version-info
+      - name: Install build dependencies
+        run: >-
+          pacman -Syu --noconfirm
+          base-devel cmake extra-cmake-modules gettext git kconfig kconfigwidgets kcoreaddons kdbusaddons
+          kglobalaccel ki18n knotifications kpipewire kwidgetsaddons kwindowsystem kxmlgui
+          layer-shell-qt libplasma qt6-base qt6-declarative qt6-wayland
 
-    - name: Extract version info
-      run: |
-        BRANCH=`cat version-branch`
-        echo "BRANCH=${BRANCH}" >> $GITHUB_ENV
-        VERSION=`cat version-string`
-        echo "VERSION=${VERSION}" >> $GITHUB_ENV
-        DO_UPLOAD=$(( [ "master" = "$BRANCH" ] || [ "develop" = "$BRANCH" ] ) && echo true || echo false)
-        echo "DO_UPLOAD=${DO_UPLOAD}" >> $GITHUB_ENV
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - uses: actions/download-artifact@v4.1.7
-      if: env.DO_UPLOAD == 'true'
-      with:
-        path: artifacts
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DPACKAGE_TARGETS=OFF
 
-    - name: Create upload directory
-      if: env.DO_UPLOAD == 'true'
-      run: |
-        BRANCHDIR=${{ env.BRANCH }}
-        [ "master" = "$BRANCHDIR" ] && BRANCHDIR=stable
-        VERSION=${{ env.VERSION }}
-        mkdir -p upload/$BRANCHDIR/$VERSION
-        find ./artifacts -iname "projecteur*" -exec mv -t upload/$BRANCHDIR/$VERSION {} +
-        BRANCHNAME=${BRANCHDIR/\//_}
-        BRANCH_FILENAME=${BRANCHNAME}-latest.json
-        echo '{ "version": "${{ env.VERSION}}" }' >> upload/$BRANCH_FILENAME
-        echo "BRANCHNAME=${BRANCHNAME}" >> $GITHUB_ENV
-        find . -iname "projecteur*"
-        cd upload/$BRANCHDIR/$VERSION
-        sha1sum * > sha1sums.txt
+      - name: Build
+        run: cmake --build build --parallel 2
 
-    - name: 📂 Upload files
-      if: env.DO_UPLOAD == 'true'
-      run: |
-        cd upload && sudo apt-get install lftp --no-install-recommends
-        lftp ${{ secrets.PROJECTEUR_UPLOAD_HOSTNAME }} \
-        -u "${{ secrets.PROJECTEUR_UPLOAD_USER }},${{ secrets.PROJECTEUR_UPLOAD_TOKEN }}" \
-        -e "set ftp:ssl-force true; set ssl:verify-certificate true; mirror \
-        --reverse --upload-older --dereference -x ^\.git/$ ./ ./; quit"
-
-    - name: Update latest symlink
-      if: env.DO_UPLOAD == 'true'
-      run: |
-        curl --fail -i -X POST -F "token=${{ secrets.PROJECTEUR_UPDATE_TOKEN }}" \
-        ${{ secrets.PROJECTEUR_UPDATE_URL }}?branch=${{ env.BRANCHNAME }}
+      - name: Smoke test
+        run: |
+          ./build/projecteur --version
+          ./build/projecteur --help

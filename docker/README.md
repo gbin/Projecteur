@@ -1,12 +1,8 @@
-# Projecteur Dockerfiles
+# Projecteur build container
 
-Docker configuration files for build containers used in _Projecteur_ CI builds.
+The maintained container targets the Qt 6 / KDE Plasma Wayland port on current
+Arch Linux.
 
-Example for creating an image:
+```sh
+docker build -f Dockerfile.archlinux --tag projecteur:archlinux .
 ```
-docker build -f Dockerfile.ubuntu-20.10 --tag jahnf/projecteur:ubuntu-20.10 .
-```
-
-Images used in the CI build can be found on docker hub:
-https://hub.docker.com/r/jahnf/projecteur
-
