@@ -8,7 +8,13 @@ endif()
 
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 
-project(Projecteur LANGUAGES C CXX)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" PROJECTEUR_RELEASE_VERSION
+     LIMIT_COUNT 1 REGEX "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+if(NOT PROJECTEUR_RELEASE_VERSION)
+  message(FATAL_ERROR "VERSION must contain one semantic version such as 1.0.0")
+endif()
+
+project(Projecteur VERSION "${PROJECTEUR_RELEASE_VERSION}" LANGUAGES C CXX)
 
 add_compile_options(-Wall -Wextra -Werror)
 #set(CMAKE_CXX_CLANG_TIDY clang-tidy-12)
@@ -26,7 +32,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.11 REQUIRED COMPONENTS Core DBus Gui Quick ShaderTools WaylandClient Widgets)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core DBus Gui Quick ShaderTools WaylandClient Widgets)
 find_package(KF6 6.7 REQUIRED COMPONENTS Config ConfigWidgets CoreAddons DBusAddons GlobalAccel I18n
                                         Notifications Package KirigamiPlatform WidgetsAddons WindowSystem XmlGui)
 find_package(KPipeWire 6.7 REQUIRED)
@@ -193,16 +199,17 @@ add_subdirectory(plasma)
 #  Update this information - the version numbers and the version type.
 #  VERSION_TYPE must be either 'release' or 'develop'
 set_target_properties(projecteur PROPERTIES
-  VERSION_MAJOR 1
-  VERSION_MINOR 0
-  VERSION_PATCH 0
-  VERSION_TYPE develop
-  VERSION_DISTANCE_OFFSET 200
+  VERSION_MAJOR "${PROJECT_VERSION_MAJOR}"
+  VERSION_MINOR "${PROJECT_VERSION_MINOR}"
+  VERSION_PATCH "${PROJECT_VERSION_PATCH}"
+  # Source archives do not contain .git. They must still report the release version.
+  VERSION_TYPE release
+  VERSION_DISTANCE_OFFSET 0
 )
 add_version_info(projecteur "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # Create files containing generated version strings, helping package maintainers
-get_target_property(PROJECTEUR_VERSION_STRING projecteur VERSION_STRING)
+get_target_property(PROJECTEUR_VERSION_STRING projecteur VERSION_STRING_FULL)
 # Arch Linux = PKGBUILD/makepkg: '-' is not allowed in version number
 string(REPLACE "-" "" PROJECTEUR_VERSION_STRING_ARCHLINUX "${PROJECTEUR_VERSION_STRING}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version-string" "${PROJECTEUR_VERSION_STRING}")

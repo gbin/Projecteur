@@ -1,7 +1,7 @@
 #include "@TARGET@-GitVersion.h"
 
 namespace @TARGET@ {
-  const char* version_string() { return "@VERSION_STRING@"; }
+  const char* version_string() { return "@VERSION_STRING_FULL@"; }
   unsigned int version_major() { return @VERSION_MAJOR@; }
   unsigned int version_minor() { return @VERSION_MINOR@; }
   unsigned int version_patch() { return @VERSION_PATCH@; }

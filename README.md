@@ -15,7 +15,7 @@ close at hand in Plasma.
 [<img src="doc/screenshot-spot.png" alt="Projecteur highlighting and magnifying part of a presentation slide" width="900">](./doc/screenshot-spot.png)
 
 > [!NOTE]
-> The current development line requires **KDE Plasma 6.7 or newer**, **Qt 6.11
+> The current development line requires **KDE Plasma 6.7 or newer**, **Qt 6.10
 > or newer**, and a **Wayland session**. The previous Qt 5, X11, and
 > cross-desktop codebase is maintained for critical fixes on the
 > [`legacy/qt5`](https://github.com/gbin/Projecteur/tree/legacy/qt5) branch.
@@ -59,9 +59,11 @@ with native KDE controls.
 
 ## Install
 
-Projecteur is under active development and currently distributed from source.
-The install step is important: KWin grants zoom access using Projecteur's
-installed desktop metadata, and the presenter needs the installed udev rules.
+Stable releases provide source, Arch Linux, Fedora, openSUSE Tumbleweed,
+Debian testing, and Ubuntu packages on the
+[GitHub Releases page](https://github.com/gbin/Projecteur/releases). The install
+step is important: KWin grants zoom access using Projecteur's installed desktop
+metadata, and the presenter needs the installed udev rules.
 
 ### Arch Linux and Arch-based distributions
 
