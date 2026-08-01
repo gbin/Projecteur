@@ -123,6 +123,7 @@ presenters vibrate when time expires.
 | AVATTO i10 Pro | USB | `2571:4109` |
 | August LP310 | USB | `69a7:9803` |
 | Norwii Wireless Presenter | USB | `3243:0122` |
+| Norwii N95s BLE Presenter | USB receiver / Bluetooth | `3243:0382` / `3243:03a2` |
 | Kensington PowerPointer | USB | `1ea7:0002` |
 
 Projecteur can also accept an additional device at runtime with
