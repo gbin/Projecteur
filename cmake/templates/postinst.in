@@ -1,5 +1,9 @@
-# Make sure uinput module is loaded
-modprobe uinput
-# Reload udev rules.
-udevadm control --reload-rules
-udevadm trigger
+# Package installation can also run in containers and image builders where
+# kernel modules and the udev daemon are intentionally unavailable.
+if command -v modprobe >/dev/null 2>&1; then
+  modprobe uinput 2>/dev/null || true
+fi
+if command -v udevadm >/dev/null 2>&1; then
+  udevadm control --reload-rules 2>/dev/null || true
+  udevadm trigger 2>/dev/null || true
+fi

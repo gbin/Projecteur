@@ -12,7 +12,7 @@ straight to a pull request.
 The current Projecteur development line targets:
 
 - KDE Plasma 6.7 or newer on Wayland
-- Qt 6.11 or newer
+- Qt 6.10 or newer
 - LayerShellQt and KPipeWire 6.7 or newer
 - Linux presenter devices exposed through evdev and hidraw
 
@@ -24,7 +24,7 @@ Qt 5, X11, and non-Plasma support are maintained only for critical fixes on the
 - A C++17 compiler
 - CMake 3.20 or newer
 - Extra CMake Modules 6.7 or newer
-- Qt 6.11 or newer with Core, DBus, Gui, Quick, ShaderTools, WaylandClient, and
+- Qt 6.10 or newer with Core, DBus, Gui, Quick, ShaderTools, WaylandClient, and
   Widgets
 - KDE Frameworks 6.7 or newer: Config, ConfigWidgets, CoreAddons, DBusAddons,
   GlobalAccel, I18n, Notifications, Package, KirigamiPlatform, WidgetsAddons,

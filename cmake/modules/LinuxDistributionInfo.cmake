@@ -35,7 +35,7 @@ function(get_linux_distribution VAR_DIST_NAME VAR_DIST_VERSION)
   endforeach()
 
   # Get distribution version/release - try different keys
-  foreach(var VERSION_ID DISTRIB_RELEASE VERSION)
+  foreach(var VERSION_ID VERSION_CODENAME UBUNTU_CODENAME DISTRIB_RELEASE VERSION)
     foreach(line IN LISTS rel_info_all)
       if( "${line}" MATCHES "^${var}=[\"]?([^ \"]*)")
         string(STRIP "${CMAKE_MATCH_1}" DIST_VERSION)

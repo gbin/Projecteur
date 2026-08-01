@@ -8,6 +8,7 @@ list(APPEND _LinuxPackaging_MAP_dist_pkgtype
   "debian::DEB"
   "ubuntu::DEB"
   "opensuse::RPM"
+  "opensuse-tumbleweed::RPM"
   "opensuse-leap::RPM"
   "fedora::RPM"
   "centos::RPM"
@@ -171,10 +172,6 @@ function(add_dist_package_target)
     _cpack_default_packaging()
   endif()
 
-  configure_file(
-    "${_LinuxPackaging_DIRECTORY}/travis-ci-bintray-deploy.json.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/travis-ci-bintray-deploy.json" @ONLY)
-
   message(STATUS "Configured target 'dist-package' with Linux '${PKG_DIST}' and package type '${PKG_TYPE}'")
 
   # Make some information available to parent scope
@@ -276,7 +273,7 @@ endfunction()
 
 # Default cpack packaging (DEB, RPM, TGZ)
 function(_cpack_default_packaging)
-  set(PKG_CPACK_PKG_FILENAME "${PKG_NAME}-${PKG_VERSION_STRING}_${PKG_DIST}-${CMAKE_SYSTEM_PROCESSOR}")
+  set(PKG_CPACK_PKG_FILENAME "${PKG_NAME}-${PKG_VERSION_STRING_BASE}-1_${PKG_DIST}-${CMAKE_SYSTEM_PROCESSOR}")
   set(PKG_CPACK_PKG_FILE_PREFIX "dist-pkg")
   set(PKG_CONFIG_TEMPLATE "${_LinuxPackaging_DIRECTORY}/LinuxPkgCPackConfig.cmake.in")
   set(PKG_CONFIG_FILE "${CMAKE_CURRENT_BINARY_DIR}/CPackConfig-${PKG_TYPE}.cmake")
@@ -295,7 +292,7 @@ function(add_source_archive_target target)
   find_program(TAR_EXECUTABLE tar)
   find_program(GZIP_EXECUTABLE gzip)
   if(GIT_FOUND)
-    get_target_property(VERSION_STRING ${target} VERSION_STRING)
+    get_target_property(VERSION_STRING ${target} VERSION_STRING_FULL)
     execute_process(COMMAND ${GIT_EXECUTABLE} describe --always
       RESULT_VARIABLE result
       OUTPUT_VARIABLE GIT_TREEISH

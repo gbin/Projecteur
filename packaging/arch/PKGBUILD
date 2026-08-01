@@ -27,15 +27,15 @@ depends=(
   'layer-shell-qt>=6.7'
   'libplasma>=6.7'
   'libglvnd'
-  'qt6-base>=6.11'
-  'qt6-declarative>=6.11'
-  'qt6-wayland>=6.11'
+  'qt6-base>=6.10'
+  'qt6-declarative>=6.10'
+  'qt6-wayland>=6.10'
 )
 makedepends=(
   'cmake>=3.20'
   'extra-cmake-modules>=6.7'
   'gettext'
-  'qt6-shadertools>=6.11'
+  'qt6-shadertools>=6.10'
 )
 source=(
   'projecteur-local.tar.gz'

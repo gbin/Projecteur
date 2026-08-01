@@ -1,0 +1,159 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  LC_ALL: C.UTF-8
+  TRAVIS_BRANCH: master
+
+jobs:
+  validate:
+    name: validate-release-ref
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Validate version and release ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(<VERSION)"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            test "${GITHUB_REF_NAME}" = "v${version}"
+            git fetch origin master
+            git merge-base --is-ancestor "${GITHUB_SHA}" origin/master
+          fi
+
+  build:
+    name: release-${{ matrix.id }}
+    needs: validate
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: archlinux
+            image: archlinux:latest
+            bootstrap: pacman -Sy --noconfirm git
+            package: true
+          - id: fedora-44
+            image: fedora:44
+            bootstrap: dnf -y -q install git
+            package: true
+          - id: tumbleweed
+            image: opensuse/tumbleweed:latest
+            bootstrap: zypper -qn refresh && zypper -qn install -y git-core gawk
+            package: true
+          - id: debian-testing
+            image: debian:testing-slim
+            bootstrap: apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git
+            package: true
+          - id: ubuntu-26.10
+            image: ubuntu:devel
+            bootstrap: apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git
+            package: true
+          - id: fedora-rawhide
+            image: fedora:rawhide
+            bootstrap: dnf -y -q install git
+            package: false
+          - id: debian-sid
+            image: debian:sid-slim
+            bootstrap: apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git
+            package: false
+    permissions:
+      contents: read
+    steps:
+      - name: Bootstrap Git for checkout
+        run: ${{ matrix.bootstrap }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: ./ci/install-dependencies.sh "${{ matrix.id }}"
+
+      - name: Build, package, and smoke test
+        run: ./ci/build-target.sh "${{ matrix.id }}"
+
+      - name: Verify tagged binary version
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$("build/ci-${{ matrix.id }}/projecteur" --version | sed -n '1p')"
+          test "$actual" = "Projecteur $(<VERSION)"
+
+      - name: Stage release package
+        if: matrix.package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ matrix.id }}
+          path: release-assets/${{ matrix.id }}/
+          if-no-files-found: error
+          retention-days: 1
+
+  assemble:
+    name: assemble-release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify and checksum assets
+        shell: bash
+        working-directory: release-assets
+        run: |
+          set -euo pipefail
+          test "$(find . -maxdepth 1 -name '*.pkg.tar.zst' | wc -l)" -eq 1
+          test "$(find . -maxdepth 1 -name '*.rpm' | wc -l)" -eq 2
+          test "$(find . -maxdepth 1 -name '*.deb' | wc -l)" -eq 2
+          test "$(find . -maxdepth 1 -name '*_source.tar.gz' | wc -l)" -eq 1
+          sha256sum -- * | sort -k2 > SHA256SUMS
+
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: release-assets/*
+
+      - name: Preserve rehearsal bundle for one day
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-bundle
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Create immutable GitHub release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --draft --generate-notes --title "Projecteur ${tag#v}"
+          gh release upload "$tag" release-assets/* --repo "$GITHUB_REPOSITORY"
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest

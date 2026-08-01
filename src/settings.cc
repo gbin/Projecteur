@@ -22,6 +22,15 @@
 #include <QQmlPropertyMap>
 
 namespace {
+  QQmlPropertyMap* createQmlPropertyMap(QObject* parent)
+  {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 11, 0)
+    return QQmlPropertyMap::create(parent);
+#else
+    return new QQmlPropertyMap(parent);
+#endif
+  }
+
   // -----------------------------------------------------------------------------------------------
   namespace settings {
     constexpr char showSpotShade[] = "showSpotShade";
@@ -175,7 +184,7 @@ namespace {
 // -------------------------------------------------------------------------------------------------
 Settings::Settings(QObject* parent)
   : QObject(parent)
-  , m_shapeSettingsRoot(QQmlPropertyMap::create(this))
+  , m_shapeSettingsRoot(createQmlPropertyMap(this))
 {
   auto config = createConfig({});
   m_config = std::make_unique<ProjecteurConfig>(std::move(config));
@@ -186,7 +195,7 @@ Settings::Settings(QObject* parent)
 // -------------------------------------------------------------------------------------------------
 Settings::Settings(const QString& configFile, QObject* parent)
   : QObject(parent)
-  , m_shapeSettingsRoot(QQmlPropertyMap::create(this))
+  , m_shapeSettingsRoot(createQmlPropertyMap(this))
 {
   auto config = createConfig(configFile);
   m_config = std::make_unique<ProjecteurConfig>(std::move(config));
@@ -613,7 +622,7 @@ void Settings::shapeSettingsInitialize()
   {
     if (shape.shapeSettings().size() && m_shapeSettings.count(shape.name()) == 0)
     {
-      auto pm = QQmlPropertyMap::create(this);
+      auto pm = createQmlPropertyMap(this);
       connect(pm, &QQmlPropertyMap::valueChanged, this,
       [this, shape, pm](const QString& key, const QVariant& value)
       {
