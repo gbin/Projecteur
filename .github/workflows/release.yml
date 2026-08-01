@@ -20,7 +20,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Validate version and release ancestry
@@ -47,29 +47,39 @@ jobs:
         include:
           - id: archlinux
             image: archlinux:latest
+            bootstrap: pacman -Sy --noconfirm git
             package: true
           - id: fedora-44
             image: fedora:44
+            bootstrap: dnf -y -q install git
             package: true
           - id: tumbleweed
             image: opensuse/tumbleweed:latest
+            bootstrap: zypper -qn refresh && zypper -qn install -y git-core
             package: true
           - id: debian-testing
             image: debian:testing-slim
+            bootstrap: apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git
             package: true
           - id: ubuntu-26.10
             image: ubuntu:devel
+            bootstrap: apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git
             package: true
           - id: fedora-rawhide
             image: fedora:rawhide
+            bootstrap: dnf -y -q install git
             package: false
           - id: debian-sid
             image: debian:sid-slim
+            bootstrap: apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git
             package: false
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Bootstrap Git for checkout
+        run: ${{ matrix.bootstrap }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
