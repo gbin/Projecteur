@@ -1,0 +1,75 @@
+# Maintainer: dosssman <dosssman@hotmail.fr>
+# Contributor: Guillaume Binet <gbin@gootz.net>
+
+pkgname=projecteur-git
+pkgver=1.0.0alpha.77.r723.8f187bf
+pkgrel=1
+pkgdesc='Virtual laser pointer for inertial pointer devices on KDE Plasma Wayland'
+arch=('x86_64')
+url='https://github.com/gbin/Projecteur'
+license=('MIT')
+depends=(
+  'glibc'
+  'hicolor-icon-theme'
+  'kcolorscheme>=6.7'
+  'kconfig>=6.7'
+  'kconfigwidgets>=6.7'
+  'kcoreaddons>=6.7'
+  'kdbusaddons>=6.7'
+  'kglobalaccel>=6.7'
+  'kguiaddons>=6.7'
+  'ki18n>=6.7'
+  'kirigami>=6.7'
+  'knotifications>=6.7'
+  'kpipewire>=6.7'
+  'kwidgetsaddons>=6.7'
+  'kwindowsystem>=6.7'
+  'kxmlgui>=6.7'
+  'layer-shell-qt>=6.7'
+  'libgcc'
+  'libglvnd'
+  'libplasma>=6.7'
+  'libstdc++'
+  'qt6-base>=6.10'
+  'qt6-declarative>=6.10'
+  'qt6-wayland>=6.10'
+  'udev'
+  'wayland'
+)
+makedepends=(
+  'cmake>=3.20'
+  'extra-cmake-modules>=6.7'
+  'gettext'
+  'git'
+  'qt6-shadertools>=6.10'
+)
+provides=('projecteur')
+conflicts=('projecteur')
+source=('projecteur::git+https://github.com/gbin/Projecteur.git#branch=develop')
+sha256sums=('SKIP')
+
+prepare() {
+  cmake -S "$srcdir/projecteur" -B "$srcdir/build" \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_UDEVRULESDIR=/usr/lib/udev/rules.d \
+    -DPACKAGE_TARGETS=OFF
+}
+
+pkgver() {
+  cd "$srcdir/projecteur"
+  printf '%s.r%s.%s' \
+    "$(<"$srcdir/build/version-string.archlinux")" \
+    "$(git rev-list --count HEAD)" \
+    "$(git rev-parse --short=7 HEAD)"
+}
+
+build() {
+  cmake --build "$srcdir/build"
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+  install -Dm644 "$srcdir/projecteur/LICENSE.md" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
