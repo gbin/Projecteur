@@ -120,7 +120,7 @@ Window {
         }
 
         MultiEffect {
-            visible: Settings.zoomEnabled && mainWindow.spotOnCurrentWindow
+            visible: Settings.pointerMode === "spotlight" && Settings.zoomEnabled && mainWindow.spotOnCurrentWindow
             anchors.fill: centerRect
             source: Settings.zoomMode === "text" ? textZoom : desktopTexture
             maskEnabled: true
@@ -152,6 +152,136 @@ Window {
                             mainWindow.contentItem.mapToGlobal(mouse.x, mouse.y))
                     }
                 }
+                onPosXChanged: {
+                    if (Settings.pointerMode === "laser" && Settings.laserTrail && ProjecteurApp.overlayVisible) {
+                        laserTrailCanvas.addPoint(posX, posY);
+                    }
+                }
+                onPosYChanged: {
+                    if (Settings.pointerMode === "laser" && Settings.laserTrail && ProjecteurApp.overlayVisible) {
+                        laserTrailCanvas.addPoint(posX, posY);
+                    }
+                }
+            }
+        }
+
+        Connections {
+            target: ProjecteurApp
+            function onOverlayVisibleChanged(visible) {
+                if (!visible) {
+                    laserTrailCanvas.clear();
+                }
+            }
+        }
+
+        Connections {
+            target: Settings
+            function onPointerModeChanged() {
+                laserTrailCanvas.clear();
+            }
+            function onLaserTrailChanged(trail) {
+                if (!trail) {
+                    laserTrailCanvas.clear();
+                }
+            }
+        }
+
+        Canvas {
+            id: laserTrailCanvas
+            anchors.fill: parent
+            visible: Settings.pointerMode === "laser" && Settings.laserTrail && ProjecteurApp.overlayVisible
+            enabled: false
+            antialiasing: true
+            renderTarget: Canvas.FramebufferObject
+            renderStrategy: Canvas.Threaded
+
+            property var points: []
+
+            function addPoint(x, y) {
+                var now = Date.now();
+                if (points.length > 0) {
+                    var last = points[points.length - 1];
+                    var dx = x - last.x;
+                    var dy = y - last.y;
+                    if (dx * dx + dy * dy < 2) {
+                        return;
+                    }
+                }
+                points.push({ x: x, y: y, time: now });
+                if (!decayTimer.running) {
+                    decayTimer.start();
+                }
+                requestPaint();
+            }
+
+            function clear() {
+                points = [];
+                decayTimer.stop();
+                requestPaint();
+            }
+
+            Timer {
+                id: decayTimer
+                interval: 16
+                repeat: true
+                running: false
+                onTriggered: {
+                    var now = Date.now();
+                    var trailTime = Math.max(50, Settings.laserTrailTime);
+                    while (laserTrailCanvas.points.length > 0 && (now - laserTrailCanvas.points[0].time) > trailTime) {
+                        laserTrailCanvas.points.shift();
+                    }
+                    laserTrailCanvas.requestPaint();
+                    if (laserTrailCanvas.points.length === 0) {
+                        decayTimer.stop();
+                    }
+                }
+            }
+
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.clearRect(0, 0, width, height);
+
+                var pts = points;
+                if (!pts || pts.length < 2) {
+                    return;
+                }
+
+                var now = Date.now();
+                var trailTime = Math.max(50, Settings.laserTrailTime);
+                var baseWidth = Math.max(1, Settings.laserTrailWidth);
+                var baseOpacity = Settings.laserTrailOpacity;
+                var trailColor = Settings.laserTrailColor;
+                var r = Math.round(trailColor.r * 255);
+                var g = Math.round(trailColor.g * 255);
+                var b = Math.round(trailColor.b * 255);
+
+                ctx.lineCap = "round";
+                ctx.lineJoin = "round";
+
+                for (var i = 1; i < pts.length; ++i) {
+                    var p0 = pts[i - 1];
+                    var p1 = pts[i];
+                    var age = (now - p1.time) / trailTime;
+                    if (age > 1.0) continue;
+                    var life = Math.max(0.0, Math.min(1.0, 1.0 - age));
+
+                    if (Settings.laserGlow && baseWidth > 2) {
+                        ctx.beginPath();
+                        ctx.moveTo(p0.x, p0.y);
+                        ctx.lineTo(p1.x, p1.y);
+                        ctx.lineWidth = (baseWidth + 4) * life;
+                        ctx.strokeStyle = "rgba(" + r + "," + g + "," + b + "," + (0.35 * baseOpacity * life) + ")";
+                        ctx.stroke();
+                    }
+
+                    ctx.beginPath();
+                    ctx.moveTo(p0.x, p0.y);
+                    ctx.lineTo(p1.x, p1.y);
+                    ctx.lineWidth = Math.max(0.5, baseWidth * life);
+                    ctx.strokeStyle = "rgba(" + r + "," + g + "," + b + "," + (baseOpacity * life) + ")";
+                    ctx.stroke();
+                }
             }
         }
 
@@ -180,7 +310,7 @@ Window {
 
         MultiEffect {
             id: spot
-            visible: Settings.showSpotShade
+            visible: Settings.pointerMode === "spotlight" && Settings.showSpotShade
             opacity: centerRect.opacity
             anchors.fill: centerRect
             source: centerRect
@@ -225,7 +355,7 @@ Window {
 
         MultiEffect {
             id: spotBorder
-            visible: Settings.showBorder && Settings.borderSize > 0
+            visible: Settings.pointerMode === "spotlight" && Settings.showBorder && Settings.borderSize > 0
             opacity: Settings.borderOpacity
             anchors.fill: centerRect
             source: borderShapeLoader
@@ -242,9 +372,63 @@ Window {
             width: Settings.dotSize; height: width
             radius: width*0.5
             color: Settings.dotColor
-            visible: Settings.showCenterDot
+            visible: Settings.pointerMode === "spotlight" && Settings.showCenterDot
             opacity: Settings.dotOpacity
             enabled: false
+        }
+
+        Item {
+            id: laserPointerItem
+            visible: Settings.pointerMode === "laser"
+            anchors.centerIn: centerRect
+            width: Settings.laserSize + (Settings.laserGlow ? Settings.laserGlowSize * 2 : 0)
+            height: width
+            enabled: false
+
+            Rectangle {
+                id: laserGlowRing
+                visible: Settings.laserGlow && Settings.laserGlowSize > 0
+                anchors.centerIn: parent
+                width: parent.width
+                height: width
+                radius: width * 0.5
+                color: Settings.laserGlowColor
+                opacity: Settings.laserGlowOpacity * 0.35
+                antialiasing: true
+            }
+
+            Rectangle {
+                id: laserMidGlow
+                visible: Settings.laserGlow && Settings.laserGlowSize > 0
+                anchors.centerIn: parent
+                width: Settings.laserSize + Settings.laserGlowSize
+                height: width
+                radius: width * 0.5
+                color: Settings.laserGlowColor
+                opacity: Settings.laserGlowOpacity * 0.7
+                antialiasing: true
+            }
+
+            Rectangle {
+                id: laserCore
+                anchors.centerIn: parent
+                width: Settings.laserSize
+                height: width
+                radius: width * 0.5
+                color: Settings.laserColor
+                opacity: Settings.laserOpacity
+                antialiasing: true
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: Math.max(2, parent.width * 0.35)
+                    height: width
+                    radius: width * 0.5
+                    color: "#ffffff"
+                    opacity: 0.8 * Settings.laserOpacity
+                    antialiasing: true
+                }
+            }
         }
 
         Rectangle {

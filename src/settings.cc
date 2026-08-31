@@ -51,6 +51,19 @@ namespace {
     constexpr char zoomEnabled[] = "enableZoom";
     constexpr char zoomFactor[] = "zoomFactor";
     constexpr char zoomMode[] = "zoomMode";
+    constexpr char pointerMode[] = "pointerMode";
+    constexpr char laserSize[] = "laserSize";
+    constexpr char laserColor[] = "laserColor";
+    constexpr char laserOpacity[] = "laserOpacity";
+    constexpr char laserGlow[] = "laserGlow";
+    constexpr char laserGlowSize[] = "laserGlowSize";
+    constexpr char laserGlowOpacity[] = "laserGlowOpacity";
+    constexpr char laserGlowColor[] = "laserGlowColor";
+    constexpr char laserTrail[] = "laserTrail";
+    constexpr char laserTrailTime[] = "laserTrailTime";
+    constexpr char laserTrailWidth[] = "laserTrailWidth";
+    constexpr char laserTrailColor[] = "laserTrailColor";
+    constexpr char laserTrailOpacity[] = "laserTrailOpacity";
     constexpr char multiScreenOverlay[] = "multiScreenOverlay";
     constexpr char presentationTimerEnabled[] = "presentationTimerEnabled";
     constexpr char presentationTimerDurationSeconds[] = "presentationTimerDurationSeconds";
@@ -78,6 +91,19 @@ namespace {
       constexpr bool zoomEnabled = false;
       constexpr double zoomFactor = 2.0;
       constexpr char zoomMode[] = "smooth";
+      constexpr char pointerMode[] = "spotlight";
+      constexpr int laserSize = 16;
+      constexpr auto laserColor = Qt::red;
+      constexpr double laserOpacity = 0.9;
+      constexpr bool laserGlow = true;
+      constexpr int laserGlowSize = 10;
+      constexpr double laserGlowOpacity = 0.6;
+      constexpr auto laserGlowColor = Qt::red;
+      constexpr bool laserTrail = false;
+      constexpr int laserTrailTime = 400;
+      constexpr int laserTrailWidth = 4;
+      constexpr auto laserTrailColor = Qt::red;
+      constexpr double laserTrailOpacity = 0.8;
       constexpr bool multiScreenOverlay = false;
       constexpr bool presentationTimerEnabled = false;
       constexpr int presentationTimerDurationSeconds = 15 * 60;
@@ -96,6 +122,13 @@ namespace {
       constexpr Settings::SettingRange<int> borderSize{ 0, 100 };
       constexpr Settings::SettingRange<double> borderOpacity{ 0.0, 1.0 };
       constexpr Settings::SettingRange<double> zoomFactor{ 1.5, 20.0 };
+      constexpr Settings::SettingRange<int> laserSize{ 3, 100 };
+      constexpr Settings::SettingRange<double> laserOpacity{ 0.0, 1.0 };
+      constexpr Settings::SettingRange<int> laserGlowSize{ 0, 50 };
+      constexpr Settings::SettingRange<double> laserGlowOpacity{ 0.0, 1.0 };
+      constexpr Settings::SettingRange<int> laserTrailTime{ 100, 2000 };
+      constexpr Settings::SettingRange<int> laserTrailWidth{ 1, 30 };
+      constexpr Settings::SettingRange<double> laserTrailOpacity{ 0.0, 1.0 };
 
       constexpr Settings::SettingRange<int> inputSequenceInterval{ 100, 950 };
     } // end namespace ranges
@@ -368,6 +401,42 @@ void Settings::initializeStringProperties()
   map.emplace_back( "zoom.mode", StringProperty{ StringProperty::StringEnum,
                     {QStringLiteral("smooth"), QStringLiteral("text"), QStringLiteral("pixel")},
                     [this](const QString& value){ setZoomMode(value); } } );
+  // --- pointer mode
+  map.emplace_back( "pointer.mode", StringProperty{ StringProperty::StringEnum,
+                    {QStringLiteral("spotlight"), QStringLiteral("laser")},
+                    [this](const QString& value){ setPointerMode(value); } } );
+  // --- laser pointer
+  map.emplace_back( "laser.size", StringProperty{ StringProperty::Integer,
+                    {::settings::ranges::laserSize.min, ::settings::ranges::laserSize.max},
+                    [this](const QString& value){ setLaserSize(value.toInt()); } } );
+  map.emplace_back( "laser.color", StringProperty{ StringProperty::Color, {},
+                    [this](const QString& value){ setLaserColor(QColor(value)); } } );
+  map.emplace_back( "laser.opacity", StringProperty{ StringProperty::Double,
+                    {::settings::ranges::laserOpacity.min, ::settings::ranges::laserOpacity.max},
+                    [this](const QString& value){ setLaserOpacity(value.toDouble()); } } );
+  map.emplace_back( "laser.glow", StringProperty{ StringProperty::Bool, {false, true},
+                    [this](const QString& value){ setLaserGlow(toBool(value)); } } );
+  map.emplace_back( "laser.glow-size", StringProperty{ StringProperty::Integer,
+                    {::settings::ranges::laserGlowSize.min, ::settings::ranges::laserGlowSize.max},
+                    [this](const QString& value){ setLaserGlowSize(value.toInt()); } } );
+  map.emplace_back( "laser.glow-opacity", StringProperty{ StringProperty::Double,
+                    {::settings::ranges::laserGlowOpacity.min, ::settings::ranges::laserGlowOpacity.max},
+                    [this](const QString& value){ setLaserGlowOpacity(value.toDouble()); } } );
+  map.emplace_back( "laser.glow-color", StringProperty{ StringProperty::Color, {},
+                    [this](const QString& value){ setLaserGlowColor(QColor(value)); } } );
+  map.emplace_back( "laser.trail", StringProperty{ StringProperty::Bool, {false, true},
+                    [this](const QString& value){ setLaserTrail(toBool(value)); } } );
+  map.emplace_back( "laser.trail.time", StringProperty{ StringProperty::Integer,
+                    {::settings::ranges::laserTrailTime.min, ::settings::ranges::laserTrailTime.max},
+                    [this](const QString& value){ setLaserTrailTime(value.toInt()); } } );
+  map.emplace_back( "laser.trail.width", StringProperty{ StringProperty::Integer,
+                    {::settings::ranges::laserTrailWidth.min, ::settings::ranges::laserTrailWidth.max},
+                    [this](const QString& value){ setLaserTrailWidth(value.toInt()); } } );
+  map.emplace_back( "laser.trail.color", StringProperty{ StringProperty::Color, {},
+                    [this](const QString& value){ setLaserTrailColor(QColor(value)); } } );
+  map.emplace_back( "laser.trail.opacity", StringProperty{ StringProperty::Double,
+                    {::settings::ranges::laserTrailOpacity.min, ::settings::ranges::laserTrailOpacity.max},
+                    [this](const QString& value){ setLaserTrailOpacity(value.toDouble()); } } );
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -385,6 +454,13 @@ const Settings::SettingRange<double>& Settings::spotRotationRange() { return ::s
 const Settings::SettingRange<int>& Settings::borderSizeRange() { return settings::ranges::borderSize; }
 const Settings::SettingRange<double>& Settings::borderOpacityRange() { return settings::ranges::borderOpacity; }
 const Settings::SettingRange<double>& Settings::zoomFactorRange() { return settings::ranges::zoomFactor; }
+const Settings::SettingRange<int>& Settings::laserSizeRange() { return ::settings::ranges::laserSize; }
+const Settings::SettingRange<double>& Settings::laserOpacityRange() { return ::settings::ranges::laserOpacity; }
+const Settings::SettingRange<int>& Settings::laserGlowSizeRange() { return ::settings::ranges::laserGlowSize; }
+const Settings::SettingRange<double>& Settings::laserGlowOpacityRange() { return ::settings::ranges::laserGlowOpacity; }
+const Settings::SettingRange<int>& Settings::laserTrailTimeRange() { return ::settings::ranges::laserTrailTime; }
+const Settings::SettingRange<int>& Settings::laserTrailWidthRange() { return ::settings::ranges::laserTrailWidth; }
+const Settings::SettingRange<double>& Settings::laserTrailOpacityRange() { return ::settings::ranges::laserTrailOpacity; }
 const Settings::SettingRange<int>& Settings::inputSequenceIntervalRange() { return settings::ranges::inputSequenceInterval; }
 
 // -------------------------------------------------------------------------------------------------
@@ -424,6 +500,19 @@ Settings::SpotlightSettings Settings::spotlightSettings() const
     {::settings::zoomEnabled, m_zoomEnabled},
     {::settings::zoomFactor, m_zoomFactor},
     {::settings::zoomMode, m_zoomMode},
+    {::settings::pointerMode, m_pointerMode},
+    {::settings::laserSize, m_laserSize},
+    {::settings::laserColor, m_laserColor},
+    {::settings::laserOpacity, m_laserOpacity},
+    {::settings::laserGlow, m_laserGlow},
+    {::settings::laserGlowSize, m_laserGlowSize},
+    {::settings::laserGlowOpacity, m_laserGlowOpacity},
+    {::settings::laserGlowColor, m_laserGlowColor},
+    {::settings::laserTrail, m_laserTrail},
+    {::settings::laserTrailTime, m_laserTrailTime},
+    {::settings::laserTrailWidth, m_laserTrailWidth},
+    {::settings::laserTrailColor, m_laserTrailColor},
+    {::settings::laserTrailOpacity, m_laserTrailOpacity},
     {::settings::multiScreenOverlay, m_multiScreenOverlayEnabled},
   };
 
@@ -462,6 +551,19 @@ Settings::SpotlightSettings Settings::defaultSpotlightSettings()
     {::settings::zoomEnabled, ::settings::defaultValue::zoomEnabled},
     {::settings::zoomFactor, ::settings::defaultValue::zoomFactor},
     {::settings::zoomMode, QString(::settings::defaultValue::zoomMode)},
+    {::settings::pointerMode, QString(::settings::defaultValue::pointerMode)},
+    {::settings::laserSize, ::settings::defaultValue::laserSize},
+    {::settings::laserColor, QColor(::settings::defaultValue::laserColor)},
+    {::settings::laserOpacity, ::settings::defaultValue::laserOpacity},
+    {::settings::laserGlow, ::settings::defaultValue::laserGlow},
+    {::settings::laserGlowSize, ::settings::defaultValue::laserGlowSize},
+    {::settings::laserGlowOpacity, ::settings::defaultValue::laserGlowOpacity},
+    {::settings::laserGlowColor, QColor(::settings::defaultValue::laserGlowColor)},
+    {::settings::laserTrail, ::settings::defaultValue::laserTrail},
+    {::settings::laserTrailTime, ::settings::defaultValue::laserTrailTime},
+    {::settings::laserTrailWidth, ::settings::defaultValue::laserTrailWidth},
+    {::settings::laserTrailColor, QColor(::settings::defaultValue::laserTrailColor)},
+    {::settings::laserTrailOpacity, ::settings::defaultValue::laserTrailOpacity},
     {::settings::multiScreenOverlay, ::settings::defaultValue::multiScreenOverlay},
   };
 
@@ -496,6 +598,19 @@ void Settings::setSpotlightSettings(const SpotlightSettings& values)
   setZoomEnabled(values.value(::settings::zoomEnabled, m_zoomEnabled).toBool());
   setZoomFactor(values.value(::settings::zoomFactor, m_zoomFactor).toDouble());
   setZoomMode(values.value(::settings::zoomMode, m_zoomMode).toString());
+  setPointerMode(values.value(::settings::pointerMode, m_pointerMode).toString());
+  setLaserSize(values.value(::settings::laserSize, m_laserSize).toInt());
+  setLaserColor(values.value(::settings::laserColor, m_laserColor).value<QColor>());
+  setLaserOpacity(values.value(::settings::laserOpacity, m_laserOpacity).toDouble());
+  setLaserGlow(values.value(::settings::laserGlow, m_laserGlow).toBool());
+  setLaserGlowSize(values.value(::settings::laserGlowSize, m_laserGlowSize).toInt());
+  setLaserGlowOpacity(values.value(::settings::laserGlowOpacity, m_laserGlowOpacity).toDouble());
+  setLaserGlowColor(values.value(::settings::laserGlowColor, m_laserGlowColor).value<QColor>());
+  setLaserTrail(values.value(::settings::laserTrail, m_laserTrail).toBool());
+  setLaserTrailTime(values.value(::settings::laserTrailTime, m_laserTrailTime).toInt());
+  setLaserTrailWidth(values.value(::settings::laserTrailWidth, m_laserTrailWidth).toInt());
+  setLaserTrailColor(values.value(::settings::laserTrailColor, m_laserTrailColor).value<QColor>());
+  setLaserTrailOpacity(values.value(::settings::laserTrailOpacity, m_laserTrailOpacity).toDouble());
   setMultiScreenOverlayEnabled(
     values.value(::settings::multiScreenOverlay, m_multiScreenOverlayEnabled).toBool());
 
@@ -540,6 +655,19 @@ void Settings::setDefaults()
   setZoomEnabled(settings::defaultValue::zoomEnabled);
   setZoomFactor(settings::defaultValue::zoomFactor);
   setZoomMode(settings::defaultValue::zoomMode);
+  setPointerMode(QString(settings::defaultValue::pointerMode));
+  setLaserSize(settings::defaultValue::laserSize);
+  setLaserColor(QColor(settings::defaultValue::laserColor));
+  setLaserOpacity(settings::defaultValue::laserOpacity);
+  setLaserGlow(settings::defaultValue::laserGlow);
+  setLaserGlowSize(settings::defaultValue::laserGlowSize);
+  setLaserGlowOpacity(settings::defaultValue::laserGlowOpacity);
+  setLaserGlowColor(QColor(settings::defaultValue::laserGlowColor));
+  setLaserTrail(settings::defaultValue::laserTrail);
+  setLaserTrailTime(settings::defaultValue::laserTrailTime);
+  setLaserTrailWidth(settings::defaultValue::laserTrailWidth);
+  setLaserTrailColor(QColor(settings::defaultValue::laserTrailColor));
+  setLaserTrailOpacity(settings::defaultValue::laserTrailOpacity);
   setMultiScreenOverlayEnabled(settings::defaultValue::multiScreenOverlay);
   shapeSettingsSetDefaults();
 }
@@ -709,6 +837,19 @@ void Settings::load(const QString& preset)
     setZoomEnabled(m_config->zoomEnabled());
     setZoomFactor(m_config->zoomFactor());
     setZoomMode(m_config->zoomMode());
+    setPointerMode(m_config->pointerMode());
+    setLaserSize(m_config->laserSize());
+    setLaserColor(m_config->laserColor());
+    setLaserOpacity(m_config->laserOpacity());
+    setLaserGlow(m_config->laserGlow());
+    setLaserGlowSize(m_config->laserGlowSize());
+    setLaserGlowOpacity(m_config->laserGlowOpacity());
+    setLaserGlowColor(m_config->laserGlowColor());
+    setLaserTrail(m_config->laserTrail());
+    setLaserTrailTime(m_config->laserTrailTime());
+    setLaserTrailWidth(m_config->laserTrailWidth());
+    setLaserTrailColor(m_config->laserTrailColor());
+    setLaserTrailOpacity(m_config->laserTrailOpacity());
     setMultiScreenOverlayEnabled(m_config->multiScreenOverlay());
     shapeSettingsLoad();
     return;
@@ -733,6 +874,19 @@ void Settings::load(const QString& preset)
   setZoomEnabled(readValue(s+::settings::zoomEnabled, settings::defaultValue::zoomEnabled).toBool());
   setZoomFactor(readValue(s+::settings::zoomFactor, settings::defaultValue::zoomFactor).toDouble());
   setZoomMode(readValue(s+::settings::zoomMode, settings::defaultValue::zoomMode).toString());
+  setPointerMode(readValue(s+::settings::pointerMode, settings::defaultValue::pointerMode).toString());
+  setLaserSize(readValue(s+::settings::laserSize, settings::defaultValue::laserSize).toInt());
+  setLaserColor(readValue(s+::settings::laserColor, QColor(settings::defaultValue::laserColor)).value<QColor>());
+  setLaserOpacity(readValue(s+::settings::laserOpacity, settings::defaultValue::laserOpacity).toDouble());
+  setLaserGlow(readValue(s+::settings::laserGlow, settings::defaultValue::laserGlow).toBool());
+  setLaserGlowSize(readValue(s+::settings::laserGlowSize, settings::defaultValue::laserGlowSize).toInt());
+  setLaserGlowOpacity(readValue(s+::settings::laserGlowOpacity, settings::defaultValue::laserGlowOpacity).toDouble());
+  setLaserGlowColor(readValue(s+::settings::laserGlowColor, QColor(settings::defaultValue::laserGlowColor)).value<QColor>());
+  setLaserTrail(readValue(s+::settings::laserTrail, settings::defaultValue::laserTrail).toBool());
+  setLaserTrailTime(readValue(s+::settings::laserTrailTime, settings::defaultValue::laserTrailTime).toInt());
+  setLaserTrailWidth(readValue(s+::settings::laserTrailWidth, settings::defaultValue::laserTrailWidth).toInt());
+  setLaserTrailColor(readValue(s+::settings::laserTrailColor, QColor(settings::defaultValue::laserTrailColor)).value<QColor>());
+  setLaserTrailOpacity(readValue(s+::settings::laserTrailOpacity, settings::defaultValue::laserTrailOpacity).toDouble());
   setMultiScreenOverlayEnabled(readValue(s+::settings::multiScreenOverlay, settings::defaultValue::multiScreenOverlay).toBool());
   shapeSettingsLoad(preset);
 }
@@ -760,6 +914,19 @@ void Settings::savePreset(const QString& preset)
   writeValue(section+::settings::zoomEnabled, m_zoomEnabled);
   writeValue(section+::settings::zoomFactor, m_zoomFactor);
   writeValue(section+::settings::zoomMode, m_zoomMode);
+  writeValue(section+::settings::pointerMode, m_pointerMode);
+  writeValue(section+::settings::laserSize, m_laserSize);
+  writeValue(section+::settings::laserColor, m_laserColor);
+  writeValue(section+::settings::laserOpacity, m_laserOpacity);
+  writeValue(section+::settings::laserGlow, m_laserGlow);
+  writeValue(section+::settings::laserGlowSize, m_laserGlowSize);
+  writeValue(section+::settings::laserGlowOpacity, m_laserGlowOpacity);
+  writeValue(section+::settings::laserGlowColor, m_laserGlowColor);
+  writeValue(section+::settings::laserTrail, m_laserTrail);
+  writeValue(section+::settings::laserTrailTime, m_laserTrailTime);
+  writeValue(section+::settings::laserTrailWidth, m_laserTrailWidth);
+  writeValue(section+::settings::laserTrailColor, m_laserTrailColor);
+  writeValue(section+::settings::laserTrailOpacity, m_laserTrailOpacity);
   writeValue(section+::settings::multiScreenOverlay, m_multiScreenOverlayEnabled);
   shapeSettingsSavePreset(preset);
 
@@ -1039,6 +1206,173 @@ void Settings::setZoomMode(const QString& mode)
   save();
   qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "zoom.mode = " << m_zoomMode;
   emit zoomModeChanged(m_zoomMode);
+}
+
+// -------------------------------------------------------------------------------------------------
+bool Settings::isPointerMode(const QString& mode)
+{
+  const auto m = mode.trimmed().toLower();
+  return m == QStringLiteral("spotlight") || m == QStringLiteral("laser");
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setPointerMode(const QString& mode)
+{
+  const auto normalizedMode = mode.trimmed().toLower();
+  if (!isPointerMode(normalizedMode) || normalizedMode == m_pointerMode) { return; }
+
+  m_pointerMode = normalizedMode;
+  m_config->setPointerMode(m_pointerMode);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "pointer.mode =" << m_pointerMode;
+  emit pointerModeChanged(m_pointerMode);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setLaserSize(int size)
+{
+  if (size == m_laserSize) { return; }
+
+  m_laserSize = qMin(qMax(::settings::ranges::laserSize.min, size), ::settings::ranges::laserSize.max);
+  m_config->setLaserSize(m_laserSize);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "laser.size =" << m_laserSize;
+  emit laserSizeChanged(m_laserSize);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setLaserColor(const QColor& color)
+{
+  if (color == m_laserColor) { return; }
+
+  m_laserColor = color;
+  m_config->setLaserColor(m_laserColor);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "laser.color =" << m_laserColor.name();
+  emit laserColorChanged(m_laserColor);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setLaserOpacity(double opacity)
+{
+  if (opacity > m_laserOpacity || opacity < m_laserOpacity)
+  {
+    m_laserOpacity = qMin(qMax(::settings::ranges::laserOpacity.min, opacity), ::settings::ranges::laserOpacity.max);
+    m_config->setLaserOpacity(m_laserOpacity);
+    save();
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "laser.opacity =" << m_laserOpacity;
+    emit laserOpacityChanged(m_laserOpacity);
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setLaserGlow(bool glow)
+{
+  if (glow == m_laserGlow) { return; }
+
+  m_laserGlow = glow;
+  m_config->setLaserGlow(m_laserGlow);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "laser.glow =" << m_laserGlow;
+  emit laserGlowChanged(m_laserGlow);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setLaserGlowSize(int size)
+{
+  if (size == m_laserGlowSize) { return; }
+
+  m_laserGlowSize = qMin(qMax(::settings::ranges::laserGlowSize.min, size), ::settings::ranges::laserGlowSize.max);
+  m_config->setLaserGlowSize(m_laserGlowSize);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "laser.glow-size =" << m_laserGlowSize;
+  emit laserGlowSizeChanged(m_laserGlowSize);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setLaserGlowOpacity(double opacity)
+{
+  if (opacity > m_laserGlowOpacity || opacity < m_laserGlowOpacity)
+  {
+    m_laserGlowOpacity = qMin(qMax(::settings::ranges::laserGlowOpacity.min, opacity), ::settings::ranges::laserGlowOpacity.max);
+    m_config->setLaserGlowOpacity(m_laserGlowOpacity);
+    save();
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "laser.glow-opacity =" << m_laserGlowOpacity;
+    emit laserGlowOpacityChanged(m_laserGlowOpacity);
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setLaserGlowColor(const QColor& color)
+{
+  if (color == m_laserGlowColor) { return; }
+
+  m_laserGlowColor = color;
+  m_config->setLaserGlowColor(m_laserGlowColor);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "laser.glow-color =" << m_laserGlowColor.name();
+  emit laserGlowColorChanged(m_laserGlowColor);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setLaserTrail(bool trail)
+{
+  if (trail == m_laserTrail) { return; }
+
+  m_laserTrail = trail;
+  m_config->setLaserTrail(m_laserTrail);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "laser.trail =" << m_laserTrail;
+  emit laserTrailChanged(m_laserTrail);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setLaserTrailTime(int timeMs)
+{
+  if (timeMs == m_laserTrailTime) { return; }
+
+  m_laserTrailTime = qMin(qMax(::settings::ranges::laserTrailTime.min, timeMs), ::settings::ranges::laserTrailTime.max);
+  m_config->setLaserTrailTime(m_laserTrailTime);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "laser.trail.time =" << m_laserTrailTime;
+  emit laserTrailTimeChanged(m_laserTrailTime);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setLaserTrailWidth(int width)
+{
+  if (width == m_laserTrailWidth) { return; }
+
+  m_laserTrailWidth = qMin(qMax(::settings::ranges::laserTrailWidth.min, width), ::settings::ranges::laserTrailWidth.max);
+  m_config->setLaserTrailWidth(m_laserTrailWidth);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "laser.trail.width =" << m_laserTrailWidth;
+  emit laserTrailWidthChanged(m_laserTrailWidth);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setLaserTrailColor(const QColor& color)
+{
+  if (color == m_laserTrailColor) { return; }
+
+  m_laserTrailColor = color;
+  m_config->setLaserTrailColor(m_laserTrailColor);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "laser.trail.color =" << m_laserTrailColor.name();
+  emit laserTrailColorChanged(m_laserTrailColor);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setLaserTrailOpacity(double opacity)
+{
+  if (opacity > m_laserTrailOpacity || opacity < m_laserTrailOpacity)
+  {
+    m_laserTrailOpacity = qMin(qMax(::settings::ranges::laserTrailOpacity.min, opacity), ::settings::ranges::laserTrailOpacity.max);
+    m_config->setLaserTrailOpacity(m_laserTrailOpacity);
+    save();
+    qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "laser.trail.opacity =" << m_laserTrailOpacity;
+    emit laserTrailOpacityChanged(m_laserTrailOpacity);
+  }
 }
 
 // -------------------------------------------------------------------------------------------------

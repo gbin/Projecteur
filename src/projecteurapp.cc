@@ -312,6 +312,14 @@ void ProjecteurApplication::setupGlobalShortcuts()
       }
     });
   addAction(
+    QStringLiteral("toggle_laser"), i18n("Toggle Laser Pointer"),
+    QStringLiteral("draw-cross-symbolic"),
+    [this]() { m_control->ToggleLaserActive(); });
+  addAction(
+    QStringLiteral("toggle_pointer_mode"), i18n("Toggle Pointer Mode"),
+    QStringLiteral("view-refresh"),
+    [this]() { m_control->TogglePointerMode(); });
+  addAction(
     QStringLiteral("show_preferences"), i18n("Show Preferences"),
     QStringLiteral("configure"),
     [this]() { m_control->ShowPreferences(); });
@@ -710,6 +718,17 @@ void ProjecteurApplication::applyCommand(const QString& command)
       qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received invalid value for command spot.size.adjust");
     }
   }
+  else if (cmdKey == "laser.size.adjust")
+  {
+    bool ok = false;
+    int const sizeAdjust = cmdValue.toInt(&ok);
+    if (ok) {
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command laser.size.adjust = %1%2").arg(sizeAdjust > 0 ? "+" : "").arg(sizeAdjust);
+      m_settings->setLaserSize(m_settings->laserSize() + sizeAdjust);
+    } else {
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received invalid value for command laser.size.adjust");
+    }
+  }
   else if (cmdKey == "spot")
   {
     if (cmdValue.isEmpty()) {
@@ -723,6 +742,37 @@ void ProjecteurApplication::applyCommand(const QString& command)
                             || cmdValue.toLower() == "true");
       qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command spot = %1").arg(active);
       m_spotlight->setSpotActive(active);
+    }
+  }
+  else if (cmdKey == "laser")
+  {
+    if (cmdValue.isEmpty()) {
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received empty command value for command laser");
+    } else if (cmdValue.toLower() == "toggle") {
+      m_control->ToggleLaserActive();
+    } else {
+      const bool active = (cmdValue.toLower() == "on"
+                            || cmdValue == "1"
+                            || cmdValue.toLower() == "true");
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command laser = %1").arg(active);
+      if (active) {
+        if (m_settings->pointerMode() != QStringLiteral("laser")) {
+          m_settings->setPointerMode(QStringLiteral("laser"));
+        }
+        m_settings->setOverlayDisabled(false);
+      } else {
+        m_settings->setOverlayDisabled(true);
+      }
+    }
+  }
+  else if (cmdKey == "pointer")
+  {
+    if (cmdValue.toLower() == "toggle") {
+      m_control->TogglePointerMode();
+    } else if (Settings::isPointerMode(cmdValue.toLower())) {
+      m_settings->setPointerMode(cmdValue.toLower());
+    } else {
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received invalid value for command pointer: %1").arg(cmdValue);
     }
   }
   else if (cmdKey == "settings" || cmdKey == "preferences")

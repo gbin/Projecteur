@@ -173,6 +173,12 @@ QDataStream& operator>>(QDataStream& s, MappedAction& mia)
   case Action::Type::ToggleSpotlight:
     mia.action = std::make_shared<ToggleSpotlightAction>();
     return mia.action->load(s);
+  case Action::Type::ToggleLaser:
+    mia.action = std::make_shared<ToggleLaserAction>();
+    return mia.action->load(s);
+  case Action::Type::TogglePointerMode:
+    mia.action = std::make_shared<TogglePointerModeAction>();
+    return mia.action->load(s);
   case Action::Type::ScrollHorizontal:
     mia.action = std::make_shared<ScrollHorizontalAction>();
     return mia.action->load(s);
@@ -203,6 +209,12 @@ bool MappedAction::operator==(const MappedAction& o) const
   case Action::Type::ToggleSpotlight:
     return (*static_cast<ToggleSpotlightAction*>(action.get()))
            == (*static_cast<ToggleSpotlightAction*>(o.action.get()));
+  case Action::Type::ToggleLaser:
+    return (*static_cast<ToggleLaserAction*>(action.get()))
+           == (*static_cast<ToggleLaserAction*>(o.action.get()));
+  case Action::Type::TogglePointerMode:
+    return (*static_cast<TogglePointerModeAction*>(action.get()))
+           == (*static_cast<TogglePointerModeAction*>(o.action.get()));
   case Action::Type::ScrollHorizontal:
     return (*static_cast<ScrollHorizontalAction*>(action.get()))
            == (*static_cast<ScrollHorizontalAction*>(o.action.get()));
@@ -551,6 +563,8 @@ const char* toString(Action::Type at, bool withClass)
     ENUM_CASE_STRINGIFY3(Type, KeySequence, withClass);
     ENUM_CASE_STRINGIFY3(Type, CyclePresets, withClass);
     ENUM_CASE_STRINGIFY3(Type, ToggleSpotlight, withClass);
+    ENUM_CASE_STRINGIFY3(Type, ToggleLaser, withClass);
+    ENUM_CASE_STRINGIFY3(Type, TogglePointerMode, withClass);
     ENUM_CASE_STRINGIFY3(Type, ScrollHorizontal, withClass);
     ENUM_CASE_STRINGIFY3(Type, ScrollVertical, withClass);
     ENUM_CASE_STRINGIFY3(Type, VolumeControl, withClass);

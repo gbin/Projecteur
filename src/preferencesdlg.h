@@ -76,6 +76,11 @@ private:
   void resetPresetCombo();
 
   QWidget* createSettingsTabWidget(Settings* settings);
+  QWidget* createLaserTabWidget(Settings* settings);
+  QGroupBox* createPointerModeGroupBox(Settings* settings);
+  QGroupBox* createLaserDotGroupBox(Settings* settings);
+  QGroupBox* createLaserGlowGroupBox(Settings* settings);
+  QGroupBox* createLaserTrailGroupBox(Settings* settings);
   QGroupBox* createShapeGroupBox(Settings* settings);
   QGroupBox* createSpotGroupBox(Settings* settings);
   QGroupBox* createDotGroupBox(Settings* settings);
@@ -91,6 +96,7 @@ private:
   QVariantMap m_appliedSpotlightSettings;
   std::unique_ptr<PresetComboCustomStyle> m_presetComboStyle;
   QComboBox* m_presetCombo = nullptr;
+  std::vector<QComboBox*> m_presetCombos;
   DevicesWidget* m_deviceswidget = nullptr;
   KShortcutsEditor* m_shortcutsEditor = nullptr;
   bool m_active = false;

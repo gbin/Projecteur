@@ -298,6 +298,23 @@ int Spotlight::connectDevices()
           {
             m_settings->setOverlayDisabled(!m_settings->overlayDisabled());
           }
+          else if (action->type() == Action::Type::ToggleLaser)
+          {
+            if (m_settings->pointerMode() != QStringLiteral("laser")) {
+              m_settings->setPointerMode(QStringLiteral("laser"));
+              if (m_settings->overlayDisabled()) {
+                m_settings->setOverlayDisabled(false);
+              }
+            } else {
+              m_settings->setOverlayDisabled(!m_settings->overlayDisabled());
+            }
+          }
+          else if (action->type() == Action::Type::TogglePointerMode)
+          {
+            m_settings->setPointerMode(m_settings->pointerMode() == QStringLiteral("laser")
+                                         ? QStringLiteral("spotlight")
+                                         : QStringLiteral("laser"));
+          }
           else if (action->type() == Action::Type::ScrollHorizontal || action->type() == Action::Type::ScrollVertical)
           {
             if (!m_virtualMouseDevice) { return; }

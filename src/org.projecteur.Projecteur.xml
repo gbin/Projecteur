@@ -8,6 +8,9 @@
     <property name="SpotlightActive" type="b" access="read">
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
     </property>
+    <property name="PointerMode" type="s" access="readwrite">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
     <property name="ConnectedDevices" type="as" access="read">
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
     </property>
@@ -44,6 +47,11 @@
     <method name="SetSpotlightActive">
       <arg name="active" type="b" direction="in"/>
     </method>
+    <method name="SetPointerMode">
+      <arg name="mode" type="s" direction="in"/>
+    </method>
+    <method name="TogglePointerMode"/>
+    <method name="ToggleLaserActive"/>
     <method name="LoadPreset">
       <arg name="preset" type="s" direction="in"/>
       <arg name="loaded" type="b" direction="out"/>
@@ -69,6 +77,9 @@
     </signal>
     <signal name="spotlightActiveChanged">
       <arg name="active" type="b"/>
+    </signal>
+    <signal name="pointerModeChanged">
+      <arg name="mode" type="s"/>
     </signal>
     <signal name="connectedDevicesChanged">
       <arg name="devices" type="as"/>

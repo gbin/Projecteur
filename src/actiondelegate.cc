@@ -66,6 +66,36 @@ namespace  {
     }
   } // end namespace togglespotlight
 
+  namespace togglelaser {
+    // ---------------------------------------------------------------------------------------------
+    void paint(QPainter* p, const QStyleOptionViewItem& option, const ToggleLaserAction* /*action*/)
+    {
+      const auto& fm = option.fontMetrics;
+      const int xPos = (option.rect.height()-fm.height()) / 2;
+      NativeKeySeqEdit::drawText(xPos, *p, option, i18n("Toggle Laser Pointer"));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    QSize sizeHint(const QStyleOptionViewItem& /*opt*/, const ToggleLaserAction* /*action*/) {
+      return { 100, 16 };
+    }
+  } // end namespace togglelaser
+
+  namespace togglepointermode {
+    // ---------------------------------------------------------------------------------------------
+    void paint(QPainter* p, const QStyleOptionViewItem& option, const TogglePointerModeAction* /*action*/)
+    {
+      const auto& fm = option.fontMetrics;
+      const int xPos = (option.rect.height()-fm.height()) / 2;
+      NativeKeySeqEdit::drawText(xPos, *p, option, i18n("Toggle Pointer Mode"));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    QSize sizeHint(const QStyleOptionViewItem& /*opt*/, const TogglePointerModeAction* /*action*/) {
+      return { 100, 16 };
+    }
+  } // end namespace togglepointermode
+
   namespace scrollhorizontal {
     // ---------------------------------------------------------------------------------------------
     void paint(QPainter* p, const QStyleOptionViewItem& option, const ScrollHorizontalAction* /*action*/)
@@ -136,6 +166,12 @@ void ActionDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option
   case Action::Type::ToggleSpotlight:
     togglespotlight::paint(painter, option, static_cast<ToggleSpotlightAction*>(item.action.get()));
     break;
+  case Action::Type::ToggleLaser:
+    togglelaser::paint(painter, option, static_cast<ToggleLaserAction*>(item.action.get()));
+    break;
+  case Action::Type::TogglePointerMode:
+    togglepointermode::paint(painter, option, static_cast<TogglePointerModeAction*>(item.action.get()));
+    break;
   case Action::Type::ScrollHorizontal:
     scrollhorizontal::paint(painter, option, static_cast<ScrollHorizontalAction*>(item.action.get()));
     break;
@@ -169,6 +205,10 @@ QSize ActionDelegate::sizeHint(const QStyleOptionViewItem& opt, const QModelInde
     return cyclepresets::sizeHint(opt, static_cast<CyclePresetsAction*>(item.action.get()));
   case Action::Type::ToggleSpotlight:
     return togglespotlight::sizeHint(opt, static_cast<ToggleSpotlightAction*>(item.action.get()));
+  case Action::Type::ToggleLaser:
+    return togglelaser::sizeHint(opt, static_cast<ToggleLaserAction*>(item.action.get()));
+  case Action::Type::TogglePointerMode:
+    return togglepointermode::sizeHint(opt, static_cast<TogglePointerModeAction*>(item.action.get()));
   case Action::Type::ScrollHorizontal:
     return scrollhorizontal::sizeHint(opt, static_cast<ScrollHorizontalAction*>(item.action.get()));
   case Action::Type::ScrollVertical:
@@ -193,6 +233,8 @@ QWidget* ActionDelegate::createEditor(QWidget* parent, const Action* action) con
   }
   case Action::Type::CyclePresets:     // [[fallthrough]];
   case Action::Type::ToggleSpotlight:  // [[fallthrough]];
+  case Action::Type::ToggleLaser:      // [[fallthrough]];
+  case Action::Type::TogglePointerMode:// [[fallthrough]];
   case Action::Type::ScrollHorizontal: // [[fallthrough]];
   case Action::Type::ScrollVertical:   // [[fallthrough]];
   case Action::Type::VolumeControl:
@@ -315,6 +357,8 @@ void ActionTypeDelegate::paint(QPainter* painter, const QStyleOptionViewItem& op
     case Action::Type::KeySequence: return QChar(static_cast<char16_t>(Font::Icon::keyboard_4));
     case Action::Type::CyclePresets: return QChar(static_cast<char16_t>(Font::Icon::connection_8));
     case Action::Type::ToggleSpotlight: return QChar(static_cast<char16_t>(Font::Icon::power_on_off_11));
+    case Action::Type::ToggleLaser: return QChar(static_cast<char16_t>(Font::Icon::target_8));
+    case Action::Type::TogglePointerMode: return QChar(static_cast<char16_t>(Font::Icon::control_panel_9));
     case Action::Type::ScrollHorizontal: return QChar(static_cast<char16_t>(Font::Icon::cursor_21_rotated));
     case Action::Type::ScrollVertical: return QChar(static_cast<char16_t>(Font::Icon::cursor_21));
     case Action::Type::VolumeControl: return QChar(static_cast<char16_t>(Font::Icon::audio_6));
@@ -352,6 +396,8 @@ void ActionTypeDelegate::actionContextMenu(QWidget* parent, InputMapConfigModel*
     {Action::Type::KeySequence, QChar(static_cast<char16_t>(Font::Icon::keyboard_4)), i18n("Key Sequence"), false},
     {Action::Type::CyclePresets, QChar(static_cast<char16_t>(Font::Icon::connection_8)), i18n("Cycle Presets"), false},
     {Action::Type::ToggleSpotlight, QChar(static_cast<char16_t>(Font::Icon::power_on_off_11)), i18n("Toggle Spotlight"), false},
+    {Action::Type::ToggleLaser, QChar(static_cast<char16_t>(Font::Icon::target_8)), i18n("Toggle Laser Pointer"), false},
+    {Action::Type::TogglePointerMode, QChar(static_cast<char16_t>(Font::Icon::control_panel_9)), i18n("Toggle Pointer Mode"), false},
     {Action::Type::ScrollHorizontal, QChar(static_cast<char16_t>(Font::Icon::cursor_21_rotated)), i18n("Scroll Horizontal"), true},
     {Action::Type::ScrollVertical, QChar(static_cast<char16_t>(Font::Icon::cursor_21)), i18n("Scroll Vertical"), true},
     {Action::Type::VolumeControl, QChar(static_cast<char16_t>(Font::Icon::audio_6)), i18n("Volume Control"), true},

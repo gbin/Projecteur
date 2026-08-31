@@ -42,6 +42,19 @@ class Settings : public QObject
   Q_PROPERTY(bool zoomEnabled READ zoomEnabled WRITE setZoomEnabled NOTIFY zoomEnabledChanged)
   Q_PROPERTY(double zoomFactor READ zoomFactor WRITE setZoomFactor NOTIFY zoomFactorChanged)
   Q_PROPERTY(QString zoomMode READ zoomMode WRITE setZoomMode NOTIFY zoomModeChanged)
+  Q_PROPERTY(QString pointerMode READ pointerMode WRITE setPointerMode NOTIFY pointerModeChanged)
+  Q_PROPERTY(int laserSize READ laserSize WRITE setLaserSize NOTIFY laserSizeChanged)
+  Q_PROPERTY(QColor laserColor READ laserColor WRITE setLaserColor NOTIFY laserColorChanged)
+  Q_PROPERTY(double laserOpacity READ laserOpacity WRITE setLaserOpacity NOTIFY laserOpacityChanged)
+  Q_PROPERTY(bool laserGlow READ laserGlow WRITE setLaserGlow NOTIFY laserGlowChanged)
+  Q_PROPERTY(int laserGlowSize READ laserGlowSize WRITE setLaserGlowSize NOTIFY laserGlowSizeChanged)
+  Q_PROPERTY(double laserGlowOpacity READ laserGlowOpacity WRITE setLaserGlowOpacity NOTIFY laserGlowOpacityChanged)
+  Q_PROPERTY(QColor laserGlowColor READ laserGlowColor WRITE setLaserGlowColor NOTIFY laserGlowColorChanged)
+  Q_PROPERTY(bool laserTrail READ laserTrail WRITE setLaserTrail NOTIFY laserTrailChanged)
+  Q_PROPERTY(int laserTrailTime READ laserTrailTime WRITE setLaserTrailTime NOTIFY laserTrailTimeChanged)
+  Q_PROPERTY(int laserTrailWidth READ laserTrailWidth WRITE setLaserTrailWidth NOTIFY laserTrailWidthChanged)
+  Q_PROPERTY(QColor laserTrailColor READ laserTrailColor WRITE setLaserTrailColor NOTIFY laserTrailColorChanged)
+  Q_PROPERTY(double laserTrailOpacity READ laserTrailOpacity WRITE setLaserTrailOpacity NOTIFY laserTrailOpacityChanged)
   Q_PROPERTY(bool multiScreenOverlayEnabled READ multiScreenOverlayEnabled
                   WRITE setMultiScreenOverlayEnabled NOTIFY multiScreenOverlayEnabledChanged)
 public:
@@ -88,6 +101,33 @@ public:
   void setZoomFactor(double factor);
   QString zoomMode() const { return m_zoomMode; }
   void setZoomMode(const QString& mode);
+  QString pointerMode() const { return m_pointerMode; }
+  void setPointerMode(const QString& mode);
+  static bool isPointerMode(const QString& mode);
+  int laserSize() const { return m_laserSize; }
+  void setLaserSize(int size);
+  QColor laserColor() const { return m_laserColor; }
+  void setLaserColor(const QColor& color);
+  double laserOpacity() const { return m_laserOpacity; }
+  void setLaserOpacity(double opacity);
+  bool laserGlow() const { return m_laserGlow; }
+  void setLaserGlow(bool glow);
+  int laserGlowSize() const { return m_laserGlowSize; }
+  void setLaserGlowSize(int size);
+  double laserGlowOpacity() const { return m_laserGlowOpacity; }
+  void setLaserGlowOpacity(double opacity);
+  QColor laserGlowColor() const { return m_laserGlowColor; }
+  void setLaserGlowColor(const QColor& color);
+  bool laserTrail() const { return m_laserTrail; }
+  void setLaserTrail(bool trail);
+  int laserTrailTime() const { return m_laserTrailTime; }
+  void setLaserTrailTime(int timeMs);
+  int laserTrailWidth() const { return m_laserTrailWidth; }
+  void setLaserTrailWidth(int width);
+  QColor laserTrailColor() const { return m_laserTrailColor; }
+  void setLaserTrailColor(const QColor& color);
+  double laserTrailOpacity() const { return m_laserTrailOpacity; }
+  void setLaserTrailOpacity(double opacity);
   bool multiScreenOverlayEnabled() const { return m_multiScreenOverlayEnabled; }
   void setMultiScreenOverlayEnabled(bool enabled);
   bool overlayDisabled() const { return m_overlayDisabled; }
@@ -106,6 +146,13 @@ public:
   static const SettingRange<int>& borderSizeRange();
   static const SettingRange<double>& borderOpacityRange();
   static const SettingRange<double>& zoomFactorRange();
+  static const SettingRange<int>& laserSizeRange();
+  static const SettingRange<double>& laserOpacityRange();
+  static const SettingRange<int>& laserGlowSizeRange();
+  static const SettingRange<double>& laserGlowOpacityRange();
+  static const SettingRange<int>& laserTrailTimeRange();
+  static const SettingRange<int>& laserTrailWidthRange();
+  static const SettingRange<double>& laserTrailOpacityRange();
   static const SettingRange<int>& inputSequenceIntervalRange();
 
   class SpotShapeSetting {
@@ -209,6 +256,19 @@ signals:
   void zoomEnabledChanged(bool enabled);
   void zoomFactorChanged(double zoomFactor);
   void zoomModeChanged(const QString& mode);
+  void pointerModeChanged(const QString& mode);
+  void laserSizeChanged(int size);
+  void laserColorChanged(const QColor& color);
+  void laserOpacityChanged(double opacity);
+  void laserGlowChanged(bool glow);
+  void laserGlowSizeChanged(int size);
+  void laserGlowOpacityChanged(double opacity);
+  void laserGlowColorChanged(const QColor& color);
+  void laserTrailChanged(bool trail);
+  void laserTrailTimeChanged(int timeMs);
+  void laserTrailWidthChanged(int width);
+  void laserTrailColorChanged(const QColor& color);
+  void laserTrailOpacityChanged(double opacity);
   void multiScreenOverlayEnabledChanged(bool enabled);
   void overlayDisabledChanged(bool disabled);
 
@@ -236,6 +296,19 @@ private:
   bool m_zoomEnabled = false;
   double m_zoomFactor = 2.0;
   QString m_zoomMode = QStringLiteral("smooth");
+  QString m_pointerMode = QStringLiteral("spotlight");
+  int m_laserSize = 16;
+  QColor m_laserColor;
+  double m_laserOpacity = 0.9;
+  bool m_laserGlow = true;
+  int m_laserGlowSize = 10;
+  double m_laserGlowOpacity = 0.6;
+  QColor m_laserGlowColor;
+  bool m_laserTrail = false;
+  int m_laserTrailTime = 400;
+  int m_laserTrailWidth = 4;
+  QColor m_laserTrailColor;
+  double m_laserTrailOpacity = 0.8;
   bool m_showSpotShade = true;
   bool m_showCenterDot = false;
   bool m_spotRotationAllowed = false;

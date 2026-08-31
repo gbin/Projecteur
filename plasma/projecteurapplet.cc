@@ -47,6 +47,11 @@ void ProjecteurApplet::setSpotlightActive(bool active)
   if (m_interface) { m_interface->SetSpotlightActive(active); }
 }
 
+void ProjecteurApplet::setPointerMode(const QString& mode)
+{
+  if (m_interface) { m_interface->SetPointerMode(mode); }
+}
+
 void ProjecteurApplet::loadPreset(const QString& preset)
 {
   if (m_interface) { m_interface->LoadPreset(preset); }
@@ -129,6 +134,13 @@ void ProjecteurApplet::remoteSpotlightActiveChanged(bool active)
   emit spotlightActiveChanged();
 }
 
+void ProjecteurApplet::remotePointerModeChanged(const QString& mode)
+{
+  if (m_pointerMode == mode) { return; }
+  m_pointerMode = mode;
+  emit pointerModeChanged();
+}
+
 void ProjecteurApplet::remoteConnectedDevicesChanged(const QStringList& devices)
 {
   if (m_connectedDevices == devices) { return; }
@@ -203,6 +215,8 @@ void ProjecteurApplet::createInterface()
           this, &ProjecteurApplet::remoteOverlayEnabledChanged);
   connect(m_interface, &OrgProjecteurProjecteurInterface::spotlightActiveChanged,
           this, &ProjecteurApplet::remoteSpotlightActiveChanged);
+  connect(m_interface, &OrgProjecteurProjecteurInterface::pointerModeChanged,
+          this, &ProjecteurApplet::remotePointerModeChanged);
   connect(m_interface, &OrgProjecteurProjecteurInterface::connectedDevicesChanged,
           this, &ProjecteurApplet::remoteConnectedDevicesChanged);
   connect(m_interface,
@@ -236,6 +250,7 @@ void ProjecteurApplet::refresh()
   }
   remoteOverlayEnabledChanged(m_interface->overlayEnabled());
   remoteSpotlightActiveChanged(m_interface->spotlightActive());
+  remotePointerModeChanged(m_interface->pointerMode());
   remoteConnectedDevicesChanged(m_interface->connectedDevices());
   remoteConnectedDeviceBatteryLevelsChanged(m_interface->connectedDeviceBatteryLevels());
   remoteConnectedDeviceBatteryStatusesChanged(m_interface->connectedDeviceBatteryStatuses());
@@ -259,6 +274,7 @@ void ProjecteurApplet::resetState()
   }
   remoteOverlayEnabledChanged(true);
   remoteSpotlightActiveChanged(false);
+  remotePointerModeChanged(QStringLiteral("spotlight"));
   remoteConnectedDevicesChanged({});
   remoteConnectedDeviceBatteryLevelsChanged({});
   remoteConnectedDeviceBatteryStatusesChanged({});

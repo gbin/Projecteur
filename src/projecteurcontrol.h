@@ -22,6 +22,7 @@ class ProjecteurControl : public QObject
   Q_PROPERTY(bool TrayVisible READ trayVisible CONSTANT)
   Q_PROPERTY(bool OverlayEnabled READ overlayEnabled NOTIFY overlayEnabledChanged)
   Q_PROPERTY(bool SpotlightActive READ spotlightActive NOTIFY spotlightActiveChanged)
+  Q_PROPERTY(QString PointerMode READ pointerMode WRITE SetPointerMode NOTIFY pointerModeChanged)
   Q_PROPERTY(QStringList ConnectedDevices READ connectedDevices NOTIFY connectedDevicesChanged)
   Q_PROPERTY(QList<int> ConnectedDeviceBatteryLevels READ connectedDeviceBatteryLevels
              NOTIFY connectedDeviceBatteryLevelsChanged)
@@ -48,6 +49,7 @@ public:
   bool trayVisible() const { return m_trayVisible; }
   bool overlayEnabled() const;
   bool spotlightActive() const;
+  QString pointerMode() const;
   QStringList connectedDevices() const;
   QList<int> connectedDeviceBatteryLevels() const;
   QStringList connectedDeviceBatteryStatuses() const;
@@ -63,6 +65,9 @@ public:
 public slots:
   void SetOverlayEnabled(bool enabled);
   void SetSpotlightActive(bool active);
+  void SetPointerMode(const QString& mode);
+  void TogglePointerMode();
+  void ToggleLaserActive();
   bool LoadPreset(const QString& preset);
   void SetTimerEnabled(bool enabled);
   void StartTimer();
@@ -77,6 +82,7 @@ public slots:
 signals:
   void overlayEnabledChanged(bool enabled);
   void spotlightActiveChanged(bool active);
+  void pointerModeChanged(const QString& mode);
   void connectedDevicesChanged(const QStringList& devices);
   void connectedDeviceBatteryLevelsChanged(const QList<int>& levels);
   void connectedDeviceBatteryStatusesChanged(const QStringList& statuses);

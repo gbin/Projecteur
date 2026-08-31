@@ -170,6 +170,8 @@ struct Action
     KeySequence = 1,
     CyclePresets = 2,
     ToggleSpotlight = 3,
+    ToggleLaser = 4,
+    TogglePointerMode = 5,
     ScrollHorizontal = 11,
     ScrollVertical = 12,
     VolumeControl = 13,
@@ -219,6 +221,28 @@ struct ToggleSpotlightAction : public Action
   QDataStream& load(QDataStream& s) override { return s >> placeholder; }
   bool empty() const override { return false; }
   bool operator==(const ToggleSpotlightAction&) const { return true; }
+  bool placeholder = false;
+};
+
+// -------------------------------------------------------------------------------------------------
+struct ToggleLaserAction : public Action
+{
+  Type type() const override { return Type::ToggleLaser; }
+  QDataStream& save(QDataStream& s) const override { return s << placeholder; }
+  QDataStream& load(QDataStream& s) override { return s >> placeholder; }
+  bool empty() const override { return false; }
+  bool operator==(const ToggleLaserAction&) const { return true; }
+  bool placeholder = false;
+};
+
+// -------------------------------------------------------------------------------------------------
+struct TogglePointerModeAction : public Action
+{
+  Type type() const override { return Type::TogglePointerMode; }
+  QDataStream& save(QDataStream& s) const override { return s << placeholder; }
+  QDataStream& load(QDataStream& s) override { return s >> placeholder; }
+  bool empty() const override { return false; }
+  bool operator==(const TogglePointerModeAction&) const { return true; }
   bool placeholder = false;
 };
 

@@ -69,12 +69,24 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
 
   const auto spotlightPage = new QWidget(this);
   const auto spotlightLayout = new QVBoxLayout(spotlightPage);
-  const auto overlayCheckBox = new QCheckBox(i18n("Enable spotlight overlay"), spotlightPage);
+  const auto overlayCheckBox = new QCheckBox(i18n("Enable overlay"), spotlightPage);
   overlayCheckBox->setChecked(!settings->overlayDisabled());
   spotlightLayout->addWidget(overlayCheckBox);
   spotlightLayout->addWidget(settingsWidget);
 
+  const auto laserSettingsWidget = createLaserTabWidget(settings);
+  laserSettingsWidget->setDisabled(settings->overlayDisabled());
+
+  const auto laserPage = new QWidget(this);
+  const auto laserLayout = new QVBoxLayout(laserPage);
+  const auto laserOverlayCheckBox = new QCheckBox(i18n("Enable overlay"), laserPage);
+  laserOverlayCheckBox->setChecked(!settings->overlayDisabled());
+  laserLayout->addWidget(laserOverlayCheckBox);
+  laserLayout->addWidget(laserSettingsWidget);
+
   addPage(spotlightPage, i18n("Spotlight"), QStringLiteral("preferences-desktop-display"),
+          QString(), false);
+  addPage(laserPage, i18n("Laser Pointer"), QStringLiteral("draw-cross-symbolic"),
           QString(), false);
   m_deviceswidget = new DevicesWidget(settings, spotlight, this);
   addPage(m_deviceswidget, i18n("Devices"), QStringLiteral("input-mouse"), QString(), false);
@@ -88,14 +100,18 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
     helpButton->hide();
   }
 
-  connect(overlayCheckBox, &QCheckBox::toggled, this, [settings](bool checked){
+  const auto toggleOverlay = [settings](bool checked){
     settings->setOverlayDisabled(!checked);
-  });
+  };
+  connect(overlayCheckBox, &QCheckBox::toggled, this, toggleOverlay);
+  connect(laserOverlayCheckBox, &QCheckBox::toggled, this, toggleOverlay);
 
   connect(settings, &Settings::overlayDisabledChanged, this,
-  [overlayCheckBox, settingsWidget](bool disabled){
+  [overlayCheckBox, laserOverlayCheckBox, settingsWidget, laserSettingsWidget](bool disabled){
     overlayCheckBox->setChecked(!disabled);
+    laserOverlayCheckBox->setChecked(!disabled);
     settingsWidget->setDisabled(disabled);
+    laserSettingsWidget->setDisabled(disabled);
   });
 
   const auto modified = [this]() { settingsModified(); };
@@ -117,6 +133,19 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
   connect(settings, &Settings::zoomEnabledChanged, this, modified);
   connect(settings, &Settings::zoomFactorChanged, this, modified);
   connect(settings, &Settings::zoomModeChanged, this, modified);
+  connect(settings, &Settings::pointerModeChanged, this, modified);
+  connect(settings, &Settings::laserSizeChanged, this, modified);
+  connect(settings, &Settings::laserColorChanged, this, modified);
+  connect(settings, &Settings::laserOpacityChanged, this, modified);
+  connect(settings, &Settings::laserGlowChanged, this, modified);
+  connect(settings, &Settings::laserGlowSizeChanged, this, modified);
+  connect(settings, &Settings::laserGlowOpacityChanged, this, modified);
+  connect(settings, &Settings::laserGlowColorChanged, this, modified);
+  connect(settings, &Settings::laserTrailChanged, this, modified);
+  connect(settings, &Settings::laserTrailTimeChanged, this, modified);
+  connect(settings, &Settings::laserTrailWidthChanged, this, modified);
+  connect(settings, &Settings::laserTrailColorChanged, this, modified);
+  connect(settings, &Settings::laserTrailOpacityChanged, this, modified);
   connect(settings, &Settings::multiScreenOverlayEnabledChanged, this, modified);
   for (const auto& shape : Settings::spotShapes()) {
     if (auto* shapeSettings = settings->shapeSettings(shape.name())) {
@@ -135,6 +164,7 @@ QWidget* PreferencesDialog::createSettingsTabWidget(Settings* settings)
   const auto widget = new QWidget(this);
   const auto mainHBox = new QHBoxLayout;
   const auto spotScreenVBoxLeft = new QVBoxLayout();
+  spotScreenVBoxLeft->addWidget(createPointerModeGroupBox(settings));
   spotScreenVBoxLeft->addWidget(createShapeGroupBox(settings));
   spotScreenVBoxLeft->addWidget(createZoomGroupBox(settings));
   spotScreenVBoxLeft->addWidget(createCursorGroupBox(settings));
@@ -163,6 +193,238 @@ QWidget* PreferencesDialog::createSettingsTabWidget(Settings* settings)
   return widget;
 }
 
+QWidget* PreferencesDialog::createLaserTabWidget(Settings* settings)
+{
+  const auto widget = new QWidget(this);
+  const auto mainHBox = new QHBoxLayout;
+  const auto laserVBoxLeft = new QVBoxLayout();
+  laserVBoxLeft->addWidget(createPointerModeGroupBox(settings));
+  laserVBoxLeft->addWidget(createLaserDotGroupBox(settings));
+  laserVBoxLeft->addWidget(createCursorGroupBox(settings));
+  laserVBoxLeft->addWidget(createMultiScreenWidget(settings));
+  const auto laserVBoxRight = new QVBoxLayout();
+  laserVBoxRight->addWidget(createLaserGlowGroupBox(settings));
+  laserVBoxRight->addWidget(createLaserTrailGroupBox(settings));
+  mainHBox->addLayout(laserVBoxLeft);
+  mainHBox->addLayout(laserVBoxRight);
+
+  const auto presetSelector = createPresetSelector(settings);
+
+  const auto testBtn = new QPushButton(i18n("&Show test..."), widget);
+  connect(testBtn, &QPushButton::clicked, this, &PreferencesDialog::testButtonClicked);
+
+  const auto hbox = new QHBoxLayout;
+  hbox->addWidget(testBtn);
+  hbox->addStretch(1);
+
+  const auto mainVBox = new QVBoxLayout(widget);
+  mainVBox->addLayout(mainHBox);
+  mainVBox->addWidget(presetSelector);
+  mainVBox->addLayout(hbox);
+
+  return widget;
+}
+
+QGroupBox* PreferencesDialog::createPointerModeGroupBox(Settings* settings)
+{
+  const auto modeGroup = new QGroupBox(i18n("Active Pointer Mode"), this);
+  const auto grid = new QGridLayout(modeGroup);
+  const auto modeCombo = new QComboBox(this);
+  modeCombo->addItem(i18n("Spotlight (Screen dimming + shape highlight)"), QStringLiteral("spotlight"));
+  modeCombo->addItem(i18n("Laser Pointer (Digital laser dot)"), QStringLiteral("laser"));
+  modeCombo->setCurrentIndex(modeCombo->findData(settings->pointerMode()));
+  connect(modeCombo, &QComboBox::currentIndexChanged, settings,
+    [settings, modeCombo](int index) {
+      settings->setPointerMode(modeCombo->itemData(index).toString());
+    });
+  connect(settings, &Settings::pointerModeChanged, modeCombo,
+    [modeCombo](const QString& mode) {
+      const auto index = modeCombo->findData(mode);
+      if (index >= 0) { modeCombo->setCurrentIndex(index); }
+    });
+  connect(settings, &Settings::pointerModeChanged, this, &PreferencesDialog::resetPresetCombo);
+
+  grid->addWidget(new QLabel(i18n("Pointer Mode"), this), 0, 0);
+  grid->addWidget(modeCombo, 0, 1);
+  grid->setColumnStretch(1, 1);
+  return modeGroup;
+}
+
+QGroupBox* PreferencesDialog::createLaserDotGroupBox(Settings* settings)
+{
+  const auto laserGroup = new QGroupBox(i18n("Laser Dot Settings"), this);
+  const auto grid = new QGridLayout(laserGroup);
+
+  // Laser Size
+  const auto laserSizeSpinBox = new QSpinBox(this);
+  laserSizeSpinBox->setMaximum(settings->laserSizeRange().max);
+  laserSizeSpinBox->setMinimum(settings->laserSizeRange().min);
+  laserSizeSpinBox->setValue(settings->laserSize());
+  const auto lasersizeHBox = new QHBoxLayout;
+  lasersizeHBox->addWidget(laserSizeSpinBox);
+  lasersizeHBox->addWidget(new QLabel(i18n("pixel")));
+  connect(laserSizeSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+          settings, &Settings::setLaserSize);
+  connect(settings, &Settings::laserSizeChanged, laserSizeSpinBox, &QSpinBox::setValue);
+  connect(settings, &Settings::laserSizeChanged, this, &PreferencesDialog::resetPresetCombo);
+  grid->addWidget(new QLabel(i18n("Laser Size"), this), 0, 0);
+  grid->addLayout(lasersizeHBox, 0, 1);
+
+  // Laser Color
+  const auto laserColor = new KColorButton(settings->laserColor(), this);
+  laserColor->setAccessibleName(i18n("Laser Color"));
+  connect(laserColor, &KColorButton::changed, settings, &Settings::setLaserColor);
+  connect(settings, &Settings::laserColorChanged, laserColor, &KColorButton::setColor);
+  connect(settings, &Settings::laserColorChanged, this, &PreferencesDialog::resetPresetCombo);
+  grid->addWidget(new QLabel(i18n("Laser Color"), this), 1, 0);
+  grid->addWidget(laserColor, 1, 1);
+
+  // Laser Opacity
+  const auto laserOpacitySb = new QDoubleSpinBox(this);
+  laserOpacitySb->setMaximum(settings->laserOpacityRange().max);
+  laserOpacitySb->setMinimum(settings->laserOpacityRange().min);
+  laserOpacitySb->setDecimals(2);
+  laserOpacitySb->setSingleStep(0.05);
+  laserOpacitySb->setValue(settings->laserOpacity());
+  connect(laserOpacitySb, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
+          settings, &Settings::setLaserOpacity);
+  connect(settings, &Settings::laserOpacityChanged, laserOpacitySb, &QDoubleSpinBox::setValue);
+  connect(settings, &Settings::laserOpacityChanged, this, &PreferencesDialog::resetPresetCombo);
+  grid->addWidget(new QLabel(i18n("Laser Opacity"), this), 2, 0);
+  grid->addWidget(laserOpacitySb, 2, 1);
+
+  grid->addWidget(new QWidget(this), 100, 0);
+  grid->setRowStretch(100, 100);
+  grid->setColumnStretch(1, 1);
+  return laserGroup;
+}
+
+QGroupBox* PreferencesDialog::createLaserGlowGroupBox(Settings* settings)
+{
+  const auto glowGroup = new QGroupBox(i18n("Laser Glow / Halo"), this);
+  glowGroup->setCheckable(true);
+  glowGroup->setChecked(settings->laserGlow());
+  connect(glowGroup, &QGroupBox::toggled, settings, &Settings::setLaserGlow);
+  connect(settings, &Settings::laserGlowChanged, glowGroup, &QGroupBox::setChecked);
+  connect(settings, &Settings::laserGlowChanged, this, &PreferencesDialog::resetPresetCombo);
+
+  const auto grid = new QGridLayout(glowGroup);
+
+  // Glow Size
+  const auto glowSizeSpinBox = new QSpinBox(this);
+  glowSizeSpinBox->setMaximum(settings->laserGlowSizeRange().max);
+  glowSizeSpinBox->setMinimum(settings->laserGlowSizeRange().min);
+  glowSizeSpinBox->setValue(settings->laserGlowSize());
+  const auto glowsizeHBox = new QHBoxLayout;
+  glowsizeHBox->addWidget(glowSizeSpinBox);
+  glowsizeHBox->addWidget(new QLabel(i18n("pixel")));
+  connect(glowSizeSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+          settings, &Settings::setLaserGlowSize);
+  connect(settings, &Settings::laserGlowSizeChanged, glowSizeSpinBox, &QSpinBox::setValue);
+  connect(settings, &Settings::laserGlowSizeChanged, this, &PreferencesDialog::resetPresetCombo);
+  grid->addWidget(new QLabel(i18n("Glow Size"), this), 0, 0);
+  grid->addLayout(glowsizeHBox, 0, 1);
+
+  // Glow Color
+  const auto glowColor = new KColorButton(settings->laserGlowColor(), this);
+  glowColor->setAccessibleName(i18n("Glow Color"));
+  connect(glowColor, &KColorButton::changed, settings, &Settings::setLaserGlowColor);
+  connect(settings, &Settings::laserGlowColorChanged, glowColor, &KColorButton::setColor);
+  connect(settings, &Settings::laserGlowColorChanged, this, &PreferencesDialog::resetPresetCombo);
+  grid->addWidget(new QLabel(i18n("Glow Color"), this), 1, 0);
+  grid->addWidget(glowColor, 1, 1);
+
+  // Glow Opacity
+  const auto glowOpacitySb = new QDoubleSpinBox(this);
+  glowOpacitySb->setMaximum(settings->laserGlowOpacityRange().max);
+  glowOpacitySb->setMinimum(settings->laserGlowOpacityRange().min);
+  glowOpacitySb->setDecimals(2);
+  glowOpacitySb->setSingleStep(0.05);
+  glowOpacitySb->setValue(settings->laserGlowOpacity());
+  connect(glowOpacitySb, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
+          settings, &Settings::setLaserGlowOpacity);
+  connect(settings, &Settings::laserGlowOpacityChanged, glowOpacitySb, &QDoubleSpinBox::setValue);
+  connect(settings, &Settings::laserGlowOpacityChanged, this, &PreferencesDialog::resetPresetCombo);
+  grid->addWidget(new QLabel(i18n("Glow Opacity"), this), 2, 0);
+  grid->addWidget(glowOpacitySb, 2, 1);
+
+  grid->addWidget(new QWidget(this), 100, 0);
+  grid->setRowStretch(100, 100);
+  grid->setColumnStretch(1, 1);
+  return glowGroup;
+}
+
+QGroupBox* PreferencesDialog::createLaserTrailGroupBox(Settings* settings)
+{
+  const auto trailGroup = new QGroupBox(i18n("Laser Trail Mark"), this);
+  trailGroup->setCheckable(true);
+  trailGroup->setChecked(settings->laserTrail());
+  connect(trailGroup, &QGroupBox::toggled, settings, &Settings::setLaserTrail);
+  connect(settings, &Settings::laserTrailChanged, trailGroup, &QGroupBox::setChecked);
+  connect(settings, &Settings::laserTrailChanged, this, &PreferencesDialog::resetPresetCombo);
+
+  const auto grid = new QGridLayout(trailGroup);
+
+  // Trail Duration
+  const auto trailTimeSpinBox = new QSpinBox(this);
+  trailTimeSpinBox->setMaximum(settings->laserTrailTimeRange().max);
+  trailTimeSpinBox->setMinimum(settings->laserTrailTimeRange().min);
+  trailTimeSpinBox->setSingleStep(50);
+  trailTimeSpinBox->setValue(settings->laserTrailTime());
+  const auto timeHBox = new QHBoxLayout;
+  timeHBox->addWidget(trailTimeSpinBox);
+  timeHBox->addWidget(new QLabel(i18n("ms")));
+  connect(trailTimeSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+          settings, &Settings::setLaserTrailTime);
+  connect(settings, &Settings::laserTrailTimeChanged, trailTimeSpinBox, &QSpinBox::setValue);
+  connect(settings, &Settings::laserTrailTimeChanged, this, &PreferencesDialog::resetPresetCombo);
+  grid->addWidget(new QLabel(i18n("Trail Duration"), this), 0, 0);
+  grid->addLayout(timeHBox, 0, 1);
+
+  // Trail Width
+  const auto trailWidthSpinBox = new QSpinBox(this);
+  trailWidthSpinBox->setMaximum(settings->laserTrailWidthRange().max);
+  trailWidthSpinBox->setMinimum(settings->laserTrailWidthRange().min);
+  trailWidthSpinBox->setValue(settings->laserTrailWidth());
+  const auto widthHBox = new QHBoxLayout;
+  widthHBox->addWidget(trailWidthSpinBox);
+  widthHBox->addWidget(new QLabel(i18n("pixel")));
+  connect(trailWidthSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+          settings, &Settings::setLaserTrailWidth);
+  connect(settings, &Settings::laserTrailWidthChanged, trailWidthSpinBox, &QSpinBox::setValue);
+  connect(settings, &Settings::laserTrailWidthChanged, this, &PreferencesDialog::resetPresetCombo);
+  grid->addWidget(new QLabel(i18n("Trail Width"), this), 1, 0);
+  grid->addLayout(widthHBox, 1, 1);
+
+  // Trail Color
+  const auto trailColor = new KColorButton(settings->laserTrailColor(), this);
+  trailColor->setAccessibleName(i18n("Trail Color"));
+  connect(trailColor, &KColorButton::changed, settings, &Settings::setLaserTrailColor);
+  connect(settings, &Settings::laserTrailColorChanged, trailColor, &KColorButton::setColor);
+  connect(settings, &Settings::laserTrailColorChanged, this, &PreferencesDialog::resetPresetCombo);
+  grid->addWidget(new QLabel(i18n("Trail Color"), this), 2, 0);
+  grid->addWidget(trailColor, 2, 1);
+
+  // Trail Opacity
+  const auto trailOpacitySb = new QDoubleSpinBox(this);
+  trailOpacitySb->setMaximum(settings->laserTrailOpacityRange().max);
+  trailOpacitySb->setMinimum(settings->laserTrailOpacityRange().min);
+  trailOpacitySb->setDecimals(2);
+  trailOpacitySb->setSingleStep(0.05);
+  trailOpacitySb->setValue(settings->laserTrailOpacity());
+  connect(trailOpacitySb, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
+          settings, &Settings::setLaserTrailOpacity);
+  connect(settings, &Settings::laserTrailOpacityChanged, trailOpacitySb, &QDoubleSpinBox::setValue);
+  connect(settings, &Settings::laserTrailOpacityChanged, this, &PreferencesDialog::resetPresetCombo);
+  grid->addWidget(new QLabel(i18n("Trail Opacity"), this), 3, 0);
+  grid->addWidget(trailOpacitySb, 3, 1);
+
+  grid->addWidget(new QWidget(this), 100, 0);
+  grid->setRowStretch(100, 100);
+  grid->setColumnStretch(1, 1);
+  return trailGroup;
+}
+
 // -------------------------------------------------------------------------------------------------
 QWidget* PreferencesDialog::createPresetSelector(Settings* settings)
 {
@@ -171,20 +433,22 @@ QWidget* PreferencesDialog::createPresetSelector(Settings* settings)
   const auto hbox = new QHBoxLayout(widget);
   hbox->addWidget(new QLabel(i18n("Presets"), widget));
 
-  m_presetCombo = new QComboBox(widget);
-  m_presetCombo->setModel(settings->presetModel());
+  auto* const presetCombo = new QComboBox(widget);
+  presetCombo->setModel(settings->presetModel());
+  m_presetCombos.push_back(presetCombo);
+  m_presetCombo = presetCombo;
 
-  const auto normalComboStyle = m_presetCombo->style();
-  m_presetCombo->setStyle(&*m_presetComboStyle); // style when no preset is selected
-  m_presetCombo->setInsertPolicy(QComboBox::NoInsert);
+  const auto normalComboStyle = presetCombo->style();
+  presetCombo->setStyle(&*m_presetComboStyle); // style when no preset is selected
+  presetCombo->setInsertPolicy(QComboBox::NoInsert);
 
   const auto deleteBtn = new IconButton(Font::Icon::trash_can_1, widget);
   deleteBtn->setToolTip(i18n("Delete currently selected preset."));
-  deleteBtn->setEnabled(m_presetCombo->currentIndex() > 0);
+  deleteBtn->setEnabled(presetCombo->currentIndex() > 0);
   const auto newBtn = new IconButton(Font::Icon::plus_5, widget);
-  newBtn->setToolTip(i18n("Create new preset from current spotlight settings."));
+  newBtn->setToolTip(i18n("Create new preset from current settings."));
 
-  const std::vector<QWidget*> widgets{m_presetCombo, deleteBtn, newBtn};
+  const std::vector<QWidget*> widgets{presetCombo, deleteBtn, newBtn};
   for (const auto w : widgets) {
     w->setSizePolicy(w->sizePolicy().horizontalPolicy(), QSizePolicy::Minimum);
     hbox->addWidget(w);
@@ -192,38 +456,38 @@ QWidget* PreferencesDialog::createPresetSelector(Settings* settings)
 
   hbox->setStretch(1, 1); // stretch combobox
 
-  connect(m_presetCombo, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), widget,
-  [deleteBtn, settings, normalComboStyle, this](int index)
+  connect(presetCombo, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), widget,
+  [presetCombo, deleteBtn, settings, normalComboStyle, this](int index)
   {
     deleteBtn->setEnabled(index > 0);
-    m_presetCombo->setStyle(index == 0 ? &*m_presetComboStyle : normalComboStyle);
+    presetCombo->setStyle(index == 0 ? &*m_presetComboStyle : normalComboStyle);
 
-    if (index > 0 && !m_presetCombo->currentText().isEmpty()) {
-      settings->loadPreset(m_presetCombo->currentText());
+    if (index > 0 && !presetCombo->currentText().isEmpty()) {
+      settings->loadPreset(presetCombo->currentText());
     }
   });
 
-  connect(newBtn, &QPushButton::clicked, this, [newBtn, settings, this]()
+  connect(newBtn, &QPushButton::clicked, this, [newBtn, presetCombo, settings, this]()
   {
     newBtn->setEnabled(false);
-    m_presetCombo->setEditable(true);
-    const auto le = m_presetCombo->lineEdit();
+    presetCombo->setEditable(true);
+    const auto le = presetCombo->lineEdit();
     le->setMaxLength(35);
     le->setCompleter(nullptr);
 
-    connect(le, &QLineEdit::editingFinished, this, [le, settings, newBtn, this]()
+    connect(le, &QLineEdit::editingFinished, this, [le, presetCombo, settings, newBtn, this]()
     {
       auto text = le->text().trimmed();
-      m_presetCombo->setEditable(false);
+      presetCombo->setEditable(false);
 
       if (text.isEmpty()) {
-        text = m_presetCombo->currentText().trimmed();
+        text = presetCombo->currentText().trimmed();
       }
 
-      if (m_presetCombo->findText(text) >= 0) { // Item with same name already exists
+      if (presetCombo->findText(text) >= 0) { // Item with same name already exists
         text.append(" (%1)");
         for (int i = 2; i < 1000; ++i) {
-          if (m_presetCombo->findText(text.arg(i)) < 0) {
+          if (presetCombo->findText(text.arg(i)) < 0) {
             text = text.arg(i);
             break;
           }
@@ -239,24 +503,27 @@ QWidget* PreferencesDialog::createPresetSelector(Settings* settings)
     le->selectAll();
   });
 
-  connect(deleteBtn, &QPushButton::clicked, this, [this, settings]()
+  connect(deleteBtn, &QPushButton::clicked, this, [presetCombo, settings]()
   {
-    if (m_presetCombo->currentIndex() < 0) { return; }
-    settings->removePreset(m_presetCombo->currentText());
+    if (presetCombo->currentIndex() < 0) { return; }
+    settings->removePreset(presetCombo->currentText());
   });
 
   connect(settings, &Settings::presetLoaded, this,
   [normalComboStyle, deleteBtn, this](const QString& preset)
   {
-    const auto idx = m_presetCombo->findText(preset);
-    if (idx >= 0 && idx != m_presetCombo->currentIndex())
-    {
-      m_presetCombo->blockSignals(true);
-      m_presetCombo->setCurrentIndex(idx);
-      m_presetCombo->blockSignals(false);
-      m_presetCombo->setStyle(idx == 0 ? &*m_presetComboStyle : normalComboStyle);
-      deleteBtn->setEnabled(idx > 0);
+    for (auto* combo : m_presetCombos) {
+      if (!combo) continue;
+      const auto idx = combo->findText(preset);
+      if (idx >= 0 && idx != combo->currentIndex())
+      {
+        combo->blockSignals(true);
+        combo->setCurrentIndex(idx);
+        combo->blockSignals(false);
+        combo->setStyle(idx == 0 ? &*m_presetComboStyle : normalComboStyle);
+      }
     }
+    deleteBtn->setEnabled(m_presetCombos.empty() ? false : m_presetCombos.front()->currentIndex() > 0);
   });
 
   return widget;
@@ -486,8 +753,8 @@ QGroupBox* PreferencesDialog::createDotGroupBox(Settings* settings)
   dotOpacitySb->setValue(settings->dotOpacity());
   connect(dotOpacitySb, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
           settings, &Settings::setDotOpacity);
-  connect(settings, &Settings::borderOpacityChanged, dotOpacitySb, &QDoubleSpinBox::setValue);
-  connect(settings, &Settings::borderOpacityChanged, this, &PreferencesDialog::resetPresetCombo);
+  connect(settings, &Settings::dotOpacityChanged, dotOpacitySb, &QDoubleSpinBox::setValue);
+  connect(settings, &Settings::dotOpacityChanged, this, &PreferencesDialog::resetPresetCombo);
   dotGrid->addWidget(new QLabel(i18n("Dot Opacity"), this), 2, 0);
   dotGrid->addWidget(dotOpacitySb, 2, 1);
 
@@ -766,7 +1033,9 @@ void PreferencesDialog::reject()
 // -------------------------------------------------------------------------------------------------
 void PreferencesDialog::resetPresetCombo()
 {
-  if (m_presetCombo) { m_presetCombo->setCurrentIndex(0); }
+  for (auto* combo : m_presetCombos) {
+    if (combo) { combo->setCurrentIndex(0); }
+  }
 }
 
 // -------------------------------------------------------------------------------------------------

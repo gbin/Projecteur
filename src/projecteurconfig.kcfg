@@ -75,6 +75,59 @@
     <entry name="ZoomMode" key="zoomMode" type="String">
       <default>smooth</default>
     </entry>
+    <entry name="PointerMode" key="pointerMode" type="String">
+      <default>spotlight</default>
+    </entry>
+    <entry name="LaserSize" key="laserSize" type="Int">
+      <default>16</default>
+      <min>3</min>
+      <max>100</max>
+    </entry>
+    <entry name="LaserColor" key="laserColor" type="Color">
+      <default>#ff0000</default>
+    </entry>
+    <entry name="LaserOpacity" key="laserOpacity" type="Double">
+      <default>0.9</default>
+      <min>0.0</min>
+      <max>1.0</max>
+    </entry>
+    <entry name="LaserGlow" key="laserGlow" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry name="LaserGlowSize" key="laserGlowSize" type="Int">
+      <default>10</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
+    <entry name="LaserGlowOpacity" key="laserGlowOpacity" type="Double">
+      <default>0.6</default>
+      <min>0.0</min>
+      <max>1.0</max>
+    </entry>
+    <entry name="LaserGlowColor" key="laserGlowColor" type="Color">
+      <default>#ff0000</default>
+    </entry>
+    <entry name="LaserTrail" key="laserTrail" type="Bool">
+      <default>false</default>
+    </entry>
+    <entry name="LaserTrailTime" key="laserTrailTime" type="Int">
+      <default>400</default>
+      <min>100</min>
+      <max>2000</max>
+    </entry>
+    <entry name="LaserTrailWidth" key="laserTrailWidth" type="Int">
+      <default>4</default>
+      <min>1</min>
+      <max>30</max>
+    </entry>
+    <entry name="LaserTrailColor" key="laserTrailColor" type="Color">
+      <default>#ff0000</default>
+    </entry>
+    <entry name="LaserTrailOpacity" key="laserTrailOpacity" type="Double">
+      <default>0.8</default>
+      <min>0.0</min>
+      <max>1.0</max>
+    </entry>
     <entry name="MultiScreenOverlay" key="multiScreenOverlay" type="Bool">
       <default>false</default>
     </entry>

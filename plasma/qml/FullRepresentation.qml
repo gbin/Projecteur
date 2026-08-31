@@ -307,7 +307,7 @@ PlasmaExtras.Representation {
                 spacing: Kirigami.Units.smallSpacing
 
                 PlasmaComponents3.Label {
-                    text: i18n("Spotlight")
+                    text: i18n("Pointer Controls")
                     font.bold: true
                 }
 
@@ -319,6 +319,29 @@ PlasmaExtras.Representation {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    PlasmaComponents3.Label {
+                        text: i18n("Mode:")
+                    }
+
+                    PlasmaComponents3.ComboBox {
+                        id: modeCombo
+
+                        Layout.fillWidth: true
+                        enabled: root.backend && root.backend.serviceAvailable
+                        model: [i18n("Spotlight"), i18n("Laser Pointer")]
+                        currentIndex: (root.backend && root.backend.pointerMode === "laser") ? 1 : 0
+                        onActivated: (index) => {
+                            if (root.backend) {
+                                root.backend.setPointerMode(index === 1 ? "laser" : "spotlight");
+                            }
+                        }
+                    }
+                }
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -355,7 +378,13 @@ PlasmaExtras.Representation {
                     PlasmaComponents3.Button {
                         Layout.fillWidth: true
                         enabled: root.backend && root.backend.serviceAvailable
-                        text: root.backend && root.backend.spotlightActive ? i18n("Hide Spotlight") : i18n("Test Spotlight")
+                        text: {
+                            const isLaser = root.backend && root.backend.pointerMode === "laser";
+                            if (root.backend && root.backend.spotlightActive) {
+                                return isLaser ? i18n("Hide Laser") : i18n("Hide Spotlight");
+                            }
+                            return isLaser ? i18n("Test Laser") : i18n("Test Spotlight");
+                        }
                         icon.name: root.backend && root.backend.spotlightActive ? "visibility-hidden-symbolic" : "visibility-symbolic"
                         onClicked: root.backend.setSpotlightActive(!root.backend.spotlightActive)
                     }

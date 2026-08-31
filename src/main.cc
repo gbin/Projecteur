@@ -346,15 +346,15 @@ namespace {
       print() << "  -c COMMAND|PROPERTY    " << commandOption_.description() << std::endl;
       print() << "<Commands>";
       print() << "  spot=[on|off|toggle]     " << i18n("Turn spotlight on/off or toggle.");
+      print() << "  laser=[on|off|toggle]    " << i18n("Turn laser pointer on/off or toggle.");
+      print() << "  pointer=[spotlight|laser|toggle] " << i18n("Set or toggle pointer mode.");
       if (fullHelp) {
         print() << "  preset=NAME              " << i18n("Set a preset.");
         print() << "  vibrate[=I[,L]]          " << i18n("Send vibrate command to device with intensity,length.");
         print() << "  spot.size.adjust=[+|-]N  " << i18n("Increase or decrease spot size by N.");
+        print() << "  laser.size.adjust=[+|-]N " << i18n("Increase or decrease laser size by N.");
       }
       print() << "  settings=[show|hide]     " << i18n("Show/hide preferences dialog.");
-      if (fullHelp) {
-        print() << "  preset=NAME              " << i18n("Set a preset.");
-      }
       print() << "  quit                     " << i18n("Quit the running instance.");
 
       // Early return if the user not explicitly requested the full help

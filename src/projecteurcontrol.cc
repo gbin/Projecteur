@@ -58,6 +58,10 @@ ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Setting
     emit spotlightActiveChanged(active);
     emitPropertiesChanged({{QStringLiteral("SpotlightActive"), active}});
   });
+  connect(m_settings, &Settings::pointerModeChanged, this, [this](const QString& mode) {
+    emit pointerModeChanged(mode);
+    emitPropertiesChanged({{QStringLiteral("PointerMode"), mode}});
+  });
   connect(m_presentationTimer, &PresentationTimer::enabledChanged, this,
           [this](bool enabled) {
     emit timerEnabledChanged(enabled);
@@ -138,6 +142,14 @@ ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Setting
   connect(m_settings, &Settings::zoomEnabledChanged, this, settingsChanged);
   connect(m_settings, &Settings::zoomFactorChanged, this, settingsChanged);
   connect(m_settings, &Settings::zoomModeChanged, this, settingsChanged);
+  connect(m_settings, &Settings::pointerModeChanged, this, settingsChanged);
+  connect(m_settings, &Settings::laserSizeChanged, this, settingsChanged);
+  connect(m_settings, &Settings::laserColorChanged, this, settingsChanged);
+  connect(m_settings, &Settings::laserOpacityChanged, this, settingsChanged);
+  connect(m_settings, &Settings::laserGlowChanged, this, settingsChanged);
+  connect(m_settings, &Settings::laserGlowSizeChanged, this, settingsChanged);
+  connect(m_settings, &Settings::laserGlowOpacityChanged, this, settingsChanged);
+  connect(m_settings, &Settings::laserGlowColorChanged, this, settingsChanged);
   connect(m_settings, &Settings::multiScreenOverlayEnabledChanged, this, settingsChanged);
 
   for (const auto& shape : Settings::spotShapes()) {
@@ -180,6 +192,11 @@ bool ProjecteurControl::overlayEnabled() const
 bool ProjecteurControl::spotlightActive() const
 {
   return m_spotlight->spotActive();
+}
+
+QString ProjecteurControl::pointerMode() const
+{
+  return m_settings->pointerMode();
 }
 
 QStringList ProjecteurControl::connectedDevices() const
@@ -277,6 +294,32 @@ void ProjecteurControl::SetOverlayEnabled(bool enabled)
 void ProjecteurControl::SetSpotlightActive(bool active)
 {
   m_spotlight->setSpotActive(active);
+}
+
+void ProjecteurControl::SetPointerMode(const QString& mode)
+{
+  if (Settings::isPointerMode(mode)) {
+    m_settings->setPointerMode(mode);
+  }
+}
+
+void ProjecteurControl::TogglePointerMode()
+{
+  m_settings->setPointerMode(m_settings->pointerMode() == QStringLiteral("laser")
+                               ? QStringLiteral("spotlight")
+                               : QStringLiteral("laser"));
+}
+
+void ProjecteurControl::ToggleLaserActive()
+{
+  if (m_settings->pointerMode() != QStringLiteral("laser")) {
+    m_settings->setPointerMode(QStringLiteral("laser"));
+    if (m_settings->overlayDisabled()) {
+      m_settings->setOverlayDisabled(false);
+    }
+  } else {
+    m_settings->setOverlayDisabled(!m_settings->overlayDisabled());
+  }
 }
 
 bool ProjecteurControl::LoadPreset(const QString& preset)
