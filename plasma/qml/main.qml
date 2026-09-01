@@ -80,6 +80,17 @@ PlasmoidItem {
         plasmoidItem: root
     }
 
+    PlasmaCore.Action {
+        id: preferencesAction
+        text: i18n("Projecteur Preferences…")
+        icon.name: "configure-symbolic"
+        enabled: backend && backend.serviceAvailable
+        onTriggered: {
+            root.expanded = false;
+            backend.showPreferences();
+        }
+    }
+
     Plasmoid.contextualActions: [
         PlasmaCore.Action {
             text: i18n("About Projecteur")
@@ -98,6 +109,10 @@ PlasmoidItem {
     fullRepresentation: FullRepresentation {
         backend: root.backend
         plasmoidItem: root
+    }
+
+    Component.onCompleted: {
+        Plasmoid.setInternalAction("configure", preferencesAction);
     }
 
 }
