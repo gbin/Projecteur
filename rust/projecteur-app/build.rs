@@ -21,12 +21,19 @@ inline void load_qml_module(QQmlApplicationEngine& engine,
     )
     .expect("write generated QML loader header");
 
-    CxxQtBuilder::new_qml_module(
+    let builder = CxxQtBuilder::new_qml_module(
         QmlModule::new("org.projecteur.rust")
             .version(1, 0)
             .qml_files(["qml/Main.qml", "qml/OverlayPreview.qml"]),
     )
     .include_dir(output_directory)
-    .file("src/backend.rs")
-    .build();
+    .file("src/backend.rs");
+    // GCC 16 diagnoses a harmless Qt template completeness probe in generated
+    // bridge code. Keep Cargo output focused on warnings we can act on.
+    let builder = unsafe {
+        builder.cc_builder(|compiler| {
+            compiler.flag_if_supported("-Wno-sfinae-incomplete");
+        })
+    };
+    builder.build();
 }

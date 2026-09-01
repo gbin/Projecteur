@@ -1,6 +1,6 @@
 [target.'cfg(all(unix, not(target_vendor = "apple")))']
 # CXX-Qt executables need a linker that preserves Qt's static initializers.
 # qt-build-utils currently mistakes the generic `lld` dispatcher for `ld.lld`
-# on some distributions; GNU gold is installed with binutils and is reliable.
-rustflags = ["-C", "link-arg=-fuse-ld=gold"]
-
+# on some distributions. GNU bfd is available with binutils and avoids both
+# that dispatcher failure and Rust's deprecation warning for GNU gold.
+rustflags = ["-C", "link-arg=-fuse-ld=bfd"]
