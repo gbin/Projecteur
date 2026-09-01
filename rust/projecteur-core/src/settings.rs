@@ -139,11 +139,11 @@ impl SpotlightSettings {
             "spotSize" => set_i32(&mut self.spot_size, value, Self::SPOT_SIZE_RANGE),
             "showCenterDot" => set_bool(&mut self.show_center_dot, value),
             "dotSize" => set_i32(&mut self.dot_size, value, Self::DOT_SIZE_RANGE),
-            "dotColor" => set_nonempty(&mut self.dot_color, value),
+            "dotColor" => set_color(&mut self.dot_color, value),
             "dotOpacity" => set_f64(&mut self.dot_opacity, value, Self::OPACITY_RANGE),
             "dotMode" => set_parsed(&mut self.dot_mode, value),
             "dotTrailEnabled" => set_bool(&mut self.dot_trail_enabled, value),
-            "shadeColor" => set_nonempty(&mut self.shade_color, value),
+            "shadeColor" => set_color(&mut self.shade_color, value),
             "shadeOpacity" => set_f64(&mut self.shade_opacity, value, Self::OPACITY_RANGE),
             "cursor" => set_unbounded_i32(&mut self.cursor, value),
             "spotShape" => set_nonempty(&mut self.spot_shape, value),
@@ -151,7 +151,7 @@ impl SpotlightSettings {
                 set_f64(&mut self.spot_rotation, value, Self::SPOT_ROTATION_RANGE);
             }
             "showBorder" => set_bool(&mut self.show_border, value),
-            "borderColor" => set_nonempty(&mut self.border_color, value),
+            "borderColor" => set_color(&mut self.border_color, value),
             "borderSize" => set_i32(&mut self.border_size, value, Self::BORDER_SIZE_RANGE),
             "borderOpacity" => set_f64(&mut self.border_opacity, value, Self::OPACITY_RANGE),
             "enableZoom" => set_bool(&mut self.zoom_enabled, value),
@@ -231,6 +231,36 @@ fn set_nonempty(target: &mut String, value: &str) {
     }
 }
 
+fn set_color(target: &mut String, value: &str) {
+    if value.is_empty() {
+        return;
+    }
+
+    let channels: Vec<_> = value.split(',').map(str::trim).collect();
+    if channels.len() == 3 || channels.len() == 4 {
+        let Some(channels) = channels
+            .iter()
+            .map(|channel| channel.parse::<u8>().ok())
+            .collect::<Option<Vec<_>>>()
+        else {
+            return;
+        };
+        *target = if channels.len() == 3 {
+            format!("#{:02x}{:02x}{:02x}", channels[0], channels[1], channels[2])
+        } else {
+            format!(
+                "#{:02x}{:02x}{:02x}{:02x}",
+                channels[3], channels[0], channels[1], channels[2]
+            )
+        };
+        return;
+    }
+
+    if !value.contains(',') {
+        value.clone_into(target);
+    }
+}
+
 fn set_parsed<T: FromStr>(target: &mut T, value: &str) {
     if let Ok(value) = value.parse() {
         *target = value;
@@ -260,6 +290,8 @@ mod tests {
             ("showSpotShade", "off"),
             ("spotSize", "999"),
             ("dotOpacity", "-2"),
+            ("dotColor", "0, 255, 0"),
+            ("shadeColor", "34,34,34,128"),
             ("zoomMode", "pixel"),
             ("presentationTimerDurationSeconds", "0"),
         ] {
@@ -269,6 +301,8 @@ mod tests {
         assert!(!settings.show_spot_shade);
         assert_eq!(settings.spot_size, 100);
         assert!(settings.dot_opacity.abs() < f64::EPSILON);
+        assert_eq!(settings.dot_color, "#00ff00");
+        assert_eq!(settings.shade_color, "#80222222");
         assert_eq!(settings.zoom_mode, ZoomMode::Pixel);
         assert_eq!(settings.presentation_timer_duration_seconds, 1);
     }
@@ -279,8 +313,10 @@ mod tests {
         settings.apply_general_entry("zoomFactor", "wat");
         settings.apply_general_entry("zoomMode", "nearest");
         settings.apply_general_entry("futureSetting", "42");
+        settings.apply_general_entry("borderColor", "1,broken,3");
 
         assert!((settings.zoom_factor - 2.0).abs() < f64::EPSILON);
         assert_eq!(settings.zoom_mode, ZoomMode::Smooth);
+        assert_eq!(settings.border_color, "#73d216");
     }
 }

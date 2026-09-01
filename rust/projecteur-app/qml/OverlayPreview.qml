@@ -72,9 +72,9 @@ Window {
         height: width
         radius: width / 2
         color: "transparent"
-        border.width: backend.showBorder ? Math.max(0, backend.borderSize) : 0
-        border.color: backend.borderColor
-        opacity: backend.borderOpacity
+        border.width: backend.showBorder ? Math.max(1, backend.borderSize) : 1
+        border.color: backend.showBorder ? backend.borderColor : "white"
+        opacity: backend.showBorder ? backend.borderOpacity : 0.7
     }
 
     Rectangle {
@@ -127,7 +127,7 @@ Window {
             id: safetyText
             anchors.centerIn: parent
             color: "white"
-            text: qsTr("Overlay preview — click anywhere to close (auto-closes in 12 seconds)")
+            text: qsTr("Move the pointer to test the aperture — click to close (12-second timeout)")
         }
     }
 

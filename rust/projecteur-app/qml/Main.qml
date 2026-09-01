@@ -5,7 +5,7 @@ import QtQuick.Window
 import org.kde.layershell as LayerShell
 import org.projecteur.rust
 
-Window {
+ApplicationWindow {
     id: root
 
     width: 520
@@ -81,7 +81,7 @@ Window {
     }
 
     Shortcut {
-        sequence: StandardKey.Cancel
+        sequences: [StandardKey.Cancel]
         onActivated: root.close()
     }
 }
