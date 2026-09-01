@@ -89,8 +89,12 @@ PlasmaExtras.Representation {
         return hours > 0 ? hours.toString() + ":" + mm + ":" + ss : mm + ":" + ss;
     }
 
+    readonly property real contentMargins: Kirigami.Units.largeSpacing * 2
+
     implicitWidth: Kirigami.Units.gridUnit * 22
-    implicitHeight: content.implicitHeight + header.implicitHeight
+    implicitHeight: content.implicitHeight + footer.implicitHeight + contentMargins
+    Layout.preferredHeight: implicitHeight
+    Layout.maximumHeight: implicitHeight
     focus: true
     collapseMarginsHint: true
 
@@ -318,7 +322,7 @@ PlasmaExtras.Representation {
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
+                spacing: Kirigami.Units.largeSpacing
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -376,14 +380,14 @@ PlasmaExtras.Representation {
 
     }
 
-    header: PlasmaExtras.PlasmoidHeading {
-        id: header
+    footer: PlasmaExtras.PlasmoidHeading {
+        id: footer
 
         contentItem: RowLayout {
             spacing: Kirigami.Units.smallSpacing
 
             PlasmaComponents3.Switch {
-                text: i18n("Enable Spotlight")
+                text: i18n("Enable")
                 icon.name: "projecteur"
                 checked: root.backend ? root.backend.overlayEnabled : false
                 enabled: root.backend && root.backend.serviceAvailable
