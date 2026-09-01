@@ -16,3 +16,10 @@ QML feasibility surface:
 ```sh
 cargo run --bin projecteur-rs -- --show-window
 ```
+
+Pass the legacy `--cfg` argument to verify a specific configuration without
+changing the normal desktop selection:
+
+```sh
+cargo run --bin projecteur-rs -- --show-window --cfg /path/to/projecteurrc
+```

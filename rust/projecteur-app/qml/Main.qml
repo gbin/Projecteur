@@ -9,7 +9,7 @@ Window {
     id: root
 
     width: 520
-    height: 230
+    height: 310
     visible: backend.showWindow
     title: qsTr("Projecteur Rust port")
 
@@ -47,6 +47,19 @@ Window {
             Layout.fillWidth: true
             text: backend.status
             wrapMode: Text.Wrap
+        }
+
+        Label {
+            Layout.fillWidth: true
+            text: "Config: " + (backend.configPath.length > 0 ? backend.configPath : "built-in defaults")
+            elide: Text.ElideMiddle
+        }
+
+        Label {
+            Layout.fillWidth: true
+            text: "Overlay: size " + backend.spotSize
+                  + ", dot " + backend.dotColor
+                  + ", zoom " + backend.zoomMode + " ×" + backend.zoomFactor
         }
 
         Label {
