@@ -1,0 +1,24 @@
+[package]
+name = "projecteur-app"
+description = "Rust and QML implementation of Projecteur"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+build = "build.rs"
+
+[[bin]]
+name = "projecteur-rs"
+path = "src/main.rs"
+
+[dependencies]
+cxx = "1.0.176"
+cxx-qt = "0.10.0"
+cxx-qt-lib = { version = "0.10.0", features = ["qt_gui", "qt_qml"] }
+projecteur-core = { path = "../projecteur-core" }
+
+[build-dependencies]
+cxx-qt-build = "0.10.0"
+
+[lints]
+workspace = true

@@ -1,0 +1,11 @@
+[package]
+name = "projecteur-core"
+description = "Qt-independent domain and device support for Projecteur"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
