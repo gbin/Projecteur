@@ -79,6 +79,10 @@ pub mod ffi {
         #[qproperty(i32, cursor)]
         #[qproperty(QString, spot_shape)]
         #[qproperty(f64, spot_rotation)]
+        #[qproperty(i32, square_radius)]
+        #[qproperty(i32, star_points)]
+        #[qproperty(i32, star_inner_radius)]
+        #[qproperty(i32, ngon_sides)]
         #[qproperty(bool, show_border)]
         #[qproperty(QString, border_color)]
         #[qproperty(i32, border_size)]
@@ -96,6 +100,9 @@ pub mod ffi {
 
         #[qinvokable]
         fn poll_presenter(self: Pin<&mut ProjecteurBackend>);
+
+        #[qinvokable]
+        fn save_settings(self: Pin<&mut ProjecteurBackend>) -> bool;
     }
 
     impl cxx_qt::Initialize for ProjecteurBackend {}
@@ -130,6 +137,10 @@ pub struct ProjecteurBackendRust {
     cursor: i32,
     spot_shape: QString,
     spot_rotation: f64,
+    square_radius: i32,
+    star_points: i32,
+    star_inner_radius: i32,
+    ngon_sides: i32,
     show_border: bool,
     border_color: QString,
     border_size: i32,
@@ -231,6 +242,10 @@ impl ProjecteurBackendRust {
             cursor: settings.cursor,
             spot_shape: QString::from(&settings.spot_shape),
             spot_rotation: settings.spot_rotation,
+            square_radius: settings.square_radius,
+            star_points: settings.star_points,
+            star_inner_radius: settings.star_inner_radius,
+            ngon_sides: settings.ngon_sides,
             show_border: settings.show_border,
             border_color: QString::from(&settings.border_color),
             border_size: settings.border_size,
@@ -595,6 +610,75 @@ impl ffi::ProjecteurBackend {
     #[allow(clippy::unused_self)]
     fn confirm_qml_loaded(self: Pin<&mut Self>) {
         eprintln!("projecteur-rs: Rust backend and QML are connected");
+    }
+
+    fn save_settings(mut self: Pin<&mut Self>) -> bool {
+        let (path, settings) = {
+            let pinned = self.as_ref();
+            let rust = pinned.rust();
+            let path = PathBuf::from(String::from(&rust.config_path));
+            let settings = SpotlightSettings {
+                show_spot_shade: rust.show_spot_shade,
+                spot_size: rust.spot_size,
+                show_center_dot: rust.show_center_dot,
+                dot_size: rust.dot_size,
+                dot_color: String::from(&rust.dot_color),
+                dot_opacity: rust.dot_opacity,
+                dot_mode: String::from(&rust.dot_mode).parse().unwrap_or_default(),
+                dot_trail_enabled: rust.dot_trail_enabled,
+                shade_color: String::from(&rust.shade_color),
+                shade_opacity: rust.shade_opacity,
+                cursor: rust.cursor,
+                spot_shape: String::from(&rust.spot_shape),
+                spot_rotation: rust.spot_rotation,
+                square_radius: rust.square_radius,
+                star_points: rust.star_points,
+                star_inner_radius: rust.star_inner_radius,
+                ngon_sides: rust.ngon_sides,
+                show_border: rust.show_border,
+                border_color: String::from(&rust.border_color),
+                border_size: rust.border_size,
+                border_opacity: rust.border_opacity,
+                zoom_enabled: rust.zoom_enabled,
+                zoom_factor: rust.zoom_factor,
+                zoom_mode: String::from(&rust.zoom_mode).parse().unwrap_or_default(),
+                multi_screen_overlay: rust.multi_screen_overlay,
+                presentation_timer_enabled: rust.presentation_timer_enabled,
+                presentation_timer_duration_seconds: rust.presentation_timer_duration_seconds,
+            };
+            (path, settings)
+        };
+        if path.as_os_str().is_empty() {
+            self.as_mut()
+                .set_status(QString::from("Cannot save settings without a config path"));
+            return false;
+        }
+        let mut config = match ProjecteurConfig::read(&path) {
+            Ok(config) => config,
+            Err(ConfigError::Io { source, .. }) if source.kind() == ErrorKind::NotFound => {
+                ProjecteurConfig::default()
+            }
+            Err(error) => {
+                self.as_mut()
+                    .set_status(QString::from(format!("Could not read settings: {error}")));
+                return false;
+            }
+        };
+        config.set_spotlight_settings(&settings);
+        match config.write(&path) {
+            Ok(()) => {
+                self.as_mut().set_status(QString::from(format!(
+                    "Saved settings to {}",
+                    path.display()
+                )));
+                true
+            }
+            Err(error) => {
+                self.as_mut()
+                    .set_status(QString::from(format!("Could not save settings: {error}")));
+                false
+            }
+        }
     }
 
     fn poll_presenter(mut self: Pin<&mut Self>) {

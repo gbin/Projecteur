@@ -87,6 +87,10 @@ pub struct SpotlightSettings {
     pub cursor: i32,
     pub spot_shape: String,
     pub spot_rotation: f64,
+    pub square_radius: i32,
+    pub star_points: i32,
+    pub star_inner_radius: i32,
+    pub ngon_sides: i32,
     pub show_border: bool,
     pub border_color: String,
     pub border_size: i32,
@@ -150,6 +154,38 @@ impl SpotlightSettings {
             "spotRotation" => {
                 set_f64(&mut self.spot_rotation, value, Self::SPOT_ROTATION_RANGE);
             }
+            "Shape.Square/radius" => set_i32(
+                &mut self.square_radius,
+                value,
+                Range {
+                    minimum: 0,
+                    maximum: 100,
+                },
+            ),
+            "Shape.Star/points" => set_i32(
+                &mut self.star_points,
+                value,
+                Range {
+                    minimum: 3,
+                    maximum: 100,
+                },
+            ),
+            "Shape.Star/innerRadius" => set_i32(
+                &mut self.star_inner_radius,
+                value,
+                Range {
+                    minimum: 5,
+                    maximum: 100,
+                },
+            ),
+            "Shape.Ngon/sides" => set_i32(
+                &mut self.ngon_sides,
+                value,
+                Range {
+                    minimum: 3,
+                    maximum: 100,
+                },
+            ),
             "showBorder" => set_bool(&mut self.show_border, value),
             "borderColor" => set_color(&mut self.border_color, value),
             "borderSize" => set_i32(&mut self.border_size, value, Self::BORDER_SIZE_RANGE),
@@ -169,6 +205,55 @@ impl SpotlightSettings {
             _ => {}
         }
     }
+
+    /// Return every persisted `General` key owned by the Rust port.
+    #[must_use]
+    pub fn general_entries(&self) -> Vec<(&'static str, String)> {
+        let dot_mode = match self.dot_mode {
+            DotMode::Solid => "solid",
+            DotMode::Diffuse => "diffuse",
+        };
+        let zoom_mode = match self.zoom_mode {
+            ZoomMode::Smooth => "smooth",
+            ZoomMode::Text => "text",
+            ZoomMode::Pixel => "pixel",
+        };
+        vec![
+            ("showSpotShade", self.show_spot_shade.to_string()),
+            ("spotSize", self.spot_size.to_string()),
+            ("showCenterDot", self.show_center_dot.to_string()),
+            ("dotSize", self.dot_size.to_string()),
+            ("dotColor", self.dot_color.clone()),
+            ("dotOpacity", self.dot_opacity.to_string()),
+            ("dotMode", dot_mode.to_owned()),
+            ("dotTrailEnabled", self.dot_trail_enabled.to_string()),
+            ("shadeColor", self.shade_color.clone()),
+            ("shadeOpacity", self.shade_opacity.to_string()),
+            ("cursor", self.cursor.to_string()),
+            ("spotShape", self.spot_shape.clone()),
+            ("spotRotation", self.spot_rotation.to_string()),
+            ("Shape.Square/radius", self.square_radius.to_string()),
+            ("Shape.Star/points", self.star_points.to_string()),
+            ("Shape.Star/innerRadius", self.star_inner_radius.to_string()),
+            ("Shape.Ngon/sides", self.ngon_sides.to_string()),
+            ("showBorder", self.show_border.to_string()),
+            ("borderColor", self.border_color.clone()),
+            ("borderSize", self.border_size.to_string()),
+            ("borderOpacity", self.border_opacity.to_string()),
+            ("enableZoom", self.zoom_enabled.to_string()),
+            ("zoomFactor", self.zoom_factor.to_string()),
+            ("zoomMode", zoom_mode.to_owned()),
+            ("multiScreenOverlay", self.multi_screen_overlay.to_string()),
+            (
+                "presentationTimerEnabled",
+                self.presentation_timer_enabled.to_string(),
+            ),
+            (
+                "presentationTimerDurationSeconds",
+                self.presentation_timer_duration_seconds.to_string(),
+            ),
+        ]
+    }
 }
 
 impl Default for SpotlightSettings {
@@ -187,6 +272,10 @@ impl Default for SpotlightSettings {
             cursor: 10,
             spot_shape: "spotshapes/Circle.qml".to_owned(),
             spot_rotation: 0.0,
+            square_radius: 20,
+            star_points: 5,
+            star_inner_radius: 50,
+            ngon_sides: 3,
             show_border: true,
             border_color: "#73d216".to_owned(),
             border_size: 4,
@@ -280,6 +369,8 @@ mod tests {
         assert_eq!(settings.dot_color, "#ff0000");
         assert_eq!(settings.cursor, 10);
         assert_eq!(settings.spot_shape, "spotshapes/Circle.qml");
+        assert_eq!(settings.square_radius, 20);
+        assert_eq!(settings.star_points, 5);
         assert_eq!(settings.presentation_timer_duration_seconds, 900);
     }
 
@@ -294,6 +385,7 @@ mod tests {
             ("shadeColor", "34,34,34,128"),
             ("zoomMode", "pixel"),
             ("presentationTimerDurationSeconds", "0"),
+            ("Shape.Star/points", "999"),
         ] {
             settings.apply_general_entry(key, value);
         }
@@ -305,6 +397,7 @@ mod tests {
         assert_eq!(settings.shade_color, "#80222222");
         assert_eq!(settings.zoom_mode, ZoomMode::Pixel);
         assert_eq!(settings.presentation_timer_duration_seconds, 1);
+        assert_eq!(settings.star_points, 100);
     }
 
     #[test]

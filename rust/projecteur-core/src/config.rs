@@ -128,6 +128,65 @@ impl ProjecteurConfig {
         }
         settings
     }
+
+    /// Replace every Rust-owned general setting while retaining unknown keys
+    /// and all other groups.
+    pub fn set_spotlight_settings(&mut self, settings: &SpotlightSettings) {
+        let general = self.groups.entry("General".to_owned()).or_default();
+        for (key, value) in settings.general_entries() {
+            general.insert(key.to_owned(), value);
+        }
+    }
+
+    /// Serialize this configuration as deterministic KConfig-compatible INI.
+    #[must_use]
+    pub fn serialize(&self) -> String {
+        let mut output = String::new();
+        for (index, (group, entries)) in self.groups.iter().enumerate() {
+            if index != 0 {
+                output.push('\n');
+            }
+            output.push('[');
+            output.push_str(group);
+            output.push_str("]\n");
+            for (key, value) in entries {
+                output.push_str(key);
+                output.push('=');
+                output.push_str(value);
+                output.push('\n');
+            }
+        }
+        output
+    }
+
+    /// Atomically write the configuration beside its destination.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigError::Io`] if the parent directory cannot be created,
+    /// the temporary file cannot be written, or the final rename fails.
+    pub fn write(&self, path: impl AsRef<Path>) -> Result<(), ConfigError> {
+        let path = path.as_ref();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|source| ConfigError::Io {
+                path: parent.to_owned(),
+                source,
+            })?;
+        }
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("projecteurrc");
+        let temporary = path.with_file_name(format!(".{file_name}.projecteur-rs.tmp"));
+        fs::write(&temporary, self.serialize()).map_err(|source| ConfigError::Io {
+            path: temporary.clone(),
+            source,
+        })?;
+        fs::rename(&temporary, path).map_err(|source| ConfigError::Io {
+            path: path.to_owned(),
+            source,
+        })
+    }
 }
 
 /// Failure to read or parse a Projecteur configuration file.
@@ -214,5 +273,42 @@ inputMapConfigData=@ByteArray(AQID)
         let error = ProjecteurConfig::parse("[General]\nnot an entry\n").unwrap_err();
 
         assert_eq!(error.to_string(), "line 2: expected key=value entry");
+    }
+
+    #[test]
+    fn updates_owned_settings_and_preserves_unknown_configuration() {
+        let mut config = ProjecteurConfig::parse(DOCUMENT).unwrap();
+        let mut settings = config.spotlight_settings();
+        settings.spot_size = 61;
+        settings.star_points = 9;
+        config.set_spotlight_settings(&settings);
+
+        let reparsed = ProjecteurConfig::parse(&config.serialize()).unwrap();
+        assert_eq!(reparsed.value("General", "spotSize"), Some("61"));
+        assert_eq!(reparsed.value("General", "Shape.Star/points"), Some("9"));
+        assert_eq!(
+            reparsed.value("General", "unknownFutureSetting"),
+            Some(r"@Variant(\0\0\0)")
+        );
+        assert_eq!(
+            reparsed.value("Device_046d_c53e", "inputMapConfigData"),
+            Some("@ByteArray(AQID)")
+        );
+    }
+
+    #[test]
+    fn writes_and_reloads_atomically() {
+        let path = std::env::temp_dir().join(format!(
+            "projecteur-core-config-test-{}-{}.rc",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("writer")
+        ));
+        let mut config = ProjecteurConfig::default();
+        config.set_spotlight_settings(&SpotlightSettings::default());
+        config.write(&path).unwrap();
+        let loaded = ProjecteurConfig::read(&path).unwrap();
+        fs::remove_file(&path).unwrap();
+
+        assert_eq!(loaded.spotlight_settings(), SpotlightSettings::default());
     }
 }
