@@ -38,3 +38,9 @@ Read-only presenter discovery runs without starting Qt or grabbing devices:
 ```sh
 cargo run --bin projecteur-rs -- --device-scan
 ```
+
+Inspect one input node without exclusively grabbing it (stop with Ctrl-C):
+
+```sh
+cargo run --bin projecteur-rs -- --event-monitor /dev/input/event16
+```
