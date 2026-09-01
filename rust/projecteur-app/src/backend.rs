@@ -6,11 +6,11 @@ use std::{
     ffi::OsString,
     fmt::Write as _,
     fs::{File, OpenOptions},
-    io::{ErrorKind, Read},
+    io::ErrorKind,
     path::PathBuf,
     sync::mpsc::{self, Receiver, SyncSender, TryRecvError},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use cxx_qt::CxxQtType;
@@ -19,7 +19,7 @@ use projecteur_core::{
     config::{ConfigError, ProjecteurConfig},
     device_scan::{DeviceNodeKind, DiscoveredDevice, scan_devices},
     hid_report::{PresenterReport, decode_presenter_report},
-    hidpp::{BatteryInfo, query_battery},
+    hidpp::{BatteryInfo, query_battery, read_report_with_timeout},
     settings::{DotMode, SpotlightSettings, ZoomMode},
     uinput::{GrabbedEventDevice, VirtualKeyboard},
 };
@@ -388,27 +388,7 @@ fn start_presenter_manager(
                 {
                     return;
                 }
-                if let Some(device_index) = battery_device_index {
-                    match query_battery(&mut device, device_index, |report| {
-                        forward_presenter_report(report, &presenter_sender);
-                    }) {
-                        Ok(info) => {
-                            if presenter_sender
-                                .send(PresenterEvent::Battery(info))
-                                .is_err()
-                            {
-                                return;
-                            }
-                        }
-                        Err(error) => {
-                            eprintln!(
-                                "projecteur-rs: battery status unavailable on {}: {error}",
-                                path.display()
-                            );
-                        }
-                    }
-                }
-                read_presenter(&mut device, &presenter_sender);
+                read_presenter(&mut device, &presenter_sender, &path, battery_device_index);
                 if presenter_sender.send(PresenterEvent::Disconnected).is_err() {
                     return;
                 }
@@ -509,14 +489,47 @@ fn run_button_manager(selection: &PresenterSelection, sender: &SyncSender<Presen
     }
 }
 
-fn read_presenter(device: &mut File, sender: &SyncSender<PresenterEvent>) {
+const BATTERY_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
+
+fn read_presenter(
+    device: &mut File,
+    sender: &SyncSender<PresenterEvent>,
+    path: &std::path::Path,
+    battery_device_index: Option<u8>,
+) {
     let mut bytes = [0_u8; 256];
+    let mut next_battery_refresh = battery_device_index.map(|_| Instant::now());
     loop {
-        let length = match device.read(&mut bytes) {
-            Ok(0) | Err(_) => return,
-            Ok(length) => length,
+        let timeout = next_battery_refresh.map_or(Duration::from_secs(60), |deadline| {
+            deadline.saturating_duration_since(Instant::now())
+        });
+        match read_report_with_timeout(device, &mut bytes, timeout) {
+            Ok(Some(0)) | Err(_) => return,
+            Ok(Some(length)) => forward_presenter_report(&bytes[..length], sender),
+            Ok(None) => {}
+        }
+
+        let (Some(device_index), Some(deadline)) = (battery_device_index, next_battery_refresh)
+        else {
+            continue;
         };
-        forward_presenter_report(&bytes[..length], sender);
+        if Instant::now() < deadline {
+            continue;
+        }
+        match query_battery(device, device_index, |report| {
+            forward_presenter_report(report, sender);
+        }) {
+            Ok(info) => {
+                if sender.send(PresenterEvent::Battery(info)).is_err() {
+                    return;
+                }
+            }
+            Err(error) => eprintln!(
+                "projecteur-rs: battery status unavailable on {}: {error}",
+                path.display()
+            ),
+        }
+        next_battery_refresh = Some(Instant::now() + BATTERY_REFRESH_INTERVAL);
     }
 }
 

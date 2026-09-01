@@ -374,7 +374,9 @@ fn exchange<T: Read + Write + AsRawFd>(
         if now >= deadline {
             return Err(BatteryQueryError::Timeout);
         }
-        wait_readable(device, deadline.saturating_duration_since(now))?;
+        if !poll_readable(device, deadline.saturating_duration_since(now))? {
+            return Err(BatteryQueryError::Timeout);
+        }
         let length = device.read(&mut bytes)?;
         if length == 0 {
             return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "hidraw closed").into());
@@ -391,7 +393,24 @@ fn exchange<T: Read + Write + AsRawFd>(
     }
 }
 
-fn wait_readable(device: &impl AsRawFd, timeout: Duration) -> Result<(), BatteryQueryError> {
+/// Read one report after waiting up to `timeout` for the hidraw descriptor.
+///
+/// # Errors
+///
+/// Returns an I/O error when polling or reading the descriptor fails.
+pub fn read_report_with_timeout<T: Read + AsRawFd>(
+    device: &mut T,
+    buffer: &mut [u8],
+    timeout: Duration,
+) -> io::Result<Option<usize>> {
+    if poll_readable(device, timeout)? {
+        device.read(buffer).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+
+fn poll_readable(device: &impl AsRawFd, timeout: Duration) -> io::Result<bool> {
     let timeout_ms = i32::try_from(timeout.as_millis()).unwrap_or(i32::MAX);
     let mut descriptor = libc::pollfd {
         fd: device.as_raw_fd(),
@@ -403,14 +422,14 @@ fn wait_readable(device: &impl AsRawFd, timeout: Duration) -> Result<(), Battery
         // and `poll` neither retains the pointer nor outlives `device`.
         let result = unsafe { libc::poll(&raw mut descriptor, 1, timeout_ms) };
         if result > 0 {
-            return Ok(());
+            return Ok(true);
         }
         if result == 0 {
-            return Err(BatteryQueryError::Timeout);
+            return Ok(false);
         }
         let error = io::Error::last_os_error();
         if error.kind() != io::ErrorKind::Interrupted {
-            return Err(error.into());
+            return Err(error);
         }
     }
 }
