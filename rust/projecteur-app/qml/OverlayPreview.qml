@@ -25,8 +25,27 @@ Window {
     LayerShell.Window.activateOnShow: false
 
     readonly property real spotDiameter: Math.max(50, Math.min(height, height * backend.spotSize / 100))
-    readonly property real spotX: (pointer.containsMouse ? pointer.mouseX : width / 2) - spotDiameter / 2
-    readonly property real spotY: (pointer.containsMouse ? pointer.mouseY : height / 2) - spotDiameter / 2
+    property real presenterX: width / 2
+    property real presenterY: height / 2
+    readonly property real activeX: backend.presenterConnected
+                                    ? presenterX
+                                    : (pointer.containsMouse ? pointer.mouseX : width / 2)
+    readonly property real activeY: backend.presenterConnected
+                                    ? presenterY
+                                    : (pointer.containsMouse ? pointer.mouseY : height / 2)
+    readonly property real spotX: activeX - spotDiameter / 2
+    readonly property real spotY: activeY - spotDiameter / 2
+
+    Connections {
+        target: backend
+
+        function onMotionSerialChanged() {
+            root.presenterX = Math.max(0, Math.min(root.width,
+                                                   root.presenterX + backend.pointerDeltaX))
+            root.presenterY = Math.max(0, Math.min(root.height,
+                                                   root.presenterY + backend.pointerDeltaY))
+        }
+    }
 
     MouseArea {
         id: pointer
@@ -115,6 +134,7 @@ Window {
     }
 
     Rectangle {
+        visible: backend.previewTimeoutEnabled
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: 24
@@ -133,7 +153,7 @@ Window {
 
     Timer {
         interval: 12000
-        running: root.visible
+        running: root.visible && backend.previewTimeoutEnabled
         onTriggered: backend.overlayActive = false
     }
 }

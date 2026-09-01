@@ -50,3 +50,9 @@ Inspect raw HID notifications without writing initialization commands:
 ```sh
 cargo run --bin projecteur-rs -- --hidraw-monitor /dev/hidraw5
 ```
+
+Drive the overlay from a presenter hidraw node without an exclusive grab:
+
+```sh
+cargo run --bin projecteur-rs -- --show-window --presenter /dev/hidraw5
+```

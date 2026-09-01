@@ -34,6 +34,13 @@ ApplicationWindow {
         backend: backend
     }
 
+    Timer {
+        interval: 8
+        repeat: true
+        running: backend.presenterConnected
+        onTriggered: backend.pollPresenter()
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 24
@@ -64,6 +71,13 @@ ApplicationWindow {
             text: "Overlay: size " + backend.spotSize
                   + ", dot " + backend.dotColor
                   + ", zoom " + backend.zoomMode + " ×" + backend.zoomFactor
+        }
+
+        Label {
+            Layout.fillWidth: true
+            text: backend.presenterConnected
+                  ? qsTr("Presenter input: connected")
+                  : qsTr("Presenter input: not connected")
         }
 
         Label {
