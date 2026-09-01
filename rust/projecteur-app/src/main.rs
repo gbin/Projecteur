@@ -1,6 +1,12 @@
 mod backend;
 
-use std::{ffi::OsString, fmt::Write as _, fs::File, path::Path};
+use std::{
+    ffi::OsString,
+    fmt::Write as _,
+    fs::File,
+    io::{self, Read},
+    path::Path,
+};
 
 use cxx_qt_lib::{QAnyStringView, QGuiApplication, QQmlApplicationEngine, QString};
 use projecteur_core::{
@@ -13,9 +19,26 @@ fn main() {
     if std::env::args_os().any(|argument| argument == "--device-scan" || argument == "-d") {
         std::process::exit(run_device_scan());
     }
-    if let Some(result) = event_monitor_argument(std::env::args_os().skip(1)) {
+    if let Some(result) = path_argument(
+        std::env::args_os().skip(1),
+        "--event-monitor",
+        "a /dev/input/event path",
+    ) {
         std::process::exit(match result {
             Ok(path) => run_event_monitor(Path::new(&path)),
+            Err(message) => {
+                eprintln!("projecteur-rs: {message}");
+                2
+            }
+        });
+    }
+    if let Some(result) = path_argument(
+        std::env::args_os().skip(1),
+        "--hidraw-monitor",
+        "a /dev/hidraw path",
+    ) {
+        std::process::exit(match result {
+            Ok(path) => run_hidraw_monitor(Path::new(&path)),
             Err(message) => {
                 eprintln!("projecteur-rs: {message}");
                 2
@@ -58,22 +81,27 @@ fn main() {
     std::process::exit(application.pin_mut().exec());
 }
 
-fn event_monitor_argument(
+fn path_argument(
     arguments: impl IntoIterator<Item = OsString>,
+    option: &str,
+    expected: &str,
 ) -> Option<Result<OsString, String>> {
     let mut arguments = arguments.into_iter();
     while let Some(argument) = arguments.next() {
-        if argument == "--event-monitor" {
+        if argument == option {
             return Some(
                 arguments
                     .next()
-                    .ok_or_else(|| "--event-monitor requires a /dev/input/event path".to_owned()),
+                    .ok_or_else(|| format!("{option} requires {expected}")),
             );
         }
         if let Some(argument) = argument.to_str() {
-            if let Some(path) = argument.strip_prefix("--event-monitor=") {
+            if let Some(path) = argument
+                .strip_prefix(option)
+                .and_then(|value| value.strip_prefix('='))
+            {
                 return Some(if path.is_empty() {
-                    Err("--event-monitor requires a /dev/input/event path".to_owned())
+                    Err(format!("{option} requires {expected}"))
                 } else {
                     Ok(OsString::from(path))
                 });
@@ -81,6 +109,49 @@ fn event_monitor_argument(
         }
     }
     None
+}
+
+fn run_hidraw_monitor(path: &Path) -> i32 {
+    let mut device = match File::open(path) {
+        Ok(device) => device,
+        Err(error) => {
+            eprintln!("projecteur-rs: cannot open {}: {error}", path.display());
+            return 1;
+        }
+    };
+    println!(
+        "Monitoring {} without writing HID commands; press Ctrl-C to stop.",
+        path.display()
+    );
+    let mut report = [0_u8; 256];
+    loop {
+        match device.read(&mut report) {
+            Ok(0) => {
+                eprintln!("projecteur-rs: {} reached end of file", path.display());
+                return 1;
+            }
+            Ok(length) => println!(
+                "HIDRAW {length:3}: {}",
+                format_hex_report(&report[..length])
+            ),
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => {
+                eprintln!("projecteur-rs: cannot read {}: {error}", path.display());
+                return 1;
+            }
+        }
+    }
+}
+
+fn format_hex_report(report: &[u8]) -> String {
+    let mut output = String::with_capacity(report.len().saturating_mul(3));
+    for (index, byte) in report.iter().enumerate() {
+        if index > 0 {
+            output.push(' ');
+        }
+        let _ = write!(output, "{byte:02x}");
+    }
+    output
 }
 
 fn run_event_monitor(path: &Path) -> i32 {
@@ -239,20 +310,40 @@ mod tests {
     }
 
     #[test]
-    fn parses_event_monitor_argument_forms() {
+    fn parses_monitor_argument_forms() {
         assert_eq!(
-            event_monitor_argument([
-                OsString::from("--event-monitor"),
-                OsString::from("/dev/input/event16")
-            ]),
+            path_argument(
+                [
+                    OsString::from("--event-monitor"),
+                    OsString::from("/dev/input/event16")
+                ],
+                "--event-monitor",
+                "an event path"
+            ),
             Some(Ok(OsString::from("/dev/input/event16")))
         );
         assert_eq!(
-            event_monitor_argument([OsString::from("--event-monitor=/dev/input/event15")]),
+            path_argument(
+                [OsString::from("--hidraw-monitor=/dev/hidraw5")],
+                "--hidraw-monitor",
+                "a hidraw path"
+            ),
+            Some(Ok(OsString::from("/dev/hidraw5")))
+        );
+        assert_eq!(
+            path_argument(
+                [OsString::from("--event-monitor=/dev/input/event15")],
+                "--event-monitor",
+                "an event path"
+            ),
             Some(Ok(OsString::from("/dev/input/event15")))
         );
         assert!(matches!(
-            event_monitor_argument([OsString::from("--event-monitor")]),
+            path_argument(
+                [OsString::from("--event-monitor")],
+                "--event-monitor",
+                "an event path"
+            ),
             Some(Err(_))
         ));
     }
@@ -275,5 +366,11 @@ mod tests {
             }),
             "KEY code=999 value=1"
         );
+    }
+
+    #[test]
+    fn formats_raw_hid_reports_as_hex() {
+        assert_eq!(format_hex_report(&[0x20, 0xff, 0x01]), "20 ff 01");
+        assert!(format_hex_report(&[]).is_empty());
     }
 }

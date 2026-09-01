@@ -44,3 +44,9 @@ Inspect one input node without exclusively grabbing it (stop with Ctrl-C):
 ```sh
 cargo run --bin projecteur-rs -- --event-monitor /dev/input/event16
 ```
+
+Inspect raw HID notifications without writing initialization commands:
+
+```sh
+cargo run --bin projecteur-rs -- --hidraw-monitor /dev/hidraw5
+```
