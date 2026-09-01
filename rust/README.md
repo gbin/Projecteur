@@ -24,8 +24,10 @@ changing the normal desktop selection:
 cargo run --bin projecteur-rs -- --show-window --cfg /path/to/projecteurrc
 ```
 
-The first settings-backed LayerShell overlay is opt-in and automatically closes
-after 12 seconds. Clicking anywhere also closes it:
+The first settings-backed LayerShell overlay is opt-in and initially activated
+by `--overlay-preview`. It can then be controlled from the diagnostic window.
+The initial preview automatically closes after 12 seconds, and clicking anywhere
+also closes it:
 
 ```sh
 cargo run --bin projecteur-rs -- --show-window --overlay-preview

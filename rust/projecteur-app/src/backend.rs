@@ -40,7 +40,7 @@ pub mod ffi {
         #[qobject]
         #[qml_element]
         #[qproperty(bool, show_window)]
-        #[qproperty(bool, overlay_preview)]
+        #[qproperty(bool, overlay_active)]
         #[qproperty(QString, status)]
         #[qproperty(QString, config_path)]
         #[qproperty(bool, show_spot_shade)]
@@ -79,7 +79,7 @@ pub mod ffi {
 #[allow(clippy::struct_excessive_bools)]
 pub struct ProjecteurBackendRust {
     show_window: bool,
-    overlay_preview: bool,
+    overlay_active: bool,
     status: QString,
     config_path: QString,
     show_spot_shade: bool,
@@ -134,7 +134,7 @@ impl Default for ProjecteurBackendRust {
 impl ProjecteurBackendRust {
     fn from_settings(
         show_window: bool,
-        overlay_preview: bool,
+        overlay_active: bool,
         settings: &SpotlightSettings,
         config_path: Option<&std::path::Path>,
         status: &str,
@@ -151,7 +151,7 @@ impl ProjecteurBackendRust {
 
         Self {
             show_window,
-            overlay_preview,
+            overlay_active,
             status: QString::from(status),
             config_path: QString::from(config_path.and_then(std::path::Path::to_str).unwrap_or("")),
             show_spot_shade: settings.show_spot_shade,

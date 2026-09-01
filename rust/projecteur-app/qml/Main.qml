@@ -73,10 +73,22 @@ ApplicationWindow {
             wrapMode: Text.Wrap
         }
 
-        Button {
-            Layout.alignment: Qt.AlignRight
-            text: qsTr("Close")
-            onClicked: root.close()
+        RowLayout {
+            Layout.fillWidth: true
+
+            Button {
+                text: backend.overlayActive ? qsTr("Hide overlay") : qsTr("Show overlay")
+                onClicked: backend.overlayActive = !backend.overlayActive
+            }
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            Button {
+                text: qsTr("Close")
+                onClicked: root.close()
+            }
         }
     }
 

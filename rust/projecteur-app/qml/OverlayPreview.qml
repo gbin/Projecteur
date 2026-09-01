@@ -8,7 +8,7 @@ Window {
 
     required property QtObject backend
 
-    visible: backend.overlayPreview
+    visible: backend.overlayActive
     width: Screen.width
     height: Screen.height
     color: "transparent"
@@ -33,7 +33,7 @@ Window {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: backend.cursor
-        onClicked: root.visible = false
+        onClicked: backend.overlayActive = false
     }
 
     Rectangle {
@@ -134,6 +134,6 @@ Window {
     Timer {
         interval: 12000
         running: root.visible
-        onTriggered: root.visible = false
+        onTriggered: backend.overlayActive = false
     }
 }
