@@ -6,6 +6,7 @@
 
 use std::{error::Error, fmt, str::FromStr};
 
+pub mod config;
 pub mod settings;
 
 /// The transport used by a supported presenter.
