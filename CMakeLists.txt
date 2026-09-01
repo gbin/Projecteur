@@ -74,6 +74,8 @@ qt6_add_shaders(projecteur projecteur_shaders
   PREFIX "/shaders"
   BASE "${CMAKE_CURRENT_SOURCE_DIR}/qml/shaders"
   FILES qml/shaders/textzoom.frag
+        qml/shaders/diffusedot.frag
+        qml/shaders/dottrail.frag
 )
 
 ecm_add_qtwayland_client_protocol(projecteur
@@ -225,6 +227,8 @@ add_custom_target(non-sources SOURCES README.md CONTRIBUTING.md LICENSE.md
                                       src/extra-devices.cc.in src/projecteurconfig.kcfg
                                       src/org.projecteur.Projecteur.xml
                                       qml/shaders/textzoom.frag
+                                      qml/shaders/diffusedot.frag
+                                      qml/shaders/dottrail.frag
                                       55-projecteur.rules.in projecteur.notifyrc
                                       cmake/templates/projecteur.desktop.in)
 

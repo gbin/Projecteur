@@ -24,7 +24,7 @@ _projecteur()
       commands="${commands} spot.size= spot.rotation= spot.shape= spot.shape.square.radius="
       commands="${commands} spot.multi-screen= spot.overlay="
       commands="${commands} spot.shape.star.points= spot.shape.star.innerradius= spot.shape.ngon.sides="
-      commands="${commands} shade= shade.opacity= shade.color= dot= dot.size= dot.color= dot.opacity="
+      commands="${commands} shade= shade.opacity= shade.color= dot= dot.size= dot.color= dot.opacity= dot.mode= dot.trail="
       commands="${commands} border= border.size= border.color= border.opacity= zoom= zoom.factor="
       commands="${commands} zoom.mode="
 
@@ -69,6 +69,18 @@ _projecteur()
       fi
       ;;
     "dot")
+      if [ "${prev_prev}" = "=" ] || [ "${cur}" = "=" ]; then
+        [ "${cur}" = "=" ] && cur=""
+        COMPREPLY=( $(compgen -W "false true" -- $cur) )
+      fi
+      ;;
+    "dot.mode")
+      if [ "${prev_prev}" = "=" ] || [ "${cur}" = "=" ]; then
+        [ "${cur}" = "=" ] && cur=""
+        COMPREPLY=( $(compgen -W "solid diffuse" -- $cur) )
+      fi
+      ;;
+    "dot.trail")
       if [ "${prev_prev}" = "=" ] || [ "${cur}" = "=" ]; then
         [ "${cur}" = "=" ] && cur=""
         COMPREPLY=( $(compgen -W "false true" -- $cur) )

@@ -28,6 +28,8 @@ class Settings : public QObject
   Q_PROPERTY(int dotSize READ dotSize WRITE setDotSize NOTIFY dotSizeChanged)
   Q_PROPERTY(QColor dotColor READ dotColor WRITE setDotColor NOTIFY dotColorChanged)
   Q_PROPERTY(double dotOpacity READ dotOpacity WRITE setDotOpacity NOTIFY dotOpacityChanged)
+  Q_PROPERTY(QString dotMode READ dotMode WRITE setDotMode NOTIFY dotModeChanged)
+  Q_PROPERTY(bool dotTrailEnabled READ dotTrailEnabled WRITE setDotTrailEnabled NOTIFY dotTrailEnabledChanged)
   Q_PROPERTY(QColor shadeColor READ shadeColor WRITE setShadeColor NOTIFY shadeColorChanged)
   Q_PROPERTY(double shadeOpacity READ shadeOpacity WRITE setShadeOpacity NOTIFY shadeOpacityChanged)
   Q_PROPERTY(Qt::CursorShape cursor READ cursor WRITE setCursor NOTIFY cursorChanged)
@@ -63,6 +65,10 @@ public:
   void setDotColor(const QColor& color);
   double dotOpacity() const { return m_dotOpacity; }
   void setDotOpacity(double opacity);
+  QString dotMode() const { return m_dotMode; }
+  void setDotMode(const QString& mode);
+  bool dotTrailEnabled() const { return m_dotTrailEnabled; }
+  void setDotTrailEnabled(bool enabled);
   QColor shadeColor() const { return m_shadeColor; }
   void setShadeColor(const QColor& color);
   double shadeOpacity() const { return m_shadeOpacity; }
@@ -196,6 +202,8 @@ signals:
   void showCenterDotChanged(bool show);
   void dotColorChanged(const QColor& color);
   void dotOpacityChanged(double opacity);
+  void dotModeChanged(const QString& mode);
+  void dotTrailEnabledChanged(bool enabled);
   void shadeColorChanged(const QColor& color);
   void shadeOpacityChanged(double opcacity);
   void cursorChanged(Qt::CursorShape cursor);
@@ -225,6 +233,8 @@ private:
   int m_dotSize = 5; ///< Center Dot Size (3-100 pixels)
   QColor m_dotColor;
   double m_dotOpacity = 0.8;
+  QString m_dotMode = QStringLiteral("solid");
+  bool m_dotTrailEnabled = false;
   QColor m_shadeColor;
   double m_shadeOpacity = 0.3;
   Qt::CursorShape m_cursor = Qt::BlankCursor;

@@ -235,16 +235,129 @@ Window {
             enabled: false
         }
 
+        Item {
+            id: dotTrailHistory
+            readonly property real currentX: centerRect.x + centerRect.width / 2
+            readonly property real currentY: centerRect.y + centerRect.height / 2
+            property real point1X: currentX
+            property real point1Y: currentY
+            property real point2X: currentX
+            property real point2Y: currentY
+            property real point3X: currentX
+            property real point3Y: currentY
+            property real point4X: currentX
+            property real point4Y: currentY
+            property real point5X: currentX
+            property real point5Y: currentY
+            property real point6X: currentX
+            property real point6Y: currentY
+
+            function reset() {
+                point1X = currentX; point1Y = currentY
+                point2X = currentX; point2Y = currentY
+                point3X = currentX; point3Y = currentY
+                point4X = currentX; point4Y = currentY
+                point5X = currentX; point5Y = currentY
+                point6X = currentX; point6Y = currentY
+            }
+
+            Timer {
+                interval: 24
+                repeat: true
+                running: mainWindow.visible && ProjecteurApp.overlayVisible
+                         && Settings.showCenterDot && Settings.dotTrailEnabled
+                onRunningChanged: if (running) dotTrailHistory.reset()
+                onTriggered: {
+                    const dx = dotTrailHistory.currentX - dotTrailHistory.point1X
+                    const dy = dotTrailHistory.currentY - dotTrailHistory.point1Y
+                    if (dx * dx + dy * dy > 90000) {
+                        dotTrailHistory.reset()
+                        return
+                    }
+                    dotTrailHistory.point6X = dotTrailHistory.point5X
+                    dotTrailHistory.point6Y = dotTrailHistory.point5Y
+                    dotTrailHistory.point5X = dotTrailHistory.point4X
+                    dotTrailHistory.point5Y = dotTrailHistory.point4Y
+                    dotTrailHistory.point4X = dotTrailHistory.point3X
+                    dotTrailHistory.point4Y = dotTrailHistory.point3Y
+                    dotTrailHistory.point3X = dotTrailHistory.point2X
+                    dotTrailHistory.point3Y = dotTrailHistory.point2Y
+                    dotTrailHistory.point2X = dotTrailHistory.point1X
+                    dotTrailHistory.point2Y = dotTrailHistory.point1Y
+                    dotTrailHistory.point1X = dotTrailHistory.currentX
+                    dotTrailHistory.point1Y = dotTrailHistory.currentY
+                }
+            }
+        }
+
+        ShaderEffect {
+            id: dotTrail
+            readonly property real margin: Math.max(4, Settings.dotSize)
+            readonly property real minimumX: Math.min(dotTrailHistory.currentX, dotTrailHistory.point1X,
+                dotTrailHistory.point2X, dotTrailHistory.point3X, dotTrailHistory.point4X,
+                dotTrailHistory.point5X, dotTrailHistory.point6X)
+            readonly property real maximumX: Math.max(dotTrailHistory.currentX, dotTrailHistory.point1X,
+                dotTrailHistory.point2X, dotTrailHistory.point3X, dotTrailHistory.point4X,
+                dotTrailHistory.point5X, dotTrailHistory.point6X)
+            readonly property real minimumY: Math.min(dotTrailHistory.currentY, dotTrailHistory.point1Y,
+                dotTrailHistory.point2Y, dotTrailHistory.point3Y, dotTrailHistory.point4Y,
+                dotTrailHistory.point5Y, dotTrailHistory.point6Y)
+            readonly property real maximumY: Math.max(dotTrailHistory.currentY, dotTrailHistory.point1Y,
+                dotTrailHistory.point2Y, dotTrailHistory.point3Y, dotTrailHistory.point4Y,
+                dotTrailHistory.point5Y, dotTrailHistory.point6Y)
+
+            x: minimumX - margin; y: minimumY - margin
+            width: Math.max(1, maximumX - minimumX + margin * 2)
+            height: Math.max(1, maximumY - minimumY + margin * 2)
+            z: 1
+            visible: Settings.showCenterDot && Settings.dotTrailEnabled
+            opacity: Settings.dotOpacity
+            property size outputSize: Qt.size(width, height)
+            property real dotSize: Settings.dotSize
+            property color dotColor: Settings.dotColor
+            property point point0: Qt.point(dotTrailHistory.currentX - x, dotTrailHistory.currentY - y)
+            property point point1: Qt.point(dotTrailHistory.point1X - x, dotTrailHistory.point1Y - y)
+            property point point2: Qt.point(dotTrailHistory.point2X - x, dotTrailHistory.point2Y - y)
+            property point point3: Qt.point(dotTrailHistory.point3X - x, dotTrailHistory.point3Y - y)
+            property point point4: Qt.point(dotTrailHistory.point4X - x, dotTrailHistory.point4Y - y)
+            property point point5: Qt.point(dotTrailHistory.point5X - x, dotTrailHistory.point5Y - y)
+            property point point6: Qt.point(dotTrailHistory.point6X - x, dotTrailHistory.point6Y - y)
+            fragmentShader: "qrc:/shaders/dottrail.frag.qsb"
+        }
+
         Rectangle {
-            id: dotCursor
+            id: solidDotCursor
             antialiasing: true
             anchors.centerIn: centerRect
             width: Settings.dotSize; height: width
-            radius: width*0.5
+            radius: width * 0.5
             color: Settings.dotColor
-            visible: Settings.showCenterDot
+            z: 2
+            visible: Settings.showCenterDot && Settings.dotMode === "solid"
             opacity: Settings.dotOpacity
             enabled: false
+        }
+
+        ShaderEffect {
+            id: diffuseDotCursor
+            anchors.centerIn: centerRect
+            width: Math.max(24, Settings.dotSize * 5)
+            height: width
+            z: 2
+            visible: Settings.showCenterDot && Settings.dotMode === "diffuse"
+            opacity: Settings.dotOpacity
+            property size outputSize: Qt.size(width, height)
+            property real dotSize: Settings.dotSize
+            property color dotColor: Settings.dotColor
+            property real time: 0
+            fragmentShader: "qrc:/shaders/diffusedot.frag.qsb"
+
+            NumberAnimation on time {
+                from: 0; to: 100
+                duration: 100000
+                loops: Animation.Infinite
+                running: diffuseDotCursor.visible && ProjecteurApp.overlayVisible
+            }
         }
 
         Rectangle {

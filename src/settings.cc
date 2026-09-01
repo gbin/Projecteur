@@ -39,6 +39,8 @@ namespace {
     constexpr char dotSize[] = "dotSize";
     constexpr char dotColor[] = "dotColor";
     constexpr char dotOpacity[] = "dotOpacity";
+    constexpr char dotMode[] = "dotMode";
+    constexpr char dotTrailEnabled[] = "dotTrailEnabled";
     constexpr char shadeColor[] = "shadeColor";
     constexpr char shadeOpacity[] = "shadeOpacity";
     constexpr char cursor[] = "cursor";
@@ -66,6 +68,8 @@ namespace {
       constexpr int dotSize = 5;
       constexpr auto dotColor = Qt::red;
       constexpr double dotOpacity = 0.8;
+      constexpr char dotMode[] = "solid";
+      constexpr bool dotTrailEnabled = false;
       constexpr char shadeColor[] = "#222222";
       constexpr double shadeOpacity = 0.3;
       constexpr Qt::CursorShape cursor = Qt::BlankCursor;
@@ -111,6 +115,11 @@ namespace {
     return mode == QStringLiteral("smooth")
         || mode == QStringLiteral("text")
         || mode == QStringLiteral("pixel");
+  }
+
+  bool isDotMode(const QString& mode) {
+    return mode == QStringLiteral("solid")
+        || mode == QStringLiteral("diffuse");
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -348,6 +357,11 @@ void Settings::initializeStringProperties()
   map.emplace_back( "dot.opacity", StringProperty{ StringProperty::Double,
                     {::settings::ranges::dotOpacity.min, ::settings::ranges::dotOpacity.max},
                     [this](const QString& value){ setDotOpacity(value.toDouble()); } } );
+  map.emplace_back( "dot.mode", StringProperty{ StringProperty::StringEnum,
+                    {QStringLiteral("solid"), QStringLiteral("diffuse")},
+                    [this](const QString& value){ setDotMode(value); } } );
+  map.emplace_back( "dot.trail", StringProperty{ StringProperty::Bool, {false, true},
+                    [this](const QString& value){ setDotTrailEnabled(toBool(value)); } } );
   // --- border
   map.emplace_back( "border", StringProperty{ StringProperty::Bool, {false, true},
                     [this](const QString& value){ setShowBorder(toBool(value)); } } );
@@ -412,6 +426,8 @@ Settings::SpotlightSettings Settings::spotlightSettings() const
     {::settings::dotSize, m_dotSize},
     {::settings::dotColor, m_dotColor},
     {::settings::dotOpacity, m_dotOpacity},
+    {::settings::dotMode, m_dotMode},
+    {::settings::dotTrailEnabled, m_dotTrailEnabled},
     {::settings::shadeColor, m_shadeColor},
     {::settings::shadeOpacity, m_shadeOpacity},
     {::settings::cursor, static_cast<int>(m_cursor)},
@@ -450,6 +466,8 @@ Settings::SpotlightSettings Settings::defaultSpotlightSettings()
     {::settings::dotSize, ::settings::defaultValue::dotSize},
     {::settings::dotColor, QColor(::settings::defaultValue::dotColor)},
     {::settings::dotOpacity, ::settings::defaultValue::dotOpacity},
+    {::settings::dotMode, QString(::settings::defaultValue::dotMode)},
+    {::settings::dotTrailEnabled, ::settings::defaultValue::dotTrailEnabled},
     {::settings::shadeColor, QColor(::settings::defaultValue::shadeColor)},
     {::settings::shadeOpacity, ::settings::defaultValue::shadeOpacity},
     {::settings::cursor, static_cast<int>(::settings::defaultValue::cursor)},
@@ -483,6 +501,8 @@ void Settings::setSpotlightSettings(const SpotlightSettings& values)
   setDotSize(values.value(::settings::dotSize, m_dotSize).toInt());
   setDotColor(values.value(::settings::dotColor, m_dotColor).value<QColor>());
   setDotOpacity(values.value(::settings::dotOpacity, m_dotOpacity).toDouble());
+  setDotMode(values.value(::settings::dotMode, m_dotMode).toString());
+  setDotTrailEnabled(values.value(::settings::dotTrailEnabled, m_dotTrailEnabled).toBool());
   setShadeColor(values.value(::settings::shadeColor, m_shadeColor).value<QColor>());
   setShadeOpacity(values.value(::settings::shadeOpacity, m_shadeOpacity).toDouble());
   setCursor(static_cast<Qt::CursorShape>(
@@ -528,6 +548,8 @@ void Settings::setDefaults()
   setDotSize(settings::defaultValue::dotSize);
   setDotColor(QColor(settings::defaultValue::dotColor));
   setDotOpacity(settings::defaultValue::dotOpacity);
+  setDotMode(settings::defaultValue::dotMode);
+  setDotTrailEnabled(settings::defaultValue::dotTrailEnabled);
   setShadeColor(QColor(settings::defaultValue::shadeColor));
   setShadeOpacity(settings::defaultValue::shadeOpacity);
   setCursor(settings::defaultValue::cursor);
@@ -697,6 +719,8 @@ void Settings::load(const QString& preset)
     setDotSize(m_config->dotSize());
     setDotColor(m_config->dotColor());
     setDotOpacity(m_config->dotOpacity());
+    setDotMode(m_config->dotMode());
+    setDotTrailEnabled(m_config->dotTrailEnabled());
     setShadeColor(m_config->shadeColor());
     setShadeOpacity(m_config->shadeOpacity());
     setCursor(static_cast<Qt::CursorShape>(m_config->cursor()));
@@ -721,6 +745,8 @@ void Settings::load(const QString& preset)
   setDotSize(readValue(s+::settings::dotSize, settings::defaultValue::dotSize).toInt());
   setDotColor(readValue(s+::settings::dotColor, QColor(settings::defaultValue::dotColor)).value<QColor>());
   setDotOpacity(readValue(s+::settings::dotOpacity, settings::defaultValue::dotOpacity).toDouble());
+  setDotMode(readValue(s+::settings::dotMode, settings::defaultValue::dotMode).toString());
+  setDotTrailEnabled(readValue(s+::settings::dotTrailEnabled, settings::defaultValue::dotTrailEnabled).toBool());
   setShadeColor(readValue(s+::settings::shadeColor, QColor(settings::defaultValue::shadeColor)).value<QColor>());
   setShadeOpacity(readValue(s+::settings::shadeOpacity, settings::defaultValue::shadeOpacity).toDouble());
   setCursor(static_cast<Qt::CursorShape>(readValue(s+::settings::cursor, static_cast<int>(settings::defaultValue::cursor)).toInt()));
@@ -748,6 +774,8 @@ void Settings::savePreset(const QString& preset)
   writeValue(section+::settings::dotSize, m_dotSize);
   writeValue(section+::settings::dotColor, m_dotColor);
   writeValue(section+::settings::dotOpacity, m_dotOpacity);
+  writeValue(section+::settings::dotMode, m_dotMode);
+  writeValue(section+::settings::dotTrailEnabled, m_dotTrailEnabled);
   writeValue(section+::settings::shadeColor, m_shadeColor);
   writeValue(section+::settings::shadeOpacity, m_shadeOpacity);
   writeValue(section+::settings::cursor, static_cast<int>(m_cursor));
@@ -838,6 +866,31 @@ void Settings::setDotOpacity(double opacity)
     qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "dot.opacity = " << m_dotOpacity;
     emit dotOpacityChanged(m_dotOpacity);
   }
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setDotMode(const QString& mode)
+{
+  const auto normalizedMode = mode.toLower();
+  if (!isDotMode(normalizedMode) || normalizedMode == m_dotMode) { return; }
+
+  m_dotMode = normalizedMode;
+  m_config->setDotMode(m_dotMode);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "dot.mode = " << m_dotMode;
+  emit dotModeChanged(m_dotMode);
+}
+
+// -------------------------------------------------------------------------------------------------
+void Settings::setDotTrailEnabled(bool enabled)
+{
+  if (enabled == m_dotTrailEnabled) { return; }
+
+  m_dotTrailEnabled = enabled;
+  m_config->setDotTrailEnabled(m_dotTrailEnabled);
+  save();
+  qCDebug(PROJECTEUR_SETTINGS_LOG).noquote() << "dot.trail = " << m_dotTrailEnabled;
+  emit dotTrailEnabledChanged(m_dotTrailEnabled);
 }
 
 // -------------------------------------------------------------------------------------------------
