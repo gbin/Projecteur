@@ -6,8 +6,9 @@ every presentation. For installation and the product overview, start with the
 
 ## Everyday workflow
 
-Launch Projecteur from the application menu. Its Plasma system tray applet shows
-connected presenters and provides quick access to:
+Launch Projecteur from the application menu to open its preferences. During
+normal use, its Plasma system tray applet shows connected presenters and
+provides quick access to:
 
 - the current spotlight preset;
 - **Test Spotlight**;

@@ -394,7 +394,6 @@ int main(int argc, char *argv[])
 {
   KLocalizedString::setApplicationDomain("projecteur");
   const auto aboutData = projecteurAboutData();
-  KAboutData::setApplicationData(aboutData);
   QCoreApplication::setApplicationName(aboutData.componentName());
   QCoreApplication::setOrganizationDomain(aboutData.organizationDomain());
   QCoreApplication::setApplicationVersion(aboutData.version());
@@ -457,6 +456,7 @@ int main(int argc, char *argv[])
   }
 
   ProjecteurApplication app(argc, argv, options);
+  KAboutData::setApplicationData(aboutData);
   if (!app.isPrimaryInstance()) {
     if (app.startupExitCode() == PROJECTEUR_ERROR_NO_INSTANCE_FOUND) {
       error() << i18n("Cannot send commands '%1' - no running application instance found.",

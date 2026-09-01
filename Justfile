@@ -106,9 +106,73 @@ install: _stop-projecteur build package
 
 _stop-projecteur:
     #!/usr/bin/env bash
-    if [[ -x /usr/bin/projecteur ]]; then
-        /usr/bin/projecteur --command quit >/dev/null 2>&1 || true
+    set -euo pipefail
+
+    service_name="org.projecteur.Projecteur"
+    service_has_owner() {
+        local reply
+        reply="$({
+            dbus-send --session --print-reply=literal \
+                --dest=org.freedesktop.DBus \
+                /org/freedesktop/DBus \
+                org.freedesktop.DBus.NameHasOwner \
+                string:"$service_name"
+        } 2>/dev/null || true)"
+        [[ "$reply" == *true* ]]
+    }
+
+    if ! service_has_owner; then
+        exit 0
     fi
+
+    dbus-send --session --print-reply=literal \
+        --dest="$service_name" \
+        /org/projecteur/Projecteur/Control \
+        org.projecteur.Projecteur.Quit >/dev/null 2>&1 || true
+
+    for (( attempt = 0; attempt < 10; ++attempt )); do
+        if ! service_has_owner; then
+            exit 0
+        fi
+        sleep 0.1
+    done
+
+    # Older or unhealthy instances may own the well-known name without exporting
+    # the control object. Resolve the exact owner and terminate only a Projecteur
+    # process, rather than allowing a stale binary to survive the package upgrade.
+    owner_pid_reply="$({
+        dbus-send --session --print-reply=literal \
+            --dest=org.freedesktop.DBus \
+            /org/freedesktop/DBus \
+            org.freedesktop.DBus.GetConnectionUnixProcessID \
+            string:"$service_name"
+    } 2>/dev/null || true)"
+    if [[ "$owner_pid_reply" =~ uint32[[:space:]]+([0-9]+) ]]; then
+        owner_pid="${BASH_REMATCH[1]}"
+        if [[ -r "/proc/$owner_pid/comm" ]] \
+            && [[ "$(<"/proc/$owner_pid/comm")" == "projecteur" ]]; then
+            kill -TERM "$owner_pid"
+        fi
+    fi
+
+    for (( attempt = 0; attempt < 50; ++attempt )); do
+        if ! service_has_owner; then
+            exit 0
+        fi
+        sleep 0.1
+    done
+
+    if service_has_owner; then
+        owner_pid_reply="$({
+            dbus-send --session --print-reply=literal \
+                --dest=org.freedesktop.DBus \
+                /org/freedesktop/DBus \
+                org.freedesktop.DBus.GetConnectionUnixProcessID \
+                string:"$service_name"
+        } 2>/dev/null || true)"
+    fi
+    echo "error: Projecteur did not release $service_name (owner: ${owner_pid_reply:-unknown})." >&2
+    exit 1
 
 # Install the compiler and Projecteur build dependencies.
 deps: _require-arch

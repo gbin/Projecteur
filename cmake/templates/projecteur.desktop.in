@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Exec=@PROJECTEUR_INSTALL_PATH@
+Exec=@PROJECTEUR_INSTALL_PATH@ --show-dialog
 Name=Projecteur
 GenericName=Wayland spotlight for Logitech presenter devices
 Icon=projecteur
