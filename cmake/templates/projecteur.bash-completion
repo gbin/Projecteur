@@ -15,7 +15,7 @@ _projecteur()
   fi
 
   local options="-h --help --help-all --version -v --cfg --device-scan -m --minimize-only"
-  options="${options} --log-level -l --show-dialog --disable-uinput -D -c"
+  options="${options} --show-dialog --disable-uinput -D -c"
 
   case "$prev" in
     "-c")
@@ -24,8 +24,9 @@ _projecteur()
       commands="${commands} spot.size= spot.rotation= spot.shape= spot.shape.square.radius="
       commands="${commands} spot.multi-screen= spot.overlay="
       commands="${commands} spot.shape.star.points= spot.shape.star.innerradius= spot.shape.ngon.sides="
-      commands="${commands} shade= shade.opacity= shade.color= dot= dot.size= dot.color= dot.opacity="
+      commands="${commands} shade= shade.opacity= shade.color= dot= dot.size= dot.color= dot.opacity= dot.mode= dot.trail="
       commands="${commands} border= border.size= border.color= border.opacity= zoom= zoom.factor="
+      commands="${commands} zoom.mode="
 
       local fl=$(printf '%.1s' "$cur")
       [ ! "$fl" = "q" ] && compopt -o nospace
@@ -73,6 +74,18 @@ _projecteur()
         COMPREPLY=( $(compgen -W "false true" -- $cur) )
       fi
       ;;
+    "dot.mode")
+      if [ "${prev_prev}" = "=" ] || [ "${cur}" = "=" ]; then
+        [ "${cur}" = "=" ] && cur=""
+        COMPREPLY=( $(compgen -W "solid diffuse" -- $cur) )
+      fi
+      ;;
+    "dot.trail")
+      if [ "${prev_prev}" = "=" ] || [ "${cur}" = "=" ]; then
+        [ "${cur}" = "=" ] && cur=""
+        COMPREPLY=( $(compgen -W "false true" -- $cur) )
+      fi
+      ;;
     "border")
       if [ "${prev_prev}" = "=" ] || [ "${cur}" = "=" ]; then
         [ "${cur}" = "=" ] && cur=""
@@ -85,15 +98,15 @@ _projecteur()
         COMPREPLY=( $(compgen -W "false true" -- $cur) )
       fi
       ;;
+    "zoom.mode")
+      if [ "${prev_prev}" = "=" ] || [ "${cur}" = "=" ]; then
+        [ "${cur}" = "=" ] && cur=""
+        COMPREPLY=( $(compgen -W "smooth text pixel" -- $cur) )
+      fi
+      ;;
     "-D")
       # TODO: Auto completion for devices (vendorId:productId)
       COMPREPLY=( $(compgen -W "0123:4567" -- $cur) )
-      ;;
-    "-l")
-      COMPREPLY=( $(compgen -W "dbg inf wrn err" -- $cur) )
-      ;;
-    "--log-level")
-      COMPREPLY=( $(compgen -W "dbg inf wrn err" -- $cur) )
       ;;
     "--cfg")
       # Auto completion for files

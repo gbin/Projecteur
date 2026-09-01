@@ -1,8 +1,8 @@
 // This file is part of Projecteur - https://github.com/jahnf/projecteur - See LICENSE.md and README.md
-import QtQuick 2.3
-import QtQuick.Window 2.2
-
-import QtGraphicalEffects 1.0
+import QtQuick
+import QtQuick.Effects
+import QtQuick.Window
+import org.kde.pipewire as KPipeWire
 
 import Projecteur.Utils 1.0 as Utils
 
@@ -11,14 +11,20 @@ Window {
     property var screenId: -1
     readonly property bool spotOnCurrentWindow: ProjecteurApp.currentSpotScreen === screenId
     property alias desktopPixmap: desktopImage.pixmap
+    property var desktopStream: null
 
     width: 300; height: 200
 
-    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SplashScreen
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
 
     color: "transparent"
 
     readonly property double diagonal: Math.sqrt(Math.pow(Math.max(width, height),2)*2)
+    readonly property real deviceScale: screen ? screen.devicePixelRatio : 1.0
+
+    function snapToDevicePixel(value) {
+        return Math.round(value * deviceScale) / deviceScale
+    }
 
     Item {
         id: rotationItem
@@ -28,7 +34,6 @@ Window {
         rotation: Settings.spotRotationAllowed ? Settings.spotRotation : 0
 
         opacity: ProjecteurApp.overlayVisible ? 1.0 : 0.0
-        Behavior on opacity { PropertyAnimation { easing.type: Easing.OutQuad } }
 
         Item {
             id: desktopItem
@@ -37,24 +42,89 @@ Window {
             scale: Settings.zoomFactor
             width: centerRect.width / scale; height: centerRect.height / scale
 
-            Utils.Image {
-                id: desktopImage
-                smooth: rotation == 0 ? false : true
+            Item {
+                id: desktopSource
                 rotation: -rotationItem.rotation
                 readonly property real xOffset: Math.floor(parent.width/2.0 + ((rotationItem.width-mainWindow.width)/2))
                 readonly property real yOffset: Math.floor(parent.height/2.0 + ((rotationItem.height-mainWindow.height)/2))
-                x: -ma.mouseX + xOffset
-                y: -ma.mouseY + yOffset
+                readonly property real rawX: -ma.mouseX + xOffset
+                readonly property real rawY: -ma.mouseY + yOffset
+                readonly property real sampleScaleX: desktopTexture.textureSize.width / parent.width
+                readonly property real sampleScaleY: desktopTexture.textureSize.height / parent.height
+                x: rotation == 0 ? Math.round(rawX * sampleScaleX) / sampleScaleX : rawX
+                y: rotation == 0 ? Math.round(rawY * sampleScaleY) / sampleScaleY : rawY
                 width: mainWindow.width; height: mainWindow.height
+
+                Utils.Image {
+                    id: desktopImage
+                    anchors.fill: parent
+                    smooth: desktopSource.rotation != 0 || mainWindow.deviceScale != 1.0
+                    visible: !desktopStreamItem.ready
+                }
+
+                ShaderEffectSource {
+                    anchors.fill: parent
+                    sourceItem: desktopStreamItem
+                    sourceRect: Qt.rect(0, 0,
+                                        desktopStreamItem.width,
+                                        desktopStreamItem.height)
+                    live: true
+                    smooth: true
+                    visible: desktopStreamItem.ready
+                }
             }
         }
 
-        OpacityMask {
-            visible: Settings.zoomEnabled && mainWindow.spotOnCurrentWindow
-            cached: true
+        KPipeWire.PipeWireSourceItem {
+            id: desktopStreamItem
+            visible: mainWindow.visible
+            enabled: false
+            width: mainWindow.width
+            height: mainWindow.height
+            nodeId: mainWindow.desktopStream
+                    ? mainWindow.desktopStream.nodeId : 0
+            allowDmaBuf: true
+        }
+
+        ShaderEffectSource {
+            id: desktopTexture
+            readonly property bool useDirectStream: desktopStreamItem.ready
             anchors.fill: centerRect
-            source: desktopItem
-            maskSource: spotShapeLoader.item
+            visible: false
+            sourceItem: useDirectStream ? desktopStreamItem : desktopItem
+            hideSource: useDirectStream
+            sourceRect: useDirectStream
+                ? Qt.rect(
+                    mainWindow.snapToDevicePixel(
+                        centerRect.x + centerRect.width / 2 - desktopItem.width / 2),
+                    mainWindow.snapToDevicePixel(
+                        centerRect.y + centerRect.height / 2 - desktopItem.height / 2),
+                    desktopItem.width,
+                    desktopItem.height)
+                : Qt.rect(0, 0, desktopItem.width, desktopItem.height)
+            smooth: Settings.zoomMode !== "pixel"
+            textureSize: Qt.size(
+                Math.max(1, Math.round(desktopItem.width * mainWindow.deviceScale)),
+                Math.max(1, Math.round(desktopItem.height * mainWindow.deviceScale)))
+        }
+
+        ShaderEffect {
+            id: textZoom
+            anchors.fill: centerRect
+            visible: false
+            property variant source: desktopTexture
+            property size outputSize: Qt.size(
+                Math.max(1, Math.round(width * mainWindow.deviceScale)),
+                Math.max(1, Math.round(height * mainWindow.deviceScale)))
+            fragmentShader: "qrc:/shaders/textzoom.frag.qsb"
+        }
+
+        MultiEffect {
+            visible: Settings.zoomEnabled && mainWindow.spotOnCurrentWindow
+            anchors.fill: centerRect
+            source: Settings.zoomMode === "text" ? textZoom : desktopTexture
+            maskEnabled: true
+            maskSource: spotShapeLoader
             enabled: false
         }
 
@@ -75,7 +145,7 @@ Window {
                 onClicked: { ProjecteurApp.spotlightWindowClicked() }
                 onExited: { ProjecteurApp.cursorExitedWindow() }
                 onEntered: { ProjecteurApp.cursorEntered(screenId) }
-                onPositionChanged: {
+                onPositionChanged: (mouse) => {
 
                     if (Settings.multiScreenOverlayEnabled) {
                         ProjecteurApp.cursorPositionChanged(
@@ -91,8 +161,8 @@ Window {
             opacity: Settings.shadeOpacity
             height: spotSize > 50 ? Math.min(spotSize, mainWindow.height) : 50
             width: height
-            x: ma.posX - width/2
-            y: ma.posY - height/2
+            x: mainWindow.snapToDevicePixel(ma.posX - width/2)
+            y: mainWindow.snapToDevicePixel(ma.posY - height/2)
             color: Settings.shadeColor
             visible: false
             enabled: false
@@ -103,18 +173,20 @@ Window {
             visible: false; enabled: false
             anchors.centerIn: centerRect
             width: centerRect.width;  height: width
+            layer.enabled: true
             sourceComponent: Qt.createComponent(Settings.spotShape)
+            onLoaded: item.visible = true
         }
 
-        OpacityMask {
+        MultiEffect {
             id: spot
             visible: Settings.showSpotShade
             opacity: centerRect.opacity
-            cached: true
-            invert: true
             anchors.fill: centerRect
             source: centerRect
-            maskSource: spotShapeLoader.item
+            maskEnabled: true
+            maskInverted: true
+            maskSource: spotShapeLoader
             enabled: false
         }
 
@@ -123,11 +195,11 @@ Window {
             anchors.centerIn: centerRect
             width: centerRect.width;  height: width
             visible: false; enabled: false
+            layer.enabled: true
             sourceComponent: spotShapeLoader.sourceComponent
-            onStatusChanged: {
-                if (status == Loader.Ready) {
-                    borderShapeLoader.item.color = Qt.binding(function(){ return Settings.borderColor; })
-                }
+            onLoaded: {
+                item.visible = true
+                item.color = Qt.binding(function(){ return Settings.borderColor; })
             }
         }
 
@@ -136,6 +208,7 @@ Window {
             anchors.centerIn: centerRect
             width: centerRect.width;  height: width
             enabled: false; visible: false
+            layer.enabled: true
             Item {
                 id: borderShapeScaled
                 anchors.centerIn: parent
@@ -150,28 +223,141 @@ Window {
             }
         }
 
-        OpacityMask {
+        MultiEffect {
             id: spotBorder
             visible: Settings.showBorder && Settings.borderSize > 0
             opacity: Settings.borderOpacity
-            cached: true
-            invert: true
             anchors.fill: centerRect
-            source: borderShapeLoader.item
+            source: borderShapeLoader
+            maskEnabled: true
+            maskInverted: true
             maskSource: borderShapeMask
             enabled: false
         }
 
+        Item {
+            id: dotTrailHistory
+            readonly property real currentX: centerRect.x + centerRect.width / 2
+            readonly property real currentY: centerRect.y + centerRect.height / 2
+            property real point1X: currentX
+            property real point1Y: currentY
+            property real point2X: currentX
+            property real point2Y: currentY
+            property real point3X: currentX
+            property real point3Y: currentY
+            property real point4X: currentX
+            property real point4Y: currentY
+            property real point5X: currentX
+            property real point5Y: currentY
+            property real point6X: currentX
+            property real point6Y: currentY
+
+            function reset() {
+                point1X = currentX; point1Y = currentY
+                point2X = currentX; point2Y = currentY
+                point3X = currentX; point3Y = currentY
+                point4X = currentX; point4Y = currentY
+                point5X = currentX; point5Y = currentY
+                point6X = currentX; point6Y = currentY
+            }
+
+            Timer {
+                interval: 24
+                repeat: true
+                running: mainWindow.visible && ProjecteurApp.overlayVisible
+                         && Settings.showCenterDot && Settings.dotTrailEnabled
+                onRunningChanged: if (running) dotTrailHistory.reset()
+                onTriggered: {
+                    const dx = dotTrailHistory.currentX - dotTrailHistory.point1X
+                    const dy = dotTrailHistory.currentY - dotTrailHistory.point1Y
+                    if (dx * dx + dy * dy > 90000) {
+                        dotTrailHistory.reset()
+                        return
+                    }
+                    dotTrailHistory.point6X = dotTrailHistory.point5X
+                    dotTrailHistory.point6Y = dotTrailHistory.point5Y
+                    dotTrailHistory.point5X = dotTrailHistory.point4X
+                    dotTrailHistory.point5Y = dotTrailHistory.point4Y
+                    dotTrailHistory.point4X = dotTrailHistory.point3X
+                    dotTrailHistory.point4Y = dotTrailHistory.point3Y
+                    dotTrailHistory.point3X = dotTrailHistory.point2X
+                    dotTrailHistory.point3Y = dotTrailHistory.point2Y
+                    dotTrailHistory.point2X = dotTrailHistory.point1X
+                    dotTrailHistory.point2Y = dotTrailHistory.point1Y
+                    dotTrailHistory.point1X = dotTrailHistory.currentX
+                    dotTrailHistory.point1Y = dotTrailHistory.currentY
+                }
+            }
+        }
+
+        ShaderEffect {
+            id: dotTrail
+            readonly property real margin: Math.max(4, Settings.dotSize)
+            readonly property real minimumX: Math.min(dotTrailHistory.currentX, dotTrailHistory.point1X,
+                dotTrailHistory.point2X, dotTrailHistory.point3X, dotTrailHistory.point4X,
+                dotTrailHistory.point5X, dotTrailHistory.point6X)
+            readonly property real maximumX: Math.max(dotTrailHistory.currentX, dotTrailHistory.point1X,
+                dotTrailHistory.point2X, dotTrailHistory.point3X, dotTrailHistory.point4X,
+                dotTrailHistory.point5X, dotTrailHistory.point6X)
+            readonly property real minimumY: Math.min(dotTrailHistory.currentY, dotTrailHistory.point1Y,
+                dotTrailHistory.point2Y, dotTrailHistory.point3Y, dotTrailHistory.point4Y,
+                dotTrailHistory.point5Y, dotTrailHistory.point6Y)
+            readonly property real maximumY: Math.max(dotTrailHistory.currentY, dotTrailHistory.point1Y,
+                dotTrailHistory.point2Y, dotTrailHistory.point3Y, dotTrailHistory.point4Y,
+                dotTrailHistory.point5Y, dotTrailHistory.point6Y)
+
+            x: minimumX - margin; y: minimumY - margin
+            width: Math.max(1, maximumX - minimumX + margin * 2)
+            height: Math.max(1, maximumY - minimumY + margin * 2)
+            z: 1
+            visible: Settings.showCenterDot && Settings.dotTrailEnabled
+            opacity: Settings.dotOpacity
+            property size outputSize: Qt.size(width, height)
+            property real dotSize: Settings.dotSize
+            property color dotColor: Settings.dotColor
+            property point point0: Qt.point(dotTrailHistory.currentX - x, dotTrailHistory.currentY - y)
+            property point point1: Qt.point(dotTrailHistory.point1X - x, dotTrailHistory.point1Y - y)
+            property point point2: Qt.point(dotTrailHistory.point2X - x, dotTrailHistory.point2Y - y)
+            property point point3: Qt.point(dotTrailHistory.point3X - x, dotTrailHistory.point3Y - y)
+            property point point4: Qt.point(dotTrailHistory.point4X - x, dotTrailHistory.point4Y - y)
+            property point point5: Qt.point(dotTrailHistory.point5X - x, dotTrailHistory.point5Y - y)
+            property point point6: Qt.point(dotTrailHistory.point6X - x, dotTrailHistory.point6Y - y)
+            fragmentShader: "qrc:/shaders/dottrail.frag.qsb"
+        }
+
         Rectangle {
-            id: dotCursor
+            id: solidDotCursor
             antialiasing: true
             anchors.centerIn: centerRect
             width: Settings.dotSize; height: width
-            radius: width*0.5
+            radius: width * 0.5
             color: Settings.dotColor
-            visible: Settings.showCenterDot
+            z: 2
+            visible: Settings.showCenterDot && Settings.dotMode === "solid"
             opacity: Settings.dotOpacity
             enabled: false
+        }
+
+        ShaderEffect {
+            id: diffuseDotCursor
+            anchors.centerIn: centerRect
+            width: Math.max(24, Settings.dotSize * 5)
+            height: width
+            z: 2
+            visible: Settings.showCenterDot && Settings.dotMode === "diffuse"
+            opacity: Settings.dotOpacity
+            property size outputSize: Qt.size(width, height)
+            property real dotSize: Settings.dotSize
+            property color dotColor: Settings.dotColor
+            property real time: 0
+            fragmentShader: "qrc:/shaders/diffusedot.frag.qsb"
+
+            NumberAnimation on time {
+                from: 0; to: 100
+                duration: 100000
+                loops: Animation.Infinite
+                running: diffuseDotCursor.visible && ProjecteurApp.overlayVisible
+            }
         }
 
         Rectangle {

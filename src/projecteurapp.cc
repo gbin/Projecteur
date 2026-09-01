@@ -3,59 +3,88 @@
 
 #include "projecteurapp.h"
 
-#include "aboutdlg.h"
 #include "device-command-helper.h"
 #include "imageitem.h"
 #include "linuxdesktop.h"
-#include "logging.h"
 #include "preferencesdlg.h"
+#include "presentationtimer.h"
+#include "projecteur_command_debug.h"
+#include "projecteur_main_debug.h"
+#include "projecteurcontrol.h"
 #include "settings.h"
 #include "spotlight.h"
 
-#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-#include <QDesktopWidget>
-#endif
+#include <KAboutApplicationDialog>
+#include <KAboutData>
+#include <KActionCollection>
+#include <KDBusService>
+#include <KGlobalAccel>
+#include <KLocalizedString>
+#include <KMessageBox>
+#include <KNotification>
+#include <KWindowSystem>
+#include <LayerShellQt/Window>
 
+#include <QAction>
 #include <QFontDatabase>
-#include <QLocalServer>
-#include <QLocalSocket>
-#include <QMenu>
-#include <QMessageBox>
+#include <QIcon>
 #include <QPointer>
+#include <QHash>
+#include <QSet>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlProperty>
 #include <QQuickWindow>
 #include <QScreen>
-#include <QSystemTrayIcon>
 #include <QTimer>
 #include <QWindow>
 
-LOGGING_CATEGORY(mainapp, "mainapp")
-LOGGING_CATEGORY(cmdclient, "cmdclient")
-LOGGING_CATEGORY(cmdserver, "cmdserver")
+#include <utility>
 
 namespace {
-  QString localServerName() {
-    return QCoreApplication::applicationName() + "_local_socket";
-  }
-} // end anonymous namespace
+constexpr auto notificationComponent = "projecteur";
+
+void sendNotification(const QString& eventId, const QString& title, const QString& text,
+                      const QString& iconName = QStringLiteral("projecteur"))
+{
+  KNotification::event(
+    eventId, title, text, iconName, KNotification::CloseOnTimeout,
+    QString::fromLatin1(notificationComponent));
+}
+}
 
 // -------------------------------------------------------------------------------------------------
 ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Options& options)
   : QApplication(argc, argv)
-  , m_trayIcon(new QSystemTrayIcon())
-  , m_trayMenu(new QMenu())
-  , m_localServer(new QLocalServer(this))
-  , m_linuxDesktop(new LinuxDesktop(this))
-  , m_xcbOnWayland(QGuiApplication::platformName() == "xcb" && m_linuxDesktop->isWayland())
 {
+  m_dbusService = new KDBusService(
+    KDBusService::Unique | KDBusService::NoExitOnFailure, this);
+  if (!m_dbusService->isRegistered()) {
+    return;
+  }
+  m_primaryInstance = true;
+  setWindowIcon(QIcon::fromTheme(
+    QStringLiteral("projecteur"), QIcon(QStringLiteral(":/icons/projecteur-tray.svg"))));
+
+  if (!options.commands.isEmpty()) {
+    const auto commands = options.commands.join(QStringLiteral("; "));
+    qCWarning(PROJECTEUR_MAIN_LOG).noquote()
+      << QStringLiteral("Cannot send commands '%1' - no running application instance found.").arg(commands);
+    m_startupExitCode = 43;
+    m_dbusService->unregister();
+    m_primaryInstance = false;
+    return;
+  }
+
+  m_linuxDesktop = new LinuxDesktop(this);
+
   if (screens().empty())
   {
-    const auto title = tr("No Screens detected");
-    const auto text = tr("screens().size() returned a size < 1. Exiting.");
-    logError(mainapp) << title << ";" << text;
-    QMessageBox::critical(nullptr, title, text);
+    const auto title = i18n("No Screens detected");
+    const auto text = i18n("screens().size() returned a size < 1. Exiting.");
+    qCCritical(PROJECTEUR_MAIN_LOG).noquote()
+      << "No screens detected; screens().size() returned a size below one. Exiting.";
+    KMessageBox::error(nullptr, text, title);
     QTimer::singleShot(0, this, [this](){ this->exit(2); });
     return;
   }
@@ -70,9 +99,14 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
                               m_settings);
 
   m_deviceCommandHelper = new DeviceCommandHelper(this, m_spotlight);
+  m_presentationTimer =
+    new PresentationTimer(m_settings, m_spotlight, m_deviceCommandHelper, this);
 
   m_settings->setOverlayDisabled(options.disableOverlay);
-  m_dialog = std::make_unique<PreferencesDialog>(m_settings, m_spotlight,
+  setupControlService(options);
+  setupGlobalShortcuts();
+
+  m_dialog = std::make_unique<PreferencesDialog>(m_settings, m_spotlight, m_actionCollection,
                                                   options.dialogMinimizeOnly
                                                   ? PreferencesDialog::Mode::MinimizeOnlyDialog
                                                   : PreferencesDialog::Mode::ClosableDialog);
@@ -80,20 +114,20 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
   connect(&*m_dialog, &PreferencesDialog::testButtonClicked, this, [this](){
     m_spotlight->setSpotActive(true);
   });
+  connect(&*m_dialog, &PreferencesDialog::exitApplicationRequested, this, [this]() {
+    qCDebug(PROJECTEUR_MAIN_LOG).noquote() << QStringLiteral("Exit request from preferences dialog.");
+    quit();
+  });
 
-  const QString desktopEnv = m_linuxDesktop->type() == LinuxDesktop::Type::KDE ? "KDE" :
-                             m_linuxDesktop->type() == LinuxDesktop::Type::Gnome ? "Gnome"
-                                                                                 : tr("Unknown");
+  const QString desktopEnv = m_linuxDesktop->type() == LinuxDesktop::Type::KDE
+                               ? QStringLiteral("KDE")
+                               : QStringLiteral("Unknown");
 
-  logDebug(mainapp) << tr("Qt platform plugin: %1;").arg(QGuiApplication::platformName())
-                    << tr("Desktop Environment: %1;").arg(desktopEnv)
-                    << tr("Wayland: %1").arg(m_linuxDesktop->isWayland() ? "true" : "false");
+  qCDebug(PROJECTEUR_MAIN_LOG).noquote() << QStringLiteral("Qt platform plugin: %1;").arg(QGuiApplication::platformName())
+                    << QStringLiteral("Desktop Environment: %1;").arg(desktopEnv)
+                    << QStringLiteral("Wayland: %1").arg(m_linuxDesktop->isWayland() ? "true" : "false");
 
-  if (m_xcbOnWayland) {
-    logWarning(mainapp) << tr("Qt 'xcb' platform and Wayland session detected.");
-  }
-
-  if (options.showPreferencesOnStart || m_linuxDesktop->isWayland()) {
+  if (options.showPreferencesOnStart) {
     QTimer::singleShot(0, this, [this](){ showPreferences(true); });
   }
   else if (options.dialogMinimizeOnly) {
@@ -109,15 +143,18 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
   // Create qml overlay window component
   m_windowQmlComponent = new QQmlComponent(m_qmlEngine, QUrl(QStringLiteral("qrc:/main.qml")), m_qmlEngine);
   if (m_windowQmlComponent->status() != QQmlComponent::Status::Ready) {
-    const auto title = tr("Overlay window error.");
-    const auto text = tr("Qml component has status '%1'. Exiting.").arg(m_windowQmlComponent->status());
+    const auto title = i18n("Overlay window error.");
+    const auto text = i18n("Qml component has status '%1'. Exiting.",
+                           static_cast<int>(m_windowQmlComponent->status()));
 
-    logError(mainapp) << title << ";" << text;
+    qCCritical(PROJECTEUR_MAIN_LOG).noquote()
+      << "Overlay QML component has unexpected status:"
+      << static_cast<int>(m_windowQmlComponent->status());
     for (const auto& error : m_windowQmlComponent->errors()) {
-      logError(mainapp) << error.toString();
+      qCCritical(PROJECTEUR_MAIN_LOG).noquote() << error.toString();
     }
 
-    QMessageBox::critical(nullptr, title, text);
+    KMessageBox::error(nullptr, text, title);
     QTimer::singleShot(0, this, [this](){ this->exit(2); });
     return;
   }
@@ -132,80 +169,32 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
       if (m_spotlight->spotActive()) { m_spotlight->setSpotActive(false); }
       else { emit m_spotlight->spotActiveChanged(false); }
     }
-    else {
-      QTimer::singleShot(0, this, [this](){
-        if (m_spotlight->spotActive()) {
-          emit m_spotlight->spotActiveChanged(true);
-        } else {
-          m_spotlight->setSpotActive(true);
-        }
-      });
-    }
   });
 
   // Re-setup screen overlay(s) when a screen is added or removed
   connect(this, &ProjecteurApplication::screenAdded, this, [this](){ setupScreenOverlays(); });
   connect(this, &ProjecteurApplication::screenRemoved, this, [this](){ setupScreenOverlays(); });
 
-  // Setup the tray icon and menu
-  setupTrayIcon();
+  setupNotifications();
 
   connect(this, &ProjecteurApplication::aboutToQuit, this, [this](){
-    for (const auto window : m_overlayWindows) { window->close(); }
+    m_linuxDesktop->setShakeCursorEffectSuppressed(false);
+    for (const auto window : m_overlayWindows) { delete window; }
     m_overlayWindows.clear();
+    m_screenWindowMap.clear();
   });
 
   // Setup the spotlight connections.
   setupSpotlight();
-
-  // Open local server for local IPC commands, e.g. from other command line instances
-  QLocalServer::removeServer(localServerName());
-  if (m_localServer->listen(localServerName()))
-  {
-    connect(m_localServer, &QLocalServer::newConnection, this, [this]()
-    {
-      while(QLocalSocket *clientConnection = m_localServer->nextPendingConnection())
-      {
-        connect(clientConnection, &QLocalSocket::readyRead, this, [this, clientConnection]() {
-          this->readCommand(clientConnection);
-        });
-        connect(clientConnection, &QLocalSocket::disconnected, this, [this, clientConnection]() {
-          const auto it = m_commandConnections.find(clientConnection);
-          if (it != m_commandConnections.end())
-          {
-            quint32& commandSize = it->second;
-            while (clientConnection->bytesAvailable() && commandSize <= clientConnection->bytesAvailable()) {
-              this->readCommand(clientConnection);
-            }
-            m_commandConnections.erase(it);
-          }
-          clientConnection->close();
-          clientConnection->deleteLater();
-        });
-
-        // Timeout timer - if after 5 seconds the connection is still open just disconnect...
-        const auto clientConnPtr = QPointer<QLocalSocket>(clientConnection);
-        QTimer::singleShot(5000, clientConnection, [clientConnPtr](){
-          if (clientConnPtr) {
-            // time out
-            clientConnPtr->disconnectFromServer();
-          }
-        });
-
-        m_commandConnections.emplace(clientConnection, 0);
-      }
-    });
-  }
-  else
-  {
-    logError(cmdserver) << tr("Error starting local socket for inter-process communication.");
-  }
 }
 
 // -------------------------------------------------------------------------------------------------
 ProjecteurApplication::~ProjecteurApplication()
 {
-  if (m_localServer) { m_localServer->close(); }
+  if (m_control) { m_control->unregisterObject(); }
+  for (const auto window : m_overlayWindows) { delete window; }
+  m_overlayWindows.clear();
+  m_screenWindowMap.clear();
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -217,19 +206,40 @@ void ProjecteurApplication::setupSpotlight()
   {
     if (active && !m_settings->overlayDisabled())
     {
-      if (!m_settings->multiScreenOverlayEnabled()) { setScreenForCursorPos(); }
+      m_linuxDesktop->setShakeCursorEffectSuppressed(true);
+
+      QScreen* const cursorScreen = screenAtCursorPos();
+      if (!m_settings->multiScreenOverlayEnabled()) {
+        updateOverlayWindow(m_overlayWindows.first(), cursorScreen);
+      }
+      if (cursorScreen) {
+        setCurrentSpotScreen(quint64(cursorScreen));
+      }
 
       for (const auto window : m_overlayWindows)
       {
-        window->setFlags(window->flags() | Qt::WindowStaysOnTopHint);
-        window->setFlags(window->flags() & ~Qt::SplashScreen);
-        window->setFlags(window->flags() | Qt::ToolTip);
-        window->setFlags(window->flags() & ~Qt::WindowTransparentForInput);
-
         if (window->screen())
         {
           if (m_settings->zoomEnabled()) {
-            window->setProperty("desktopPixmap", m_linuxDesktop->grabScreen(window->screen()));
+            auto* stream = window->property("desktopStream").value<QObject*>();
+            const auto streamScreenId =
+              window->property("desktopStreamScreenId").toULongLong();
+            const auto currentScreenId = quint64(window->screen());
+            if (stream && streamScreenId != currentScreenId) {
+              window->setProperty("desktopStream",
+                                  QVariant::fromValue<QObject*>(nullptr));
+              stream->deleteLater();
+              stream = nullptr;
+            }
+            if (!stream) {
+              stream = m_linuxDesktop->streamScreen(window->screen(), window);
+              window->setProperty("desktopStream", QVariant::fromValue(stream));
+              window->setProperty("desktopStreamScreenId", currentScreenId);
+            }
+            if (!stream) {
+              window->setProperty("desktopPixmap",
+                                  m_linuxDesktop->grabScreen(window->screen()));
+            }
           }
 
           const auto screenGeometry = window->screen()->geometry();
@@ -238,109 +248,199 @@ void ProjecteurApplication::setupSpotlight()
           }
           window->setPosition(screenGeometry.topLeft());
         }
-        window->showFullScreen();
-        window->raise();
+        window->show();
       }
       m_overlayVisible = true;
       emit overlayVisibleChanged(true);
     }
     else
     {
+      m_linuxDesktop->setShakeCursorEffectSuppressed(false);
+
       m_overlayVisible = false;
       emit overlayVisibleChanged(false);
       for (const auto window : m_overlayWindows)
       {
-        window->setFlags(window->flags() | Qt::WindowTransparentForInput);
-        window->setFlags(window->flags() & ~Qt::WindowStaysOnTopHint);
-        // Workaround for 'xcb' on Wayland session (default on Ubuntu)
-        // .. the window in that case is not transparent for inputs and cannot be clicked through.
-        // --> hide the window, although animations will not be visible
-        if (m_xcbOnWayland) { window->hide(); }
-      }
-      if (m_xcbOnWayland && m_dialog->mode() == PreferencesDialog::Mode::MinimizeOnlyDialog
-                         && m_dialog->isMinimized()) { // keep Window minimized...
-        //Workaround for QTBUG-76354 (https://bugreports.qt.io/browse/QTBUG-76354)
-        m_dialog->showNormal();
-        m_dialog->setWindowState(Qt::WindowMinimized);
+        QTimer::singleShot(200, window, [this, window]() {
+          if (!m_spotlight->spotActive()) {
+            window->hide();
+          }
+        });
       }
     }
   });
 
   connect(m_spotlight, &Spotlight::spotActiveChanged, this, [this](bool active){
     if (!active && m_dialog->isVisible()) {
-      m_dialog->raise();
-      m_dialog->activateWindow();
+      showAndActivate(m_dialog.get());
     }
   });
 }
 
-// -------------------------------------------------------------------------------------------------
-void ProjecteurApplication::setupTrayIcon()
+void ProjecteurApplication::setupControlService(Options const& options)
 {
-  // add and connect 'Preferences' tray menu action
-  const auto actionPref = m_trayMenu->addAction(tr("&Preferences..."));
-  connect(actionPref, &QAction::triggered, this, [this](){
-    this->showPreferences(true);
-  });
+  m_control = new ProjecteurControl(this, m_settings, m_spotlight, m_presentationTimer,
+                                    !options.hideSysTrayIcon);
+  if (!m_control->registerObject()) {
+    qCCritical(PROJECTEUR_MAIN_LOG).noquote() << QStringLiteral("Could not register the Projecteur D-Bus control object.");
+  }
+}
 
-  // add and and connect 'About' tray menu action
-  const auto actionAbout = m_trayMenu->addAction(tr("&About"));
-  connect(actionAbout, &QAction::triggered, this, [this]()
-  {
-    if (!m_aboutDialog) {
-      m_aboutDialog = new AboutDialog();
-      connect(m_aboutDialog, &QDialog::finished, this, [this](int /* result */) {
-        m_aboutDialog->deleteLater(); // No need to keep about dialog in memory, not that important
-      });
-    }
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::setupGlobalShortcuts()
+{
+  m_actionCollection = new KActionCollection(this);
+  m_actionCollection->setComponentDisplayName(i18n("Projecteur"));
 
-    if (m_aboutDialog->isVisible()) {
-      m_aboutDialog->show();
-      m_aboutDialog->raise();
-      m_aboutDialog->activateWindow();
-    } else {
-      m_aboutDialog->open();
-    }
-  });
-
-  m_trayMenu->addSeparator();
-  const auto actionQuit = m_trayMenu->addAction(tr("&Quit"));
-  connect(actionQuit, &QAction::triggered, this, [this](){
-    m_qmlEngine->deleteLater(); // see: https://bugreports.qt.io/browse/QTBUG-81247
-    this->quit();
-  });
-  m_trayIcon->setContextMenu(&*m_trayMenu);
-
-  m_trayIcon->setIcon(QIcon(":/icons/projecteur-tray-64.png"));
-  m_trayIcon->show();
-
-  connect(&*m_trayIcon, &QSystemTrayIcon::activated, this,
-  [this](QSystemTrayIcon::ActivationReason reason) {
-    if (reason == QSystemTrayIcon::Trigger)
+  const auto addAction =
+    [this](const QString& id, const QString& text, const QString& iconName, auto callback)
     {
-      const auto trayGeometry = m_trayIcon->geometry();
-      // This usually won't give us a valid geometry, since Qt isn't drawing the tray icon itself
-      if (trayGeometry.isValid()) {
-        m_trayIcon->contextMenu()->popup(m_trayIcon->geometry().center());
-      } else {
-        // It's tricky to get the same behavior on all desktop environments. While on GNOME3
-        // it behaves as one (or most) would expect, it behaves differently on other Desktop
-        // environments.
-        // QSystemTrayIcon is a wrapper around the StatusNotfierItem on modern (Linux) Desktops
-        // see: https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/
-        // Via the Qt API there is not much control over how e.g. KDE or GNOME show the icon
-        // and how it behaves.. e.g. setting something like
-        // org.freedesktop.StatusNotifierItem.ItemIsMenu to True would be good for KDE Plasma
-        // see: https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/StatusNotifierItem/
-        this->showPreferences(true);
+      auto* action = new QAction(QIcon::fromTheme(iconName), text, m_actionCollection);
+      m_actionCollection->addAction(id, action);
+      connect(action, &QAction::triggered, this, std::move(callback));
+      if (!KGlobalAccel::setGlobalShortcut(action, QList<QKeySequence>{})) {
+        qCWarning(PROJECTEUR_MAIN_LOG).noquote() << QStringLiteral("Could not register global shortcut action '%1'.").arg(id);
       }
+    };
+
+  addAction(
+    QStringLiteral("toggle_spotlight"), i18n("Toggle Spotlight"),
+    QStringLiteral("view-visible"),
+    [this]() {
+      if (!m_settings->overlayDisabled()) {
+        m_control->SetSpotlightActive(!m_control->spotlightActive());
+      }
+    });
+  addAction(
+    QStringLiteral("show_preferences"), i18n("Show Preferences"),
+    QStringLiteral("configure"),
+    [this]() { m_control->ShowPreferences(); });
+  addAction(
+    QStringLiteral("start_restart_timer"), i18n("Start or Restart Presentation Timer"),
+    QStringLiteral("chronometer"),
+    [this]() { m_control->RestartTimer(); });
+  addAction(
+    QStringLiteral("reset_timer"), i18n("Reset Presentation Timer"),
+    QStringLiteral("edit-undo"),
+    [this]() { m_control->ResetTimer(); });
+  addAction(
+    QStringLiteral("next_preset"), i18n("Next Spotlight Preset"),
+    QStringLiteral("go-next"),
+    [this]() { m_control->loadNextPreset(); });
+  addAction(
+    QStringLiteral("previous_preset"), i18n("Previous Spotlight Preset"),
+    QStringLiteral("go-previous"),
+    [this]() { m_control->loadPreviousPreset(); });
+}
+
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::setupNotifications()
+{
+  connect(m_presentationTimer, &PresentationTimer::stateChanged, this,
+          [this](PresentationTimer::State state) {
+    if (state == PresentationTimer::State::Completed) {
+      sendNotification(
+        QStringLiteral("presentationTimerFinished"),
+        i18n("Presentation timer finished"),
+        i18n("The configured presentation time has elapsed."),
+        QStringLiteral("chronometer"));
     }
   });
 
-  connect(&*m_dialog, &PreferencesDialog::exitApplicationRequested, actionQuit, [actionQuit]() {
-    logDebug(mainapp) << tr("Exit request from preferences dialog.");
-    actionQuit->trigger();
+  connect(m_spotlight, &Spotlight::deviceConnected, this,
+          [this](const DeviceId&, const QString& name) {
+    sendNotification(
+      QStringLiteral("presenterConnected"),
+      i18n("Presenter connected"),
+      i18n("%1 is ready.", name),
+      QStringLiteral("input-mouse"));
   });
+  connect(m_spotlight, &Spotlight::deviceDisconnected, this,
+          [this](const DeviceId&, const QString& name) {
+    sendNotification(
+      QStringLiteral("presenterDisconnected"),
+      i18n("Presenter disconnected"),
+      i18n("%1 is no longer available.", name),
+      QStringLiteral("input-mouse"));
+  });
+
+  const auto inaccessiblePaths = std::make_shared<QSet<QString>>();
+  connect(m_spotlight, &Spotlight::deviceAccessError, this,
+          [this, inaccessiblePaths](const QString& name, const QString& path) {
+    if (inaccessiblePaths->contains(path)) { return; }
+    inaccessiblePaths->insert(path);
+    sendNotification(
+      QStringLiteral("deviceAccessError"),
+      i18n("Presenter access failed"),
+      i18n("%1 cannot access %2. Check the installed udev rules and device permissions.",
+           name, path),
+      QStringLiteral("dialog-warning"));
+  });
+  connect(m_spotlight, &Spotlight::subDeviceConnected, this,
+          [inaccessiblePaths](const DeviceId&, const QString&, const QString& path) {
+    inaccessiblePaths->remove(path);
+  });
+
+  const auto batteryWarnings = std::make_shared<QHash<QString, QString>>();
+  connect(m_control, &ProjecteurControl::batteryStateChanged, this,
+          [this, batteryWarnings](const QString& name, int level, const QString& status) {
+    QString warningKey;
+    QString eventId;
+    QString title;
+    QString text;
+    QString iconName;
+
+    if (status == QStringLiteral("invalid-battery")
+        || status == QStringLiteral("thermal-error")
+        || status == QStringLiteral("charging-error")) {
+      warningKey = QStringLiteral("error:") + status;
+      eventId = QStringLiteral("presenterBatteryError");
+      title = i18n("Presenter battery problem");
+      text = i18n("%1 reported a battery error: %2.", name, status);
+      iconName = QStringLiteral("dialog-warning");
+    } else if (level >= 0 && level <= 20 && status == QStringLiteral("discharging")) {
+      warningKey = QStringLiteral("low");
+      eventId = QStringLiteral("presenterBatteryLow");
+      title = i18n("Presenter battery low");
+      text = i18n("%1 has %2% battery remaining.", name, level);
+      iconName = QStringLiteral("battery-low");
+    }
+
+    if (warningKey.isEmpty()) {
+      batteryWarnings->remove(name);
+      return;
+    }
+    if (batteryWarnings->value(name) == warningKey) { return; }
+    batteryWarnings->insert(name, warningKey);
+    sendNotification(eventId, title, text, iconName);
+  });
+  connect(m_spotlight, &Spotlight::deviceDisconnected, this,
+          [batteryWarnings](const DeviceId&, const QString& name) {
+    batteryWarnings->remove(name);
+  });
+}
+
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::showAbout()
+{
+  if (!m_aboutDialog) {
+    m_aboutDialog = new KAboutApplicationDialog(KAboutData::applicationData());
+    m_aboutDialog->setAttribute(Qt::WA_DeleteOnClose);
+  }
+
+  showAndActivate(m_aboutDialog);
+}
+
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::showAndActivate(QWidget* widget)
+{
+  if (!widget) { return; }
+  widget->show();
+  widget->raise();
+  if (auto* window = widget->windowHandle()) {
+    KWindowSystem::updateStartupId(window);
+    KWindowSystem::activateWindow(window);
+  }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -349,7 +449,18 @@ QWindow* ProjecteurApplication::createOverlayWindow()
   QObject *object = m_windowQmlComponent->create();
   object->setParent(m_qmlEngine);
   const auto window = qobject_cast<QWindow*>(object);
-  window->setFlags(window->flags() | Qt::WindowTransparentForInput | Qt::Tool);
+  auto layerWindow = LayerShellQt::Window::get(window);
+  layerWindow->setScope(QStringLiteral("projecteur-overlay"));
+  layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
+  auto anchors = LayerShellQt::Window::Anchors{LayerShellQt::Window::AnchorTop};
+  anchors.setFlag(LayerShellQt::Window::AnchorBottom);
+  anchors.setFlag(LayerShellQt::Window::AnchorLeft);
+  anchors.setFlag(LayerShellQt::Window::AnchorRight);
+  layerWindow->setAnchors(anchors);
+  layerWindow->setExclusiveZone(0);
+  layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
+  layerWindow->setActivateOnShow(false);
+  layerWindow->setCloseOnDismissed(false);
   return window;
 }
 
@@ -390,31 +501,19 @@ void ProjecteurApplication::updateOverlayWindow(QWindow* window, QScreen* screen
 
   window->setProperty("screenId", quint64(screen));
 
-  const bool wasVisible = window->isVisible();
   const bool wasSpotActive = m_spotlight->spotActive();
 
   m_overlayVisible = false;
   emit overlayVisibleChanged(false);
 
-  window->setFlags(window->flags() | Qt::WindowTransparentForInput);
-  window->setFlags(window->flags() & ~Qt::WindowStaysOnTopHint);
   window->hide();
 
-  window->setGeometry(QRect(screen->geometry().topLeft(), QSize(300,200)));
+  auto layerWindow = LayerShellQt::Window::get(window);
+  layerWindow->setScreen(screen);
+  layerWindow->setDesiredSize(QSize(0, 0));
   window->setScreen(screen);
-  window->setGeometry(screen->geometry());
 
-  if (m_xcbOnWayland && !wasVisible)
-  {
-    if (m_dialog->mode() == PreferencesDialog::Mode::MinimizeOnlyDialog
-        && m_dialog->isMinimized()) { // keep Window minimized...
-      //Workaround for QTBUG-76354 (https://bugreports.qt.io/browse/QTBUG-76354)
-      m_dialog->showNormal();
-      m_dialog->setWindowState(Qt::WindowMinimized);
-    }
-  }
-
-  if (wasVisible && wasSpotActive) {
+  if (wasSpotActive) {
     QTimer::singleShot(0, this, [this](){
       if (m_spotlight->spotActive()) {
         emit m_spotlight->spotActiveChanged(true);
@@ -434,16 +533,7 @@ void ProjecteurApplication::setScreenForCursorPos()
 // -------------------------------------------------------------------------------------------------
 QScreen* ProjecteurApplication::screenAtCursorPos() const
 {
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
   return this->screenAt(QCursor::pos());
-#else
-  const int screenNumber = this->desktop()->screenNumber(QCursor::pos());
-  const auto screenList = screens();
-  if (screenNumber >= 0 && screenNumber < screenList.size()) {
-    return screenList[screenNumber];
-  }
-  return nullptr;
-#endif
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -550,52 +640,38 @@ void ProjecteurApplication::setCurrentCursorPos(const QPoint& pos)
 }
 
 // -------------------------------------------------------------------------------------------------
-void ProjecteurApplication::readCommand(QLocalSocket* clientConnection)
+void ProjecteurApplication::activate()
 {
-  auto it = m_commandConnections.find(clientConnection);
-  if (it == m_commandConnections.end()) {
-    return;
+  if (m_dialog) {
+    showPreferences(true);
   }
+}
 
-  quint32& commandSize = it->second;
-
-  // Read size of command (always quint32) if not already done.
-  if (commandSize == 0) {
-    if (clientConnection->bytesAvailable() < static_cast<int>(sizeof(quint32))) {
-      return;
-    }
-
-    QDataStream in(clientConnection);
-    in >> commandSize;
-
-    if (commandSize > 256)
-    {
-      logWarning(cmdserver) << tr("Received invalid command size (%1)").arg(commandSize);
-      clientConnection->disconnectFromServer();
-      return ;
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::applyCommands(const QStringList& commands)
+{
+  for (const auto& command : commands) {
+    const auto trimmedCommand = command.trimmed();
+    if (!trimmedCommand.isEmpty()) {
+      applyCommand(trimmedCommand);
     }
   }
+}
 
-  if (clientConnection->bytesAvailable() < commandSize || clientConnection->atEnd()) {
-    return;
-  }
-
-  const auto command = QString::fromLocal8Bit(clientConnection->read(commandSize));
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::applyCommand(const QString& command)
+{
   const QString cmdKey = command.section('=', 0, 0).trimmed();
   const QString cmdValue = command.section('=', 1).trimmed();
 
   if (cmdKey == "quit")
   {
-    logDebug(cmdserver) << tr("Received quit command.");
+    qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received quit command.");
     this->quit();
   }
   else if (cmdKey == "vibrate") // with args intensity (0-255), length (0-10)
   {
-    #if (QT_VERSION >= QT_VERSION_CHECK(5, 14, 0))
-      auto const args = cmdValue.split(QLatin1Char(','), Qt::SkipEmptyParts);
-    #else
-      auto const args = cmdValue.split(QLatin1Char(','), QString::SkipEmptyParts);
-    #endif
+    auto const args = cmdValue.split(QLatin1Char(','), Qt::SkipEmptyParts);
 
     std::uint8_t const intensity = [&args]{
       if (args.size() >= 1) {
@@ -619,9 +695,7 @@ void ProjecteurApplication::readCommand(QLocalSocket* clientConnection)
       return std::uint8_t{0};
     }();
 
-    logDebug(cmdserver) << tr("Received command vibrate = intensity:%1, length:%2")
-                              .arg(intensity)
-                              .arg(length);
+    qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command vibrate = intensity:%1, length:%2").arg(intensity).arg(length);
 
     m_deviceCommandHelper->sendVibrateCommand(intensity, length);
   }
@@ -630,18 +704,16 @@ void ProjecteurApplication::readCommand(QLocalSocket* clientConnection)
     bool ok = false;
     int const sizeAdjust = cmdValue.toInt(&ok);
     if (ok) {
-      logDebug(cmdserver) << tr("Received command spot.size.adjust = %1%2")
-                               .arg(sizeAdjust > 0 ? "+" : "")
-                               .arg(sizeAdjust);
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command spot.size.adjust = %1%2").arg(sizeAdjust > 0 ? "+" : "").arg(sizeAdjust);
       m_settings->setSpotSize(m_settings->spotSize() + sizeAdjust);
     } else {
-      logDebug(cmdserver) << tr("Received invalid value for command spot.size.adjust");
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received invalid value for command spot.size.adjust");
     }
   }
   else if (cmdKey == "spot")
   {
     if (cmdValue.isEmpty()) {
-      logDebug(cmdserver) << tr("Received empty command value for command spot");
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received empty command value for command spot");
     } else if (cmdValue.toLower() == "toggle") {
       m_spotlight->setSpotActive(!m_spotlight->spotActive());
     }
@@ -649,19 +721,19 @@ void ProjecteurApplication::readCommand(QLocalSocket* clientConnection)
       const bool active = (cmdValue.toLower() == "on"
                             || cmdValue == "1"
                             || cmdValue.toLower() == "true");
-      logDebug(cmdserver) << tr("Received command spot = %1").arg(active);
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command spot = %1").arg(active);
       m_spotlight->setSpotActive(active);
     }
   }
   else if (cmdKey == "settings" || cmdKey == "preferences")
   {
     const bool show = !(cmdValue.toLower() == "hide" || cmdValue == "0");
-    logDebug(cmdserver) << tr("Received command settings = %1").arg(show);
+    qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command settings = %1").arg(show);
     showPreferences(show);
   }
   else if (cmdKey == "preset")
   {
-    logDebug(cmdserver) << tr("Received command preset = %1").arg(cmdValue);
+    qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command preset = %1").arg(cmdValue);
     if (!cmdValue.isEmpty()) { m_settings->loadPreset(cmdValue); }
   }
   else if (cmdValue.size())
@@ -672,16 +744,14 @@ void ProjecteurApplication::readCommand(QLocalSocket* clientConnection)
       return (pair.first == cmdKey);
     });
     if (it != m_settings->stringProperties().cend()) {
-      logDebug(cmdserver) << tr("Received command '%1'='%2'").arg(cmdKey, cmdValue);
+      qCDebug(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received command '%1'='%2'").arg(cmdKey).arg(cmdValue);
       it->second.setFunction(cmdValue);
     }
     else {
       // string property not found...
-      logWarning(cmdserver) << tr("Received unknown command key (%1)").arg(cmdKey);
+      qCWarning(PROJECTEUR_COMMAND_LOG).noquote() << QStringLiteral("Received unknown command key (%1)").arg(cmdKey);
     }
   }
-  // reset command size, for next command
-  commandSize = 0;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -689,75 +759,9 @@ void ProjecteurApplication::showPreferences(bool show)
 {
   if (show)
   {
-    m_dialog->show();
-    m_dialog->raise();
-    static const bool qtPlatformIsWayland = QGuiApplication::platformName().toLower().startsWith("wayland");
-    if (!qtPlatformIsWayland) { m_dialog->activateWindow(); }
+    showAndActivate(m_dialog.get());
   }
   else {
-    if (m_dialog->mode() == PreferencesDialog::Mode::MinimizeOnlyDialog) {
-      m_dialog->showMinimized();
-    } else {
-      m_dialog->hide();
-    }
+    m_dialog->reject();
   }
-}
-
-// =================================================================================================
-ProjecteurCommandClientApp::ProjecteurCommandClientApp(const QStringList& ipcCommands, int &argc, char **argv)
-  : QCoreApplication(argc, argv)
-{
-  if (ipcCommands.isEmpty())
-  {
-    QMetaObject::invokeMethod(this, "quit", Qt::QueuedConnection);
-    return;
-  }
-
-  QLocalSocket* const localSocket = new QLocalSocket(this);
-
-  auto socketErrorFunc = [this, localSocket](QLocalSocket::LocalSocketError /*socketError*/) {
-    logError(cmdclient) << tr("Error sending commands: %1", "%1=error message")
-                             .arg(localSocket->errorString());
-    localSocket->close();
-    QMetaObject::invokeMethod(this, "quit", Qt::QueuedConnection);
-  };
-
-  #if (QT_VERSION >= QT_VERSION_CHECK(5, 15, 0))
-    connect(localSocket, &QLocalSocket::errorOccurred, this, std::move(socketErrorFunc));
-  #else
-    connect(localSocket,
-            static_cast<void (QLocalSocket::*)(QLocalSocket::LocalSocketError)>(&QLocalSocket::error),
-            this, std::move(socketErrorFunc));
-  #endif
-
-  connect(localSocket, &QLocalSocket::connected, [localSocket, &ipcCommands]()
-  {
-    for (const auto& ipcCommand : ipcCommands)
-    {
-      if (ipcCommand.isEmpty()) { continue; }
-
-      const QByteArray commandBlock = [&ipcCommand]()
-      {
-        const QByteArray ipcBytes = ipcCommand.toLocal8Bit();
-        QByteArray block;
-        {
-          QDataStream out(&block, QIODevice::WriteOnly);
-          out << static_cast<quint32>(ipcBytes.size());
-        }
-        block.append(ipcBytes);
-        return block;
-      }();
-
-      localSocket->write(commandBlock);
-      localSocket->flush();
-    }
-    localSocket->disconnectFromServer();
-  });
-
-  connect(localSocket, &QLocalSocket::disconnected, this, [this, localSocket]() {
-    localSocket->close();
-    QMetaObject::invokeMethod(this, "quit", Qt::QueuedConnection);
-  });
-
-  localSocket->connectToServer(localServerName());
 }

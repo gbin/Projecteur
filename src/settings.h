@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <map>
+#include <memory>
 #include <vector>
 
 #include <QAbstractListModel>
@@ -12,8 +13,9 @@
 
 struct DeviceId;
 class InputMapConfig;
+class KCoreConfigSkeleton;
 class PresetModel;
-class QSettings;
+class ProjecteurConfig;
 class QQmlPropertyMap;
 
 // -------------------------------------------------------------------------------------------------
@@ -26,6 +28,8 @@ class Settings : public QObject
   Q_PROPERTY(int dotSize READ dotSize WRITE setDotSize NOTIFY dotSizeChanged)
   Q_PROPERTY(QColor dotColor READ dotColor WRITE setDotColor NOTIFY dotColorChanged)
   Q_PROPERTY(double dotOpacity READ dotOpacity WRITE setDotOpacity NOTIFY dotOpacityChanged)
+  Q_PROPERTY(QString dotMode READ dotMode WRITE setDotMode NOTIFY dotModeChanged)
+  Q_PROPERTY(bool dotTrailEnabled READ dotTrailEnabled WRITE setDotTrailEnabled NOTIFY dotTrailEnabledChanged)
   Q_PROPERTY(QColor shadeColor READ shadeColor WRITE setShadeColor NOTIFY shadeColorChanged)
   Q_PROPERTY(double shadeOpacity READ shadeOpacity WRITE setShadeOpacity NOTIFY shadeOpacityChanged)
   Q_PROPERTY(Qt::CursorShape cursor READ cursor WRITE setCursor NOTIFY cursorChanged)
@@ -39,9 +43,9 @@ class Settings : public QObject
   Q_PROPERTY(double borderOpacity READ borderOpacity WRITE setBorderOpacity NOTIFY borderOpacityChanged)
   Q_PROPERTY(bool zoomEnabled READ zoomEnabled WRITE setZoomEnabled NOTIFY zoomEnabledChanged)
   Q_PROPERTY(double zoomFactor READ zoomFactor WRITE setZoomFactor NOTIFY zoomFactorChanged)
+  Q_PROPERTY(QString zoomMode READ zoomMode WRITE setZoomMode NOTIFY zoomModeChanged)
   Q_PROPERTY(bool multiScreenOverlayEnabled READ multiScreenOverlayEnabled
                   WRITE setMultiScreenOverlayEnabled NOTIFY multiScreenOverlayEnabledChanged)
-
 public:
   explicit Settings(QObject* parent = nullptr);
   explicit Settings(const QString& configFile, QObject* parent = nullptr);
@@ -61,6 +65,10 @@ public:
   void setDotColor(const QColor& color);
   double dotOpacity() const { return m_dotOpacity; }
   void setDotOpacity(double opacity);
+  QString dotMode() const { return m_dotMode; }
+  void setDotMode(const QString& mode);
+  bool dotTrailEnabled() const { return m_dotTrailEnabled; }
+  void setDotTrailEnabled(bool enabled);
   QColor shadeColor() const { return m_shadeColor; }
   void setShadeColor(const QColor& color);
   double shadeOpacity() const { return m_shadeOpacity; }
@@ -84,6 +92,8 @@ public:
   void setZoomEnabled(bool enabled);
   double zoomFactor() const { return m_zoomFactor; }
   void setZoomFactor(double factor);
+  QString zoomMode() const { return m_zoomMode; }
+  void setZoomMode(const QString& mode);
   bool multiScreenOverlayEnabled() const { return m_multiScreenOverlayEnabled; }
   void setMultiScreenOverlayEnabled(bool enabled);
   bool overlayDisabled() const { return m_overlayDisabled; }
@@ -149,6 +159,12 @@ public:
   static const QList<SpotShape>& spotShapes();
   QQmlPropertyMap* shapeSettings(const QString& shapeName);
 
+  using SpotlightSettings = QVariantMap;
+  SpotlightSettings spotlightSettings() const;
+  static SpotlightSettings defaultSpotlightSettings();
+  void setSpotlightSettings(const SpotlightSettings& values);
+  KCoreConfigSkeleton* configSkeleton() const;
+
   struct StringProperty
   {
     enum Type { Integer, Double, Bool, StringEnum, Color };
@@ -171,12 +187,13 @@ public:
   int deviceInputSeqInterval(const DeviceId& dId) const;
   void setDeviceInputMapConfig(const DeviceId& dId, const InputMapConfig& imc);
   InputMapConfig getDeviceInputMapConfig(const DeviceId& dId);
+  void setDevicePresentationTimerHapticStrength(const DeviceId& dId, int strength);
+  int devicePresentationTimerHapticStrength(const DeviceId& dId) const;
 
-  void setTimerSettings(const DeviceId& dId, int timerId, bool enabled, int seconds);
-  std::pair<bool, int> timerSettings(const DeviceId& dId, int timerId) const;
-
-  void setVibrationSettings(const DeviceId& dId, uint8_t len, uint8_t intensity);
-  std::pair<uint8_t, uint8_t> vibrationSettings(const DeviceId& dId) const;
+  void setPresentationTimerEnabled(bool enabled);
+  bool presentationTimerEnabled() const;
+  void setPresentationTimerDurationSeconds(int seconds);
+  int presentationTimerDurationSeconds() const;
 
 signals:
   void showSpotShadeChanged(bool show);
@@ -185,6 +202,8 @@ signals:
   void showCenterDotChanged(bool show);
   void dotColorChanged(const QColor& color);
   void dotOpacityChanged(double opacity);
+  void dotModeChanged(const QString& mode);
+  void dotTrailEnabledChanged(bool enabled);
   void shadeColorChanged(const QColor& color);
   void shadeOpacityChanged(double opcacity);
   void cursorChanged(Qt::CursorShape cursor);
@@ -197,15 +216,16 @@ signals:
   void borderOpacityChanged(double opacity);
   void zoomEnabledChanged(bool enabled);
   void zoomFactorChanged(double zoomFactor);
+  void zoomModeChanged(const QString& mode);
   void multiScreenOverlayEnabledChanged(bool enabled);
   void overlayDisabledChanged(bool disabled);
 
   void presetLoaded(const QString& preset);
 
 private:
-  QSettings* m_settings = nullptr;
+  std::unique_ptr<ProjecteurConfig> m_config;
 
-  PresetModel* m_presetModel;
+  PresetModel* m_presetModel = nullptr;
   std::map<QString, QQmlPropertyMap*> m_shapeSettings;
   QQmlPropertyMap* m_shapeSettingsRoot = nullptr;
 
@@ -213,6 +233,8 @@ private:
   int m_dotSize = 5; ///< Center Dot Size (3-100 pixels)
   QColor m_dotColor;
   double m_dotOpacity = 0.8;
+  QString m_dotMode = QStringLiteral("solid");
+  bool m_dotTrailEnabled = false;
   QColor m_shadeColor;
   double m_shadeOpacity = 0.3;
   Qt::CursorShape m_cursor = Qt::BlankCursor;
@@ -223,6 +245,7 @@ private:
   double m_borderOpacity = 0.8;
   bool m_zoomEnabled = false;
   double m_zoomFactor = 2.0;
+  QString m_zoomMode = QStringLiteral("smooth");
   bool m_showSpotShade = true;
   bool m_showCenterDot = false;
   bool m_spotRotationAllowed = false;
@@ -234,6 +257,13 @@ private:
 
 private:
   void init();
+  QVariant readValue(const QString& path, const QVariant& defaultValue = {}) const;
+  void writeValue(const QString& path, const QVariant& value);
+  bool contains(const QString& path) const;
+  void remove(const QString& path);
+  QString configFileName() const;
+  void save();
+  void sync();
   void load(const QString& preset = QString());
   QObject* shapeSettingsRootObject();
   void shapeSettingsPopulateRoot();

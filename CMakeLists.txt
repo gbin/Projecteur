@@ -1,13 +1,4 @@
-cmake_minimum_required(VERSION 3.6)
-
-# Use QTDIR environment variable with find_package,
-#  e.g. set QTDIR=/home/user/Qt/5.9.6/gcc_64/
-if(NOT "$ENV{QTDIR}" STREQUAL "")
-  set(QTDIR $ENV{QTDIR})
-  list(APPEND CMAKE_PREFIX_PATH $ENV{QTDIR})
-elseif(QTDIR)
-  list(APPEND CMAKE_PREFIX_PATH ${QTDIR})
-endif()
+cmake_minimum_required(VERSION 3.20)
 
 # Set the default build type to release
 if( NOT CMAKE_BUILD_TYPE )
@@ -17,147 +8,182 @@ endif()
 
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 
-project(Projecteur LANGUAGES CXX)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" PROJECTEUR_RELEASE_VERSION
+     LIMIT_COUNT 1 REGEX "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+if(NOT PROJECTEUR_RELEASE_VERSION)
+  message(FATAL_ERROR "VERSION must contain one semantic version such as 1.0.0")
+endif()
+
+project(Projecteur VERSION "${PROJECTEUR_RELEASE_VERSION}" LANGUAGES C CXX)
 
 add_compile_options(-Wall -Wextra -Werror)
 #set(CMAKE_CXX_CLANG_TIDY clang-tidy-12)
 
+find_package(ECM 6.7 REQUIRED NO_MODULE)
+list(APPEND CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+include(KDEInstallDirs6)
+include(ECMQtDeclareLoggingCategory)
+find_package(QtWaylandScanner REQUIRED)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 include(GitVersion)
-include(Translation)
 
-set(QtVersionOptions "Auto" "5" "6")
-set(PROJECTEUR_QT_VERSION "Auto" CACHE STRING "Choose the Qt version")
-set_property(CACHE PROJECTEUR_QT_VERSION PROPERTY STRINGS ${QtVersionOptions})
-
-list(FIND QtVersionOptions ${PROJECTEUR_QT_VERSION} index)
-if(index EQUAL -1)
-    message(FATAL_ERROR "PROJECTEUR_QT_VERSION must be one of ${QtVersionOptions}")
-endif()
-
-if ("${PROJECTEUR_QT_VERSION}" STREQUAL "Auto")
-  find_package(QT NAMES Qt6 Qt5 RCOMPONENTS Core REQUIRED)
-else()
-  set(QT_VERSION_MAJOR ${PROJECTEUR_QT_VERSION})
-endif()
-
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core REQUIRED)
-set(QT_PACKAGE_NAME Qt${QT_VERSION_MAJOR})
-
-message(STATUS "Using Qt version: ${Qt${QT_VERSION_MAJOR}_VERSION}")
-
-if(${QT_PACKAGE_NAME}_VERSION VERSION_LESS "6.0")
-  set(CMAKE_CXX_STANDARD 14)
-else()
-  set(CMAKE_CXX_STANDARD 17)
-endif()
-
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 set(CMAKE_AUTOMOC ON)
 
-find_package(${QT_PACKAGE_NAME} 5.7 REQUIRED COMPONENTS Core Gui Quick Widgets)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core DBus Gui Quick ShaderTools WaylandClient Widgets)
+find_package(KF6 6.7 REQUIRED COMPONENTS Config ConfigWidgets CoreAddons DBusAddons GlobalAccel I18n
+                                        Notifications Package KirigamiPlatform WidgetsAddons WindowSystem XmlGui)
+find_package(KPipeWire 6.7 REQUIRED)
+find_package(Plasma 6.7 REQUIRED)
+find_package(LayerShellQt 6.7 REQUIRED)
+message(STATUS "Using Qt version: ${Qt6_VERSION}")
 
-if(${QT_PACKAGE_NAME}_VERSION VERSION_LESS "6.0")
-  find_package(${QT_PACKAGE_NAME} QUIET COMPONENTS X11Extras)
-  set(HAS_Qt_X11Extras ${${QT_PACKAGE_NAME}_FOUND})
-else()
-  set(HAS_Qt_X11Extras 0)
-endif()
-
-find_package(${QT_PACKAGE_NAME} QUIET COMPONENTS DBus)
-set(HAS_Qt_DBus ${${QT_PACKAGE_NAME}_FOUND})
-find_package(${QT_PACKAGE_NAME} QUIET COMPONENTS QuickCompiler)
-set(HAS_Qt_QuickCompiler ${${QT_PACKAGE_NAME}_FOUND})
-
-# Qt 5.8 seems to have issues with the way Projecteur shows the full screen overlay window,
-# let's warn the user about it.
-if(Qt5_VERSION VERSION_EQUAL "5.8"
-    OR (Qt5_VERSION VERSION_GREATER "5.8" AND Qt5_VERSION VERSION_LESS "5.9"))
-  message(WARNING "There are known issues when using Projecteur with Qt Version 5.8, "
-                  "please use a different Qt Version.")
-endif()
-
-if (HAS_Qt_QuickCompiler)
-  # Off by default, since this ties the application strictly to the Qt version
-  # it is built with, see https://doc.qt.io/qt-5.12/qtquick-deployment.html#compiling-qml-ahead-of-time
-  option(USE_QTQUICK_COMPILER "Use the QtQuickCompiler" OFF)
-else()
-  set(USE_QTQUICK_COMPILER OFF)
-endif()
-
-if (USE_QTQUICK_COMPILER)
-  message(STATUS "Using QtQuick Compiler.")
-  qtquick_compiler_add_resources(RESOURCES qml/qml.qrc)
-  # Avoid CMake policy CMP0071 warning
-  foreach(resfile IN LISTS RESOURCES)
-    set_property(SOURCE "${resfile}" PROPERTY SKIP_AUTOMOC ON)
-  endforeach()
-else()
-  if(${QT_PACKAGE_NAME}_VERSION VERSION_LESS "6.0")
-    qt5_add_resources(RESOURCES qml/qml.qrc)
-  else()
-    qt6_add_resources(RESOURCES qml/qml-qt6.qrc)
-  endif()
-endif()
-
-if(${QT_PACKAGE_NAME}_VERSION VERSION_LESS "6.0")
-  qt5_add_resources(RESOURCES resources.qrc)
-else()
-  qt6_add_resources(RESOURCES resources.qrc)
-endif()
+qt6_add_resources(RESOURCES qml/qml.qrc resources.qrc)
 
 add_executable(projecteur
   src/main.cc                  src/enum-helper.h
-  src/aboutdlg.cc              src/aboutdlg.h
   src/actiondelegate.cc        src/actiondelegate.h
-  src/colorselector.cc         src/colorselector.h
   src/device.cc                src/device.h
   src/device-command-helper.cc src/device-command-helper.h
   src/device-hidpp.cc          src/device-hidpp.h
   src/device-key-lookup.cc     src/device-key-lookup.h
-  src/device-vibration.cc      src/device-vibration.h
   src/deviceinput.cc           src/deviceinput.h
   src/devicescan.cc            src/devicescan.h
   src/deviceswidget.cc         src/deviceswidget.h
   src/hidpp.cc                 src/hidpp.h
   src/linuxdesktop.cc          src/linuxdesktop.h
+  src/kwinscreencast.cc        src/kwinscreencast.h
   src/iconwidgets.cc           src/iconwidgets.h
   src/imageitem.cc             src/imageitem.h
   src/inputmapconfig.cc        src/inputmapconfig.h
   src/inputseqedit.cc          src/inputseqedit.h
-  src/logging.cc               src/logging.h
   src/nativekeyseqedit.cc      src/nativekeyseqedit.h
   src/preferencesdlg.cc        src/preferencesdlg.h
+  src/presentationtimer.cc     src/presentationtimer.h
   src/projecteurapp.cc         src/projecteurapp.h
-  src/runguard.cc              src/runguard.h
+  src/projecteurcontrol.cc     src/projecteurcontrol.h
   src/settings.cc              src/settings.h
   src/spotlight.cc             src/spotlight.h
   src/spotshapes.cc            src/spotshapes.h
   src/virtualdevice.cc         src/virtualdevice.h
   ${RESOURCES})
 
-target_include_directories(projecteur PRIVATE src)
-
-target_link_libraries(projecteur
-  PRIVATE ${QT_PACKAGE_NAME}::Core ${QT_PACKAGE_NAME}::Quick ${QT_PACKAGE_NAME}::Widgets
+qt6_add_shaders(projecteur projecteur_shaders
+  PREFIX "/shaders"
+  BASE "${CMAKE_CURRENT_SOURCE_DIR}/qml/shaders"
+  FILES qml/shaders/textzoom.frag
+        qml/shaders/diffusedot.frag
+        qml/shaders/dottrail.frag
 )
 
-if(HAS_Qt_X11Extras)
-  if(${QT_PACKAGE_NAME}_VERSION VERSION_LESS "6.0")
-    target_link_libraries(projecteur PRIVATE ${QT_PACKAGE_NAME}::X11Extras)
-  endif()
-  target_compile_definitions(projecteur PRIVATE HAS_Qt_X11Extras=1)
-else()
-  message(STATUS "Compiling without Qt5::X11Extras.")
-endif()
+ecm_add_qtwayland_client_protocol(projecteur
+  PROTOCOL "${CMAKE_CURRENT_SOURCE_DIR}/protocols/zkde-screencast-unstable-v1.xml"
+  BASENAME zkde-screencast-unstable-v1
+)
 
-if(HAS_Qt_DBus)
-  target_link_libraries(projecteur PRIVATE ${QT_PACKAGE_NAME}::DBus)
-  target_compile_definitions(projecteur PRIVATE HAS_Qt_DBus=1)
-else()
-  message(STATUS "Compiling without Qt5::DBus.")
-endif()
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_main_debug.h
+  IDENTIFIER PROJECTEUR_MAIN_LOG
+  CATEGORY_NAME projecteur.mainapp
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur application"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_command_debug.h
+  IDENTIFIER PROJECTEUR_COMMAND_LOG
+  CATEGORY_NAME projecteur.cmdserver
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur command service"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_desktop_debug.h
+  IDENTIFIER PROJECTEUR_DESKTOP_LOG
+  CATEGORY_NAME projecteur.desktop
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur desktop integration"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_device_debug.h
+  IDENTIFIER PROJECTEUR_DEVICE_LOG
+  CATEGORY_NAME projecteur.device
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur device handling"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_hid_debug.h
+  IDENTIFIER PROJECTEUR_HID_LOG
+  CATEGORY_NAME projecteur.hid
+  OLD_CATEGORY_NAMES projecteur.HID
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur HID++ protocol"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_input_debug.h
+  IDENTIFIER PROJECTEUR_INPUT_LOG
+  CATEGORY_NAME projecteur.input
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur input mapping"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_settings_debug.h
+  IDENTIFIER PROJECTEUR_SETTINGS_LOG
+  CATEGORY_NAME projecteur.settings
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur settings"
+  EXPORT Projecteur
+)
+ecm_qt_declare_logging_category(projecteur
+  HEADER projecteur_virtual_device_debug.h
+  IDENTIFIER PROJECTEUR_VIRTUAL_DEVICE_LOG
+  CATEGORY_NAME projecteur.virtualdevice
+  DEFAULT_SEVERITY Info
+  DESCRIPTION "Projecteur virtual input devices"
+  EXPORT Projecteur
+)
+ecm_qt_install_logging_categories(
+  EXPORT Projecteur
+  FILE projecteur.categories
+  DESTINATION "${KDE_INSTALL_LOGGINGCATEGORIESDIR}"
+  SORT
+)
+
+set(PROJECTEUR_CONTROL_XML
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/org.projecteur.Projecteur.xml")
+qt_add_dbus_adaptor(PROJECTEUR_DBUS_ADAPTOR_SOURCES
+  "${PROJECTEUR_CONTROL_XML}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/projecteurcontrol.h"
+  ProjecteurControl
+  projecteurcontroladaptor
+  ProjecteurControlAdaptor
+)
+target_sources(projecteur PRIVATE ${PROJECTEUR_DBUS_ADAPTOR_SOURCES})
+
+kconfig_target_kcfg_file(projecteur
+  FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/projecteurconfig.kcfg"
+  CLASS_NAME ProjecteurConfig
+  MUTATORS
+  DEFAULT_VALUE_GETTERS
+  KCONFIG_CONSTRUCTOR
+)
+
+target_include_directories(projecteur PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
+
+target_link_libraries(projecteur
+  PRIVATE Qt6::Core Qt6::DBus Qt6::Quick Qt6::WaylandClient Qt6::Widgets
+          K::KPipeWire
+          KF6::ConfigCore KF6::ConfigGui KF6::ConfigWidgets KF6::CoreAddons KF6::DBusAddons
+          KF6::GlobalAccel KF6::I18n KF6::Notifications KF6::WidgetsAddons
+          KF6::WindowSystem KF6::XmlGui
+          LayerShellQt::Interface
+)
 
 target_compile_options(projecteur
   PRIVATE
@@ -167,36 +193,43 @@ target_compile_options(projecteur
 target_compile_definitions(projecteur PRIVATE
   CXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID} CXX_COMPILER_VERSION=${CMAKE_CXX_COMPILER_VERSION})
 
+add_subdirectory(plasma)
+
 # Set version project properties for builds not from a git repository (e.g. created with git archive)
 # If creating the version number via git information fails, the following target properties
 # will be used. IMPORTANT - when creating a release tag with git flow:
 #  Update this information - the version numbers and the version type.
 #  VERSION_TYPE must be either 'release' or 'develop'
 set_target_properties(projecteur PROPERTIES
-  VERSION_MAJOR 0
-  VERSION_MINOR 10
-  VERSION_PATCH 0
+  VERSION_MAJOR "${PROJECT_VERSION_MAJOR}"
+  VERSION_MINOR "${PROJECT_VERSION_MINOR}"
+  VERSION_PATCH "${PROJECT_VERSION_PATCH}"
+  # Source archives do not contain .git. They must still report the release version.
   VERSION_TYPE release
   VERSION_DISTANCE_OFFSET 0
 )
 add_version_info(projecteur "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # Create files containing generated version strings, helping package maintainers
-get_target_property(PROJECTEUR_VERSION_STRING projecteur VERSION_STRING)
+get_target_property(PROJECTEUR_VERSION_STRING projecteur VERSION_STRING_FULL)
 # Arch Linux = PKGBUILD/makepkg: '-' is not allowed in version number
 string(REPLACE "-" "" PROJECTEUR_VERSION_STRING_ARCHLINUX "${PROJECTEUR_VERSION_STRING}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version-string" "${PROJECTEUR_VERSION_STRING}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version-string.archlinux" "${PROJECTEUR_VERSION_STRING_ARCHLINUX}")
 
-# Translation
-list(APPEND languages de fr es)
-set(ts_directories "${CMAKE_CURRENT_SOURCE_DIR}/i18n")
-add_translations_target("projecteur" "${CMAKE_CURRENT_BINARY_DIR}" "${ts_directories}" "${languages}")
-add_translation_update_task("projecteur" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/i18n" "${languages}")
+# Install gettext catalogs supplied by KDE's translation infrastructure.
+ki18n_install(po)
 
 # Add target with non-source files for convenience when using IDEs like QtCreator and others
-add_custom_target(non-sources SOURCES README.md LICENSE.md doc/CHANGELOG.md devices.conf
-                                      src/extra-devices.cc.in 55-projecteur.rules.in
+add_custom_target(non-sources SOURCES README.md CONTRIBUTING.md LICENSE.md
+                                      doc/CHANGELOG.md doc/USER-GUIDE.md
+                                      doc/TROUBLESHOOTING.md devices.conf
+                                      src/extra-devices.cc.in src/projecteurconfig.kcfg
+                                      src/org.projecteur.Projecteur.xml
+                                      qml/shaders/textzoom.frag
+                                      qml/shaders/diffusedot.frag
+                                      qml/shaders/dottrail.frag
+                                      55-projecteur.rules.in projecteur.notifyrc
                                       cmake/templates/projecteur.desktop.in)
 
 # Install
@@ -281,14 +314,24 @@ install(FILES icons/projecteur-tray.svg DESTINATION share/icons/hicolor/48x48/ap
 install(FILES icons/projecteur-tray.svg DESTINATION share/icons/hicolor/64x64/apps/ RENAME projecteur.svg)
 install(FILES icons/projecteur-tray.svg DESTINATION share/icons/hicolor/128x128/apps/ RENAME projecteur.svg)
 install(FILES icons/projecteur-tray.svg DESTINATION share/icons/hicolor/256x256/apps/ RENAME projecteur.svg)
+install(FILES projecteur.notifyrc DESTINATION ${KDE_INSTALL_KNOTIFYRCDIR})
+install(FILES src/org.projecteur.Projecteur.xml DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR})
 
 # Set variables for file configurations
 get_target_property(VERSION_STRING projecteur VERSION_STRING)
 get_target_property(VERSION_DATE_MONTH_YEAR projecteur VERSION_DATE_MONTH_YEAR)
-set(HOMEPAGE "https://github.com/jahnf/Projecteur")
+set(HOMEPAGE "https://github.com/gbin/Projecteur")
 
-configure_file("${TMPLDIR}/projecteur.desktop.in" "projecteur.desktop" @ONLY)
-install(FILES "${OUTDIR}/projecteur.desktop" DESTINATION share/applications/)
+set(PROJECTEUR_APPLICATION_ID "org.projecteur.Projecteur")
+configure_file("${TMPLDIR}/projecteur.desktop.in"
+               "${PROJECTEUR_APPLICATION_ID}.desktop" @ONLY)
+install(FILES "${OUTDIR}/${PROJECTEUR_APPLICATION_ID}.desktop"
+        DESTINATION share/applications/)
+kdbusaddons_generate_dbus_service_file(
+  projecteur
+  "${PROJECTEUR_APPLICATION_ID}"
+  "${KDE_INSTALL_FULL_BINDIR}"
+)
 
 # Configure man page and gzip it.
 option(COMPRESS_MAN_PAGE "Compress the man page" ON)
@@ -307,8 +350,10 @@ else()
   install(FILES "${OUTDIR}/projecteur.1" DESTINATION share/man/man1/)
 endif()
 
-configure_file("${TMPLDIR}/projecteur.metainfo.xml" "projecteur.metainfo.xml" @ONLY)
-install(FILES "${OUTDIR}/projecteur.metainfo.xml" DESTINATION share/metainfo/)
+configure_file("${TMPLDIR}/projecteur.metainfo.xml"
+               "${PROJECTEUR_APPLICATION_ID}.metainfo.xml" @ONLY)
+install(FILES "${OUTDIR}/${PROJECTEUR_APPLICATION_ID}.metainfo.xml"
+        DESTINATION share/metainfo/)
 
 configure_file("${TMPLDIR}/projecteur.bash-completion" "projecteur.bash-completion" @ONLY)
 install(FILES "${OUTDIR}/projecteur.bash-completion"
@@ -331,7 +376,7 @@ if(PACKAGE_TARGETS)
   add_dist_package_target(
     PROJECT "${CMAKE_PROJECT_NAME}"
     TARGET projecteur
-    DESCRIPTION_BRIEF "Linux/X11 application for the Logitech Spotlight device."
+    DESCRIPTION_BRIEF "Wayland application for the Logitech Spotlight device."
     DESCRIPTION_FULL
 "Projecteur is a virtual laser pointer for use with inertial pointers such as
  the Logitech Spotlight. Projecteur can show a colored dot, a highlighted
@@ -373,4 +418,3 @@ find_program(iwyu_path NAMES include-what-you-use iwyu)
 if(ENABLE_IWYU AND iwyu_path)
   set_property(TARGET projecteur PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
 endif()
-

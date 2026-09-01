@@ -5,10 +5,13 @@
 
 #include "device-hidpp.h"
 #include "deviceinput.h"
-#include "logging.h"
+#include "projecteur_device_debug.h"
+#include "projecteur_hid_debug.h"
+#include "projecteur_input_debug.h"
 #include "settings.h"
 #include "virtualdevice.h"
 
+#include <QElapsedTimer>
 #include <QSocketNotifier>
 #include <QTimer>
 #include <QVarLengthArray>
@@ -19,15 +22,19 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-DECLARE_LOGGING_CATEGORY(device)
-DECLARE_LOGGING_CATEGORY(hid)
-DECLARE_LOGGING_CATEGORY(input)
-
 namespace {
-  const auto hexId = logging::hexId;
+  const auto hexId = formatHexId;
 
-  // See details on workaround in onEventDataAvailable
-  bool workaroundLogitechFirstMoveEvent = true;
+  QElapsedTimer lastLogitechSlideNavigation;
+
+  bool isLogitechSpotlight(const DeviceId& id)
+  {
+    return id.vendorId == 0x46d
+      && (id.productId == 0xc53e
+          || id.productId == 0xb503
+          || id.productId == 0xc548
+          || id.productId == 0xb506);
+  }
 
 } // end anonymous namespace
 
@@ -86,7 +93,6 @@ Spotlight::Spotlight(QObject* parent, Options options, Settings* settings)
 
   connect(m_activeTimer, &QTimer::timeout, this, [this](){
     setSpotActive(false);
-    workaroundLogitechFirstMoveEvent = true;
   });
 
   if (m_options.enableUInput) {
@@ -96,7 +102,7 @@ Spotlight::Spotlight(QObject* parent, Options options, Settings* settings)
       VirtualDevice::Type::Keyboard, "Projecteur_virtual_keyboard");
   }
   else {
-    logInfo(device) << tr("Virtual device initialization was skipped.");
+    qCInfo(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Virtual device initialization was skipped.");
   }
 
   m_connectionTimer->setSingleShot(true);
@@ -107,7 +113,7 @@ Spotlight::Spotlight(QObject* parent, Options options, Settings* settings)
   m_connectionTimer->setInterval(delayedConnectionTimerIntervalMs);
 
   connect(m_connectionTimer, &QTimer::timeout, this, [this]() {
-    logDebug(device) << tr("New connection check triggered");
+    qCDebug(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("New connection check triggered");
     connectDevices();
   });
 
@@ -184,10 +190,17 @@ int Spotlight::connectDevices()
     const bool anyConnectedBefore = anySpotlightDeviceConnected();
     for (const auto& scanSubDevice : dev.subDevices)
     {
-      if (!scanSubDevice.deviceReadable)
+      const bool requiresWriteAccess =
+        scanSubDevice.type == DeviceScan::SubDevice::Type::Hidraw;
+      if (!scanSubDevice.deviceReadable
+          || (requiresWriteAccess && !scanSubDevice.deviceWritable))
       {
-        logWarn(device) << tr("Sub-device not readable: %1 (%2:%3) %4")
-          .arg(dc->deviceName(), hexId(dev.id.vendorId), hexId(dev.id.productId), scanSubDevice.deviceFile);
+        qCWarning(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Sub-device not accessible: %1 (%2:%3) %4").arg(dc->deviceName()).arg(hexId(dev.id.vendorId)).arg(hexId(dev.id.productId)).arg(scanSubDevice.deviceFile);
+        QTimer::singleShot(
+          0, this,
+          [this, name = dc->deviceName(), path = scanSubDevice.deviceFile]() {
+            emit deviceAccessError(name, path);
+          });
         continue;
       }
       if (dc->hasSubDevice(scanSubDevice.deviceFile)) { continue; }
@@ -322,16 +335,13 @@ int Spotlight::connectDevices()
       {
         QTimer::singleShot(0, this,
         [this, id = dev.id, devName = dc->deviceName(), anyConnectedBefore](){
-          logInfo(device) << tr("Connected device: %1 (%2:%3)")
-                             .arg(devName, hexId(id.vendorId), hexId(id.productId));
+          qCInfo(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Connected device: %1 (%2:%3)").arg(devName).arg(hexId(id.vendorId)).arg(hexId(id.productId));
           emit deviceConnected(id, devName);
           if (!anyConnectedBefore) { emit anySpotlightDeviceConnectedChanged(true); }
         });
       }
 
-      logDebug(device) << tr("Connected sub-device: %1 (%2:%3) %4")
-                          .arg(dc->deviceName(), hexId(dev.id.vendorId),
-                               hexId(dev.id.productId), scanSubDevice.deviceFile);
+      qCDebug(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Connected sub-device: %1 (%2:%3) %4").arg(dc->deviceName()).arg(hexId(dev.id.vendorId)).arg(hexId(dev.id.productId)).arg(scanSubDevice.deviceFile);
       emit subDeviceConnected(dev.id, dc->deviceName(), scanSubDevice.deviceFile);
     }
 
@@ -359,9 +369,7 @@ void Spotlight::removeDeviceConnection(const QString &devicePath)
 
     if (dc->subDeviceCount() == 0)
     {
-      logInfo(device) << tr("Disconnected device: %1 (%2:%3)")
-                         .arg(dc->deviceName(), hexId(dc_it->first.vendorId),
-                              hexId(dc_it->first.productId));
+      qCInfo(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Disconnected device: %1 (%2:%3)").arg(dc->deviceName()).arg(hexId(dc_it->first.vendorId)).arg(hexId(dc_it->first.productId));
       emit deviceDisconnected(dc_it->first, dc->deviceName());
       dc_it = m_deviceConnections.erase(dc_it);
     }
@@ -396,6 +404,19 @@ void Spotlight::onEventDataAvailable(int fd, SubEventConnection& connection)
     }
     ++buf;
 
+    const bool isSlideNavigationKey =
+      ev.type == EV_KEY
+      && (ev.code == KEY_RIGHT || ev.code == KEY_LEFT
+          || ev.code == KEY_PAGEDOWN || ev.code == KEY_PAGEUP);
+    if (isSlideNavigationKey) {
+      if (isLogitechSpotlight(connection.deviceId())) {
+        lastLogitechSlideNavigation.restart();
+      }
+      if (ev.value == 1) {
+        emit slideNavigationPressed();
+      }
+    }
+
     if (ev.type == EV_SYN)
     {
       // Check for relative events -> set Spotlight active
@@ -405,24 +426,19 @@ void Spotlight::onEventDataAvailable(int fd, SubEventConnection& connection)
 
       if (isMouseMoveEvent)
       { // Skip input mapping for mouse move events completely
-
         // Note: During a Next or Back button press the Logitech Spotlight device can send
         // move events via hid++ notifications. It seems that just when releasing the
         // next or back button sometimes a mouse move event 'leaks' through here as
         // relative input event causing the spotlight to be activated.
-        // The workaround skips a first input move event from the logitech spotlight device.
-        const bool isLogitechSpotlight = connection.deviceId().vendorId == 0x46d
-          && (connection.deviceId().productId == 0xc53e || connection.deviceId().productId == 0xb503);
-        const bool logitechIsFirst = isLogitechSpotlight && workaroundLogitechFirstMoveEvent;
+        // Suppress only moves immediately adjacent to slide navigation; skipping the
+        // first move after every idle period makes genuine activation feel delayed.
+        constexpr qint64 leakedMoveSuppressionMs = 250;
+        const bool suppressLeakedMove =
+          isLogitechSpotlight(connection.deviceId())
+          && lastLogitechSlideNavigation.isValid()
+          && lastLogitechSlideNavigation.elapsed() < leakedMoveSuppressionMs;
 
-        if (isLogitechSpotlight)
-        {
-          workaroundLogitechFirstMoveEvent = false;
-          if(!logitechIsFirst) {
-            if (!spotActive()) { setSpotActive(true); }
-          }
-        }
-        else if (!m_activeTimer->isActive()) {
+        if (!suppressLeakedMove && !spotActive()) {
           setSpotActive(true);
         }
 
@@ -440,7 +456,8 @@ void Spotlight::onEventDataAvailable(int fd, SubEventConnection& connection)
     }
     else if (buf.pos() >= buf.size())
     { // No idea if this will ever happen, but log it to make sure we get notified.
-      logWarning(device) << tr("Discarded %1 input events without EV_SYN.").arg(buf.size());
+      qCWarning(PROJECTEUR_DEVICE_LOG).noquote() << "Discarded" << buf.size()
+                                      << "input events without EV_SYN.";
       connection.inputMapper()->resetState();
       buf.reset();
     }
@@ -523,7 +540,6 @@ void Spotlight::registerForNotifications(SubHidppConnection* connection)
       const int adjustedY = getReducedParam(y);
 
       if (adjustedX == 0 && adjustedY == 0) { return; }
-
       static const auto scrollHAction = GlobalActions::scrollHorizontal();
       scrollHAction->param = -adjustedX;
 
@@ -570,7 +586,7 @@ bool Spotlight::setupDevEventInotify()
   {
     fd = inotify_init();
     if (fd == -1) {
-      logError(device) << tr("inotify_init() failed. Detection of new attached devices will not work.");
+      qCCritical(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("inotify_init() failed. Detection of new attached devices will not work.");
       return false;
     }
   }
@@ -578,7 +594,7 @@ bool Spotlight::setupDevEventInotify()
   const int wd = inotify_add_watch(fd, "/dev/input", IN_CREATE | IN_DELETE);
 
   if (wd < 0) {
-    logError(device) << tr("inotify_add_watch for /dev/input returned with failure.");
+    qCCritical(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("inotify_add_watch for /dev/input returned with failure.");
     return false;
   }
 

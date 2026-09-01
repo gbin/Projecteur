@@ -7,7 +7,8 @@
 #include "devicescan.h"
 #include "enum-helper.h"
 #include "hidpp.h"
-#include "logging.h"
+#include "projecteur_device_debug.h"
+#include "projecteur_hid_debug.h"
 
 #include <QSocketNotifier>
 #include <QTimer>
@@ -16,17 +17,8 @@
 #include <linux/hidraw.h>
 #include <unistd.h>
 
-LOGGING_CATEGORY(device, "device")
-LOGGING_CATEGORY(hid, "HID")
-
 namespace  {
-  // -----------------------------------------------------------------------------------------------
-  #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-  const auto registeredComparator_ = QMetaType::registerComparators<DeviceId>();
-  #endif
-
-  const auto hexId = logging::hexId;
-  // class i18n : public QObject {}; // for i18n and logging
+  const auto hexId = formatHexId;
 } // end anonymous namespace
 
 // -------------------------------------------------------------------------------------------------
@@ -102,9 +94,7 @@ bool DeviceConnection::removeSubDevice(const QString& path)
   if (find_it != m_subDeviceConnections.end())
   {
     if (find_it->second) { find_it->second->disconnect(); } // Important
-    logDebug(device) << tr("Disconnected sub-device: %1 (%2:%3) %4")
-                        .arg(m_deviceName, hexId(m_deviceId.vendorId),
-                             hexId(m_deviceId.productId), path);
+    qCDebug(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Disconnected sub-device: %1 (%2:%3) %4").arg(m_deviceName).arg(hexId(m_deviceId.vendorId)).arg(hexId(m_deviceId.productId)).arg(path);
     emit subDeviceDisconnected(m_deviceId, path);
     m_subDeviceConnections.erase(find_it);
     return true;
@@ -202,7 +192,7 @@ std::shared_ptr<SubEventConnection> SubEventConnection::create(const DeviceScan:
   const int evfd = ::open(sd.deviceFile.toLocal8Bit().constData(), O_RDONLY, 0);
 
   if (evfd == -1) {
-    logWarn(device) << tr("Cannot open event device '%1' for read.").arg(sd.deviceFile);
+    qCWarning(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Cannot open event device '%1' for read.").arg(sd.deviceFile);
     return std::shared_ptr<SubEventConnection>();
   }
 
@@ -213,8 +203,7 @@ std::shared_ptr<SubEventConnection> SubEventConnection::create(const DeviceScan:
   if (id.vendor != dc.deviceId().vendorId || id.product != dc.deviceId().productId)
   {
     ::close(evfd);
-    logDebug(device) << tr("Device id mismatch: %1 (%2:%3)")
-                        .arg(sd.deviceFile, hexId(id.vendor), hexId(id.product));
+    qCDebug(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Device id mismatch: %1 (%2:%3)").arg(sd.deviceFile).arg(hexId(id.vendor)).arg(hexId(id.product));
     return std::shared_ptr<SubEventConnection>();
   }
 
@@ -222,8 +211,7 @@ std::shared_ptr<SubEventConnection> SubEventConnection::create(const DeviceScan:
   if (ioctl(evfd, EVIOCGBIT(0, sizeof(bitmask)), &bitmask) < 0)
   {
     ::close(evfd);
-    logWarn(device) << tr("Cannot get device properties: %1 (%2:%3)")
-                       .arg(sd.deviceFile, hexId(id.vendor), hexId(id.product));
+    qCWarning(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Cannot get device properties: %1 (%2:%3)").arg(sd.deviceFile).arg(hexId(id.vendor)).arg(hexId(id.product));
     return std::shared_ptr<SubEventConnection>();
   }
 
@@ -252,7 +240,7 @@ std::shared_ptr<SubEventConnection> SubEventConnection::create(const DeviceScan:
       if (res == 0) { return true; }
 
       // Grab not successful
-      logError(device) << tr("Error grabbing device: %1 (return value: %2)").arg(sd.deviceFile).arg(res);
+      qCCritical(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Error grabbing device: %1 (return value: %2)").arg(sd.deviceFile).arg(res);
       ioctl(evfd, EVIOCGRAB, 0);
     }
     return false;
@@ -272,7 +260,7 @@ std::shared_ptr<SubEventConnection> SubEventConnection::create(const DeviceScan:
     if (grabbed) {
       ioctl(evfd, EVIOCGRAB, 0);
     }
-    logDebug(device) << tr("Closing file descriptor for '%1'").arg(path);
+    qCDebug(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Closing file descriptor for '%1'").arg(path);
     ::close(evfd);
   });
 
@@ -325,7 +313,7 @@ int SubHidrawConnection::openHidrawSubDevice(const DeviceScan::SubDevice& sd, co
   const int devfd = ::open(sd.deviceFile.toLocal8Bit().constData(), O_RDWR|O_NONBLOCK , 0);
 
   if (devfd == errorResult) {
-    logWarn(device) << tr("Cannot open hidraw device '%1' for read/write.").arg(sd.deviceFile);
+    qCWarning(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Cannot open hidraw device '%1' for read/write.").arg(sd.deviceFile);
     return errorResult;
   }
 
@@ -334,7 +322,7 @@ int SubHidrawConnection::openHidrawSubDevice(const DeviceScan::SubDevice& sd, co
     int descriptorSize = 0;
     if (ioctl(devfd, HIDIOCGRDESCSIZE, &descriptorSize) < 0)
     {
-      logWarn(device) << tr("Cannot retrieve report descriptor size of hidraw device '%1'.").arg(sd.deviceFile);
+      qCWarning(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Cannot retrieve report descriptor size of hidraw device '%1'.").arg(sd.deviceFile);
       ::close(devfd);
       return errorResult;
     }
@@ -343,7 +331,7 @@ int SubHidrawConnection::openHidrawSubDevice(const DeviceScan::SubDevice& sd, co
     reportDescriptor.size = descriptorSize;
     if (ioctl(devfd, HIDIOCGRDESC, &reportDescriptor) < 0)
     {
-      logWarn(device) << tr("Cannot retrieve report descriptor of hidraw device '%1'.").arg(sd.deviceFile);
+      qCWarning(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Cannot retrieve report descriptor of hidraw device '%1'.").arg(sd.deviceFile);
       ::close(devfd);
       return errorResult;
     }
@@ -353,7 +341,7 @@ int SubHidrawConnection::openHidrawSubDevice(const DeviceScan::SubDevice& sd, co
   // get the hidraw sub-device id info
   if (ioctl(devfd, HIDIOCGRAWINFO, &devinfo) < 0)
   {
-    logWarn(device) << tr("Cannot get info from hidraw device '%1'.").arg(sd.deviceFile);
+    qCWarning(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Cannot get info from hidraw device '%1'.").arg(sd.deviceFile);
     ::close(devfd);
     return errorResult;
   };
@@ -362,8 +350,7 @@ int SubHidrawConnection::openHidrawSubDevice(const DeviceScan::SubDevice& sd, co
   if (static_cast<uint16_t>(devinfo.vendor) != devId.vendorId
       || static_cast<uint16_t>(devinfo.product) != devId.productId)
   {
-    logDebug(device) << tr("Device id mismatch: %1 (%2:%3)")
-                          .arg(sd.deviceFile, hexId(devinfo.vendor), hexId(devinfo.product));
+    qCDebug(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Device id mismatch: %1 (%2:%3)").arg(sd.deviceFile).arg(hexId(devinfo.vendor)).arg(hexId(devinfo.product));
     ::close(devfd);
     return errorResult;
   }
@@ -386,10 +373,10 @@ ssize_t SubHidrawConnection::sendData(const void* msg, size_t msgLen)
   const auto res = ::write(m_writeNotifier->socket(), msg, msgLen);
 
   if (static_cast<size_t>(res) == msgLen) {
-    logDebug(hid) << res << "bytes written to" << path() << "("
+    qCDebug(PROJECTEUR_HID_LOG).noquote() << res << "bytes written to" << path() << "("
                   << QByteArray::fromRawData(static_cast<const char*>(msg), msgLen).toHex() << ")";
   } else {
-    logWarn(hid) << tr("Writing to '%1' failed. (%2)").arg(path()).arg(res);
+    qCWarning(PROJECTEUR_HID_LOG).noquote() << QStringLiteral("Writing to '%1' failed. (%2)").arg(path()).arg(res);
   }
 
   return res;
@@ -412,7 +399,7 @@ void SubHidrawConnection::createSocketNotifiers(int fd, const QString& path)
   connect(readNotifier, &QSocketNotifier::destroyed, [fdPtr, path]()
   {
     if (fdPtr && *fdPtr != -1) {
-      logDebug(device) << tr("Closing file descriptor for '%1'").arg(path);
+      qCDebug(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Closing file descriptor for '%1'").arg(path);
       ::close(*fdPtr);
       *fdPtr = -1;
     }
@@ -425,7 +412,7 @@ void SubHidrawConnection::createSocketNotifiers(int fd, const QString& path)
   connect(writeNotifier, &QSocketNotifier::destroyed, [fdPtr, path]()
   {
     if (fdPtr && *fdPtr != -1) {
-      logDebug(device) << tr("Closing file descriptor for '%1'").arg(path);
+      qCDebug(PROJECTEUR_DEVICE_LOG).noquote() << QStringLiteral("Closing file descriptor for '%1'").arg(path);
       ::close(*fdPtr);
       *fdPtr = -1;
     }
@@ -446,7 +433,7 @@ void SubHidrawConnection::onHidrawDataAvailable(int fd)
 
   // For generic hidraw devices without known protocols, just print out the
   // received data into the debug log
-  logDebug(hid) << "Received" << readVal.toHex() << "from" << path();
+  qCDebug(PROJECTEUR_HID_LOG).noquote() << "Received" << readVal.toHex() << "from" << path();
 }
 
 // -------------------------------------------------------------------------------------------------

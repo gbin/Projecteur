@@ -4,9 +4,11 @@
 #include "projecteurapp.h"
 #include "projecteur-GitVersion.h"
 
-#include "logging.h"
-#include "runguard.h"
 #include "settings.h"
+
+#include <KAboutData>
+#include <KDBusService>
+#include <KLocalizedString>
 
 #include <QCommandLineParser>
 
@@ -21,16 +23,73 @@
 #define XSTRINGIFY(s) STRINGIFY(s)
 #define STRINGIFY(x) #x
 
-LOGGING_CATEGORY(appMain, "main")
-
 namespace {
   // -----------------------------------------------------------------------------------------------
-  constexpr int PROJECTEUR_ERROR_ANOTHER_INST_RUNNING = 42;
   constexpr int PROJECTEUR_ERROR_NO_INSTANCE_FOUND = 43;
   constexpr int PROJECTEUR_ERROR_EMPTY_COMMAND_PROPS = 44;
 
   // -----------------------------------------------------------------------------------------------
-  class Main : public QObject {};
+  KAboutData projecteurAboutData()
+  {
+    KAboutData aboutData(
+      QStringLiteral("Projecteur"),
+      QStringLiteral("Projecteur"),
+      QString::fromUtf8(projecteur::version_string()),
+      i18n("A KDE Plasma spotlight for Logitech presenter devices."),
+      KAboutLicense::MIT,
+      i18n("Copyright 2018–2021 Jahn Fuchs\n"
+               "Current development copyright 2026 Guillaume Binet"),
+      {},
+      QStringLiteral("https://github.com/gbin/Projecteur"),
+      QStringLiteral("https://github.com/gbin/Projecteur/issues"));
+
+    aboutData.setOrganizationDomain("projecteur.org");
+    aboutData.setDesktopFileName(QStringLiteral("org.projecteur.Projecteur"));
+    aboutData.setOtherText(
+      i18n("Official KDE Plasma/Wayland edition of Projecteur.\n\n"
+               "Build information:\n"
+               "Git branch: %1\n"
+               "Git hash: %2\n"
+               "Build type: %3",
+             QString::fromUtf8(projecteur::version_branch()),
+             QString::fromUtf8(projecteur::version_shorthash()),
+             QString::fromUtf8(projecteur::version_buildtype())));
+
+    aboutData.addAuthor(
+      QStringLiteral("Guillaume Binet"), i18n("Projecteur maintainer"), {},
+      QStringLiteral("https://github.com/gbin"));
+    aboutData.addAuthor(
+      QStringLiteral("Jahn Fuchs"), i18n("Original Projecteur author"), {},
+      QStringLiteral("https://github.com/jahnf"));
+
+    const struct {
+      const char* name;
+      const char* githubName;
+    } contributors[] = {
+      {"Ricardo Jesus", "rj-jesus"},
+      {"Mayank Suman", "mayanksuman"},
+      {"Tiziano Müller", "dev-zero"},
+      {"Torsten Maehne", "maehne"},
+      {"TBK", "TBK"},
+      {"Louie Lu", "mlouielu"},
+      {"fmuelle4711", "fmuelle4711"},
+      {"Deniz Bahadir", "Bagira80"},
+      {"Tomáš Chvátal", "scarabeusiv"},
+      {"Brandon Johnson", "dbrandonjohnson"},
+      {"Stuart Prescott", "llimeht"},
+      {"Crista Renouard", "Lumnicence"},
+      {"freddii", "freddii"},
+      {"Matthias Blümel", "Blaimi"},
+      {"Grzegorz Szymaszek", "gszy"},
+      {"TheAssassin", "TheAssassin"},
+    };
+    for (const auto& contributor : contributors) {
+      aboutData.addCredit(
+        QString::fromUtf8(contributor.name), i18n("Contributor"), {},
+        QStringLiteral("https://github.com/%1").arg(QString::fromUtf8(contributor.githubName)));
+    }
+    return aboutData;
+  }
 
   std::ostream& operator<<(std::ostream& os, const QString& s) {
     os << s.toStdString();
@@ -124,15 +183,16 @@ namespace {
   {
     const auto result = DeviceScan::getDevices(options.additionalDevices);
     print() << QCoreApplication::applicationName() << " "
-            << projecteur::version_string() << "; " << Main::tr("device scan") << std::endl;
+            << projecteur::version_string() << "; " << i18n("device scan") << std::endl;
 
     for (const auto& errmsg : result.errorMessages) {
-      print() << "** " << Main::tr("Error: ") << errmsg;
+      print() << "** " << i18n("Error: ") << errmsg;
     }
 
     print() << (!result.errorMessages.empty() ? "\n" : "")
-            << Main::tr(" * Found %1 supported devices. (%2 readable, %3 writable)")
-                .arg(result.devices.size()).arg(result.numDevicesReadable).arg(result.numDevicesWritable);
+            << i18np(" * Found one supported device. (%2 readable, %3 writable)",
+                     " * Found %1 supported devices. (%2 readable, %3 writable)",
+                     result.devices.size(), result.numDevicesReadable, result.numDevicesWritable);
 
     for (const auto& device : result.devices)
     {
@@ -160,8 +220,8 @@ namespace {
         return subDevice.deviceWritable;
       });
 
-      print() << "     " << "vendorId:  " << logging::hexId(device.id.vendorId);
-      print() << "     " << "productId: " << logging::hexId(device.id.productId);
+      print() << "     " << "vendorId:  " << formatHexId(device.id.vendorId);
+      print() << "     " << "productId: " << formatHexId(device.id.productId);
       print() << "     " << "phys:      " << device.id.phys;
       print() << "     " << "busType:   " << toString(device.id.busType);
       print() << "     " << "devices:   " << subDeviceList.join(", ");
@@ -178,7 +238,7 @@ namespace {
       const uint16_t vendorId = devAttribs.size() > 0 ? devAttribs[0].toUShort(nullptr, 16) : 0;
       const uint16_t productId = devAttribs.size() > 1 ? devAttribs[1].toUShort(nullptr, 16) : 0;
       if (vendorId == 0 || productId == 0) {
-        error() << Main::tr("Invalid vendor/productId pair: ") << deviceValue;
+        error() << i18n("Invalid vendor/productId pair: ") << deviceValue;
       } else {
         const QString name = (devAttribs.size() >= 3) ? devAttribs[2] : "";
         options.additionalDevices.push_back({vendorId, productId, false, name});
@@ -191,31 +251,31 @@ namespace {
   {
     QCommandLineParser parser;
 
-    const QCommandLineOption versionOption_ = {QStringList{ "v", "version"}, Main::tr("Print application version.")};
+    const QCommandLineOption versionOption_ = {QStringList{ "v", "version"}, i18n("Print application version.")};
     const QCommandLineOption fullVersionOption_ = QCommandLineOption{QStringList{ "f", "fullversion" }};
-    const QCommandLineOption helpOption_ = {QStringList{ "h", "help"}, Main::tr("Show command line usage.")};
-    const QCommandLineOption fullHelpOption_ = {QStringList{ "help-all"}, Main::tr("Show complete command line usage with all properties.")};
-    const QCommandLineOption cfgFileOption_ = {QStringList{ "cfg" }, Main::tr("Set custom config file."), "file"};
-    const QCommandLineOption commandOption_ = {QStringList{ "c", "command"}, Main::tr("Send command/property to a running instance."), "cmd"};
-    const QCommandLineOption deviceInfoOption_ = {QStringList{ "d", "device-scan"}, Main::tr("Print device-scan results.")};
-    const QCommandLineOption logLvlOption_ = {QStringList{ "l", "log-level" }, Main::tr("Set log level (dbg,inf,wrn,err)."), "lvl"};
-    const QCommandLineOption disableUInputOption_ = {QStringList{ "disable-uinput" }, Main::tr("Disable uinput support.")};
-    const QCommandLineOption showDlgOnStartOption_ = {QStringList{ "show-dialog" }, Main::tr("Show preferences dialog on start.")};
-    const QCommandLineOption dialogMinOnlyOption_ = {QStringList{ "m", "minimize-only" }, Main::tr("Only allow minimizing the dialog.")};
-    const QCommandLineOption disableOverlayOption_ = {QStringList{ "disable-overlay" }, Main::tr("Disable spotlight overlay completely.")};
+    const QCommandLineOption helpOption_ = {QStringList{ "h", "help"}, i18n("Show command line usage.")};
+    const QCommandLineOption fullHelpOption_ = {QStringList{ "help-all"}, i18n("Show complete command line usage with all properties.")};
+    const QCommandLineOption cfgFileOption_ = {QStringList{ "cfg" }, i18n("Set custom config file."), "file"};
+    const QCommandLineOption commandOption_ = {QStringList{ "c", "command"}, i18n("Send command/property to a running instance."), "cmd"};
+    const QCommandLineOption deviceInfoOption_ = {QStringList{ "d", "device-scan"}, i18n("Print device-scan results.")};
+    const QCommandLineOption disableUInputOption_ = {QStringList{ "disable-uinput" }, i18n("Disable uinput support.")};
+    const QCommandLineOption showDlgOnStartOption_ = {QStringList{ "show-dialog" }, i18n("Show preferences dialog on start.")};
+    const QCommandLineOption hideSysTrayOption_ = {QStringList{ "hide-systray-icon"}, i18n("Hide the system tray icon.")};
+    const QCommandLineOption dialogMinOnlyOption_ = {QStringList{ "m", "minimize-only" }, i18n("Only allow minimizing the dialog.")};
+    const QCommandLineOption disableOverlayOption_ = {QStringList{ "disable-overlay" }, i18n("Disable spotlight overlay completely.")};
     const QCommandLineOption additionalDeviceOption_ = {QStringList{ "D", "additional-device"},
-                               Main::tr("Additional accepted device; DEVICE = vendorId:productId\n"
+                               i18n("Additional accepted device; DEVICE = vendorId:productId\n"
                                         "                         "
                                         "e.g., -D 04b3:310c; e.g. -D 0x0c45:0x8101"), "device"};
 
     // ---------------------------------------------------------------------------------------------
     ProjecteurCmdLineParser()
     {
-      parser.setApplicationDescription(Main::tr("Linux/X11 application for the Logitech Spotlight device."));
+      parser.setApplicationDescription(i18n("Wayland application for the Logitech Spotlight device."));
       parser.addOptions({versionOption_, helpOption_, fullHelpOption_, commandOption_,
-                        cfgFileOption_, fullVersionOption_, deviceInfoOption_, logLvlOption_,
+                        cfgFileOption_, fullVersionOption_, deviceInfoOption_,
                         disableUInputOption_, showDlgOnStartOption_, dialogMinOnlyOption_,
-                        disableOverlayOption_, additionalDeviceOption_});
+                        disableOverlayOption_, additionalDeviceOption_, hideSysTrayOption_});
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -234,8 +294,7 @@ namespace {
     auto commandOptionValues() const { return parser.values(commandOption_); }
     bool cfgFileOptionSet() const { return parser.isSet(cfgFileOption_); }
     auto cfgFileOptionValue() const { return parser.value(cfgFileOption_); }
-    bool logLvlOptionSet() const { return parser.isSet(logLvlOption_); }
-    auto logLvlOptionValue() const { return parser.value(logLvlOption_); }
+    bool hideSysTrayOptionSet() const { return parser.isSet(hideSysTrayOption_); }
 
     // ---------------------------------------------------------------------------------------------
     void processArgs(int argc, char** argv)
@@ -277,26 +336,26 @@ namespace {
       print() << "  -v, --version          " << versionOption_.description();
       print() << "  --cfg FILE             " << cfgFileOption_.description();
       print() << "  -d, --device-scan      " << deviceInfoOption_.description();
-      print() << "  -l, --log-level LEVEL  " << logLvlOption_.description();
       print() << "  -D DEVICE              " << additionalDeviceOption_.description();
       if (fullHelp) {
         print() << "  --disable-uinput       " << disableUInputOption_.description();
         print() << "  --show-dialog          " << showDlgOnStartOption_.description();
+        print() << "  --hide-systray-icon    " << hideSysTrayOption_.description();
         print() << "  -m, --minimize-only    " << dialogMinOnlyOption_.description();
       }
       print() << "  -c COMMAND|PROPERTY    " << commandOption_.description() << std::endl;
       print() << "<Commands>";
-      print() << "  spot=[on|off|toggle]     " << Main::tr("Turn spotlight on/off or toggle.");
+      print() << "  spot=[on|off|toggle]     " << i18n("Turn spotlight on/off or toggle.");
       if (fullHelp) {
-        print() << "  preset=NAME              " << Main::tr("Set a preset.");
-        print() << "  vibrate[=I[,L]]          " << Main::tr("Send vibrate command to device with intensity,length.");
-        print() << "  spot.size.adjust=[+|-]N  " << Main::tr("Increase or decrease spot size by N.");
+        print() << "  preset=NAME              " << i18n("Set a preset.");
+        print() << "  vibrate[=I[,L]]          " << i18n("Send vibrate command to device with intensity,length.");
+        print() << "  spot.size.adjust=[+|-]N  " << i18n("Increase or decrease spot size by N.");
       }
-      print() << "  settings=[show|hide]     " << Main::tr("Show/hide preferences dialog.");
+      print() << "  settings=[show|hide]     " << i18n("Show/hide preferences dialog.");
       if (fullHelp) {
-        print() << "  preset=NAME              " << Main::tr("Set a preset.");
+        print() << "  preset=NAME              " << i18n("Set a preset.");
       }
-      print() << "  quit                     " << Main::tr("Quit the running instance.");
+      print() << "  quit                     " << i18n("Quit the running instance.");
 
       // Early return if the user not explicitly requested the full help
       if (!fullHelp) { return; }
@@ -333,10 +392,14 @@ namespace {
 // -------------------------------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
-  QCoreApplication::setApplicationName("Projecteur");
-  QCoreApplication::setApplicationVersion(projecteur::version_string());
+  KLocalizedString::setApplicationDomain("projecteur");
+  const auto aboutData = projecteurAboutData();
+  QCoreApplication::setApplicationName(aboutData.componentName());
+  QCoreApplication::setOrganizationDomain(aboutData.organizationDomain());
+  QCoreApplication::setApplicationVersion(aboutData.version());
+  QGuiApplication::setApplicationDisplayName(aboutData.displayName());
+  QGuiApplication::setDesktopFileName(aboutData.desktopFileName());
   ProjecteurApplication::Options options;
-  QStringList ipcCommands;
   {
     ProjecteurCmdLineParser parser;
     parser.processArgs(argc, argv);
@@ -368,14 +431,14 @@ int main(int argc, char *argv[])
     // Check and trim ipc commands if set
     if (parser.commandOptionSet())
     {
-      ipcCommands = parser.commandOptionValues();
-      for (auto& value : ipcCommands) {
+      options.commands = parser.commandOptionValues();
+      for (auto& value : options.commands) {
         value = value.trimmed();
       }
-      ipcCommands.removeAll("");
+      options.commands.removeAll("");
 
-      if (ipcCommands.isEmpty()) {
-        error() << Main::tr("Command/Properties cannot be an empty string.");
+      if (options.commands.isEmpty()) {
+        error() << i18n("Command/Properties cannot be an empty string.");
         return PROJECTEUR_ERROR_EMPTY_COMMAND_PROPS;
       }
     }
@@ -388,37 +451,43 @@ int main(int argc, char *argv[])
     options.showPreferencesOnStart = parser.showDlgOnStartOptionSet();
     options.dialogMinimizeOnly = parser.dialogMinOnlyOptionSet();
     options.disableOverlay = parser.disableOverlayOptionSet();
+    options.hideSysTrayIcon = parser.hideSysTrayOptionSet();
 
-    if (parser.logLvlOptionSet()) {
-      const auto lvl = logging::levelFromName(parser.logLvlOptionValue());
-      if (lvl != logging::level::unknown) {
-        logging::setCurrentLevel(lvl);
-      } else {
-        error() << Main::tr("Cannot set log level, unknown level: '%1'").arg(parser.logLvlOptionValue());
-      }
-    }
-  }
-
-  RunGuard guard(QCoreApplication::applicationName());
-  if (!guard.tryToRun())
-  {
-    if (ipcCommands.size() > 0) {
-      return ProjecteurCommandClientApp(ipcCommands, argc, argv).exec();
-    }
-    error() << Main::tr("Another application instance is already running. Exiting.");
-    return PROJECTEUR_ERROR_ANOTHER_INST_RUNNING;
-  }
-
-  if (ipcCommands.size() > 0)
-  {
-    // No other application instance running - but command option was used.
-    logInfo(appMain) << Main::tr("Cannot send commands '%1' - no running application instance found.").arg(ipcCommands.join("; "));
-    logWarning(appMain) << Main::tr("Cannot send commands '%1' - no running application instance found.").arg(ipcCommands.join("; "));
-    error() << Main::tr("Cannot send commands '%1' - no running application instance found.").arg(ipcCommands.join("; "));
-    return PROJECTEUR_ERROR_NO_INSTANCE_FOUND;
   }
 
   ProjecteurApplication app(argc, argv, options);
+  KAboutData::setApplicationData(aboutData);
+  if (!app.isPrimaryInstance()) {
+    if (app.startupExitCode() == PROJECTEUR_ERROR_NO_INSTANCE_FOUND) {
+      error() << i18n("Cannot send commands '%1' - no running application instance found.",
+                      options.commands.join("; "));
+    }
+    return app.startupExitCode();
+  }
+
+  QObject::connect(app.dbusService(), &KDBusService::activateRequested, &app,
+    [&app](const QStringList& arguments, const QString& /*workingDirectory*/) {
+      QStringList commands;
+      bool showPreferences = false;
+      for (qsizetype i = 1; i < arguments.size(); ++i) {
+        const auto& argument = arguments[i];
+        if ((argument == QStringLiteral("-c") || argument == QStringLiteral("--command"))
+            && i + 1 < arguments.size()) {
+          commands.push_back(arguments[++i].trimmed());
+        } else if (argument.startsWith(QStringLiteral("--command="))) {
+          commands.push_back(argument.mid(QStringLiteral("--command=").size()).trimmed());
+        } else if (argument == QStringLiteral("--show-dialog")) {
+          showPreferences = true;
+        }
+      }
+      commands.removeAll(QString());
+      if (!commands.isEmpty()) {
+        app.applyCommands(commands);
+      } else if (showPreferences) {
+        app.activate();
+      }
+    });
+
   signal(SIGINT, ctrl_c_signal_handler);
   return app.exec();
 }

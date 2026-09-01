@@ -1,5 +1,4 @@
 # Container for building the Projecteur package
-# Images available at: https://hub.docker.com/r/jahnf/projecteur/tags
 
 FROM archlinux
 
@@ -14,12 +13,24 @@ RUN pacman --noconfirm -Sy && pacman --noconfirm -S \
   gcc \
   make \
   cmake \
+  gettext \
   git \
-  qt5-tools \
-  qt5-base \
-  qt5-declarative \
-  qt5-x11extras \
-  qt5-graphicaleffects
+  qt6-base \
+  qt6-declarative \
+  qt6-shadertools \
+  extra-cmake-modules \
+  kconfig \
+  kconfigwidgets \
+  kcoreaddons \
+  kdbusaddons \
+  kglobalaccel \
+  ki18n \
+  knotifications \
+  kwidgetsaddons \
+  kwindowsystem \
+  kxmlgui \
+  libplasma \
+  layer-shell-qt
 
 RUN pacman --noconfirm -Sy && pacman --noconfirm -S \
   libusb

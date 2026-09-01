@@ -35,9 +35,6 @@ Set custom config file.
 \fB\-d\fR, \fB\-\-device\-scan\fR
 Print device\-scan results.
 .TP
-\fB\-l\fR, \fB\-\-log\-level\fR \fILEVEL\fR
-Set log level, where LEVEL is one of \fBdbg\fR, \fBinf\fR, \fBwrn\fR, \fBerr\fR
-.TP
 \fB\-D\fR \fIDEVICE\fR
 Additional accepted device; DEVICE = vendorId:productId
 e.g., \fB\-D\fR 04b3:310c; e.g. \fB\-D\fR 0x0c45:0x8101;
@@ -102,6 +99,10 @@ dot.color=[Color]                       (HTML-color; #RRGGBB)
 .TP
 dot.opacity=[Double]                    (0 ... 1)
 .TP
+dot.mode=[String]                       (solid, diffuse)
+.TP
+dot.trail=[Bool]                        (false, true)
+.TP
 border=[Bool]                           (false, true)
 .TP
 border.size=[Integer]                   (0 ... 100)
@@ -113,3 +114,5 @@ border.opacity=[Double]                 (0 ... 1)
 zoom=[Bool]                             (false, true)
 .TP
 zoom.factor=[Double]                    (1.5 ... 20)
+.TP
+zoom.mode=[Value]                       (smooth, text, pixel)

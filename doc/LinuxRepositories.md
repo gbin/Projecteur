@@ -1,237 +1,38 @@
-# Projecteur Linux Repositories
+# Projecteur packages
 
-This document aims to list all Linux repositories where _Projecteur_ is available.
+Official Projecteur release files are published exclusively through
+[GitHub Releases](https://github.com/gbin/Projecteur/releases). Each release
+contains checksums and GitHub-hosted provenance information.
 
-Is something missing? Please let me know or create a pull request.
+## Upstream release assets
 
-## Official Repositories
+Projecteur currently builds x86-64 packages for:
 
-### Debian (and Debian based distributions)
+- Arch Linux and Arch-based distributions (`.pkg.tar.zst`)
+- Fedora 44 (`.rpm`)
+- openSUSE Tumbleweed (`.rpm`)
+- Debian testing (`.deb`)
+- Ubuntu 26.10 (`.deb`)
 
-The stable version of _Projecteur_ is available in Debian starting
-with _Debian bullseye_.
-See [this listing](https://packages.debian.org/search?keywords=projecteur&searchon=names&suite=all&section=all)
-for all available `projecteur` packages in Debian.
+These files are standalone release downloads, not package repositories. Your
+package manager can install a downloaded file and resolve its dependencies from
+the distribution's normal repositories.
 
-### Ubuntu
+Fedora Rawhide and Debian sid are continuous compatibility checks. They do not
+produce additional release downloads because their packages would duplicate a
+supported target while becoming stale quickly.
 
-Thanks to debian packages, _Projecteur_ is available in the official Ubuntu repositories
-from Ubuntu 20.10 on. See: https://packages.ubuntu.com/search?keywords=projecteur&searchon=names
+## Distribution repositories
 
-### Gentoo Linux
+Some distributions independently package Projecteur. Their versions and
+support schedules are controlled by the respective maintainers:
 
-See: https://packages.gentoo.org/packages/x11-misc/projecteur
+- [Debian](https://packages.debian.org/search?keywords=projecteur&searchon=names&suite=all&section=all)
+- [Ubuntu](https://packages.ubuntu.com/search?keywords=projecteur&searchon=names)
+- [Gentoo](https://packages.gentoo.org/packages/x11-misc/projecteur)
+- [Arch User Repository](https://aur.archlinux.org/packages?K=projecteur)
+- [openSUSE Software](https://software.opensuse.org/search?baseproject=ALL&q=projecteur)
 
-## User Repositories
-
-### Arch Linux
-
-* https://aur.archlinux.org/packages/projecteur/
-* https://aur.archlinux.org/packages/projecteur-git/
-
-### OpenSUSE
-
-User/community repositories:
-* https://software.opensuse.org/package/projecteur?search_term=projecteur
-
-### Projecteur's Development Repositories
-
-Automated project builds from the development branch of _Projecteur_ are also
-uploaded to [cloudsmith.io](https://cloudsmith.io/~jahnf/repos/projecteur-develop/packages/)
-and are accessible as a Linux repository for different distributions.
-
-See also:
- * https://cloudsmith.io/~jahnf/repos/projecteur-develop/setup/#formats-deb
- * https://cloudsmith.io/~jahnf/repos/projecteur-develop/setup/#formats-rpm
-
-[![Cloudsmith OSS Hosting](https://img.shields.io/badge/OSS%20hosting%20by-cloudsmith-blue?logo=cloudsmith&style=for-the-badge)](https://cloudsmith.com)
-
-#### Debian Stretch
-
-```sh
-apt-get install -y debian-keyring
-apt-get install -y debian-archive-keyring
-apt-get install -y apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key' | apt-key add -
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.deb.txt?distro=debian&codename=stretch' > /etc/apt/sources.list.d/jahnf-projecteur-develop.list
-apt-get update
-```
-
-#### Debian Buster
-
-```sh
-apt-get install -y debian-keyring
-apt-get install -y debian-archive-keyring
-apt-get install -y apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key' | apt-key add -
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.deb.txt?distro=debian&codename=buster' > /etc/apt/sources.list.d/jahnf-projecteur-develop.list
-apt-get update
-```
-
-#### Debian Bullseye
-
-```sh
-apt-get install -y debian-keyring
-apt-get install -y debian-archive-keyring
-apt-get install -y apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key' | apt-key add -
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.deb.txt?distro=debian&codename=bullseye' > /etc/apt/sources.list.d/jahnf-projecteur-develop.list
-apt-get update
-```
-
-#### Debian Bookworm
-
-```sh
-apt-get install -y debian-keyring
-apt-get install -y debian-archive-keyring
-apt-get install -y apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key' | apt-key add -
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.deb.txt?distro=debian&codename=bookworm' > /etc/apt/sources.list.d/jahnf-projecteur-develop.list
-apt-get update
-```
-
-#### Ubuntu 18.04
-
-```sh
-apt-get install -y apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key' | apt-key add -
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.deb.txt?distro=ubuntu&codename=bionic' > /etc/apt/sources.list.d/jahnf-projecteur-develop.list
-apt-get update
-```
-
-#### Ubuntu 20.04
-
-```sh
-apt-get install -y apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key' | apt-key add -
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.deb.txt?distro=ubuntu&codename=focal' > /etc/apt/sources.list.d/jahnf-projecteur-develop.list
-apt-get update
-```
-
-#### Ubuntu 22.04
-
-```sh
-apt-get install -y apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key' | apt-key add -
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.deb.txt?distro=ubuntu&codename=jammy' > /etc/apt/sources.list.d/jahnf-projecteur-develop.list
-apt-get update
-```
-
-#### Ubuntu 23.04
-
-```sh
-apt-get install -y apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key' | apt-key add -
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.deb.txt?distro=ubuntu&codename=lunar' > /etc/apt/sources.list.d/jahnf-projecteur-develop.list
-apt-get update
-```
-
-#### OpenSuse 15.1
-
-```sh
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.rpm.txt?distro=opensuse&codename=15.1' > /tmp/jahnf-projecteur-develop.repo
-zypper ar -f '/tmp/jahnf-projecteur-develop.repo'
-zypper --gpg-auto-import-keys refresh jahnf-projecteur-develop jahnf-projecteur-develop-source
-```
-
-#### OpenSuse 15.2
-
-```sh
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.rpm.txt?distro=opensuse&codename=15.2' > /tmp/jahnf-projecteur-develop.repo
-zypper ar -f '/tmp/jahnf-projecteur-develop.repo'
-zypper --gpg-auto-import-keys refresh jahnf-projecteur-develop jahnf-projecteur-develop-source
-```
-
-#### OpenSuse 15.3
-
-```sh
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.rpm.txt?distro=opensuse&codename=15.3' > /tmp/jahnf-projecteur-develop.repo
-zypper ar -f '/tmp/jahnf-projecteur-develop.repo'
-zypper --gpg-auto-import-keys refresh jahnf-projecteur-develop jahnf-projecteur-develop-source
-```
-
-#### OpenSuse 15.4
-
-```sh
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.rpm.txt?distro=opensuse&codename=15.4' > /tmp/jahnf-projecteur-develop.repo
-zypper ar -f '/tmp/jahnf-projecteur-develop.repo'
-zypper --gpg-auto-import-keys refresh jahnf-projecteur-develop jahnf-projecteur-develop-source
-```
-
-#### OpenSuse 15.5
-
-```sh
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.rpm.txt?distro=opensuse&codename=15.5' > /tmp/jahnf-projecteur-develop.repo
-zypper ar -f '/tmp/jahnf-projecteur-develop.repo'
-zypper --gpg-auto-import-keys refresh jahnf-projecteur-develop jahnf-projecteur-develop-source
-```
-
-#### Fedora 31
-
- ```sh
-dnf install yum-utils pygpgme
-rpm --import 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key'
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.rpm.txt?distro=fedora&codename=31' > /tmp/jahnf-projecteur-develop.repo
-dnf config-manager --add-repo '/tmp/jahnf-projecteur-develop.repo'
-dnf -q makecache -y --disablerepo='*' --enablerepo='jahnf-projecteur-develop' --enablerepo='jahnf-projecteur-develop-source'
-```
-
-#### Fedora 32
-
-```sh
-dnf install yum-utils pygpgme
-rpm --import 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key'
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.rpm.txt?distro=fedora&codename=32' > /tmp/jahnf-projecteur-develop.repo
-dnf config-manager --add-repo '/tmp/jahnf-projecteur-develop.repo'
-dnf -q makecache -y --disablerepo='*' --enablerepo='jahnf-projecteur-develop' --enablerepo='jahnf-projecteur-develop-source'
-```
-
-#### Fedora 33
-
-```sh
-dnf install yum-utils pygpgme
-rpm --import 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key'
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.rpm.txt?distro=fedora&codename=33' > /tmp/jahnf-projecteur-develop.repo
-dnf config-manager --add-repo '/tmp/jahnf-projecteur-develop.repo'
-dnf -q makecache -y --disablerepo='*' --enablerepo='jahnf-projecteur-develop' --enablerepo='jahnf-projecteur-develop-source'
-```
-
-#### Fedora 34
-
-```sh
-dnf install yum-utils pygpgme
-rpm --import 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key'
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.rpm.txt?distro=fedora&codename=34' > /tmp/jahnf-projecteur-develop.repo
-dnf config-manager --add-repo '/tmp/jahnf-projecteur-develop.repo'
-dnf -q makecache -y --disablerepo='*' --enablerepo='jahnf-projecteur-develop' --enablerepo='jahnf-projecteur-develop-source'
-```
-
-#### Fedora 37
-
-```sh
-dnf install yum-utils pygpgme
-rpm --import 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key'
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.rpm.txt?distro=fedora&codename=37' > /tmp/jahnf-projecteur-develop.repo
-dnf config-manager --add-repo '/tmp/jahnf-projecteur-develop.repo'
-dnf -q makecache -y --disablerepo='*' --enablerepo='jahnf-projecteur-develop' --enablerepo='jahnf-projecteur-develop-source'
-```
-
-#### Fedora 38
-
-```sh
-dnf install yum-utils pygpgme
-rpm --import 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key'
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.rpm.txt?distro=fedora&codename=38' > /tmp/jahnf-projecteur-develop.repo
-dnf config-manager --add-repo '/tmp/jahnf-projecteur-develop.repo'
-dnf -q makecache -y --disablerepo='*' --enablerepo='jahnf-projecteur-develop' --enablerepo='jahnf-projecteur-develop-source'
-```
-
-#### CentOS 8
-
-```sh
-yum install yum-utils pygpgme
-rpm --import 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/gpg/gpg.544E6934C0570750.key'
-curl -1sLf 'https://dl.cloudsmith.io/public/jahnf/projecteur-develop/cfg/setup/config.rpm.txt?distro=el&codename=8' > /tmp/jahnf-projecteur-develop.repo
-yum-config-manager --add-repo '/tmp/jahnf-projecteur-develop.repo'
-yum -q makecache -y --disablerepo='*' --enablerepo='jahnf-projecteur-develop'
-```
+Check that a downstream package is the Plasma 6 / Wayland edition before
+installing it. The older Qt 5 edition remains available from the
+[`legacy/qt5`](https://github.com/gbin/Projecteur/tree/legacy/qt5) branch.

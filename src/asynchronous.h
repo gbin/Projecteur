@@ -5,11 +5,6 @@
 #include <QMetaObject>
 #include <QPointer>
 
-#if (QT_VERSION < QT_VERSION_CHECK(5, 10, 0))
-#include <QCoreApplication>
-#include <QEvent>
-#endif
-
 #include <functional>
 #include <tuple>
 #include <type_traits>
@@ -35,49 +30,25 @@ constexpr decltype(auto) apply(F&& f, Tuple&& t){
     std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>{});
 }
 
-// Capture args and add them as additional arguments
+// Capture arguments for a zero-argument queued invocation.
 template <typename Lambda, typename ... Args>
 auto capture_call(Lambda&& lambda, Args&& ... args){
   return [
     lambda = std::forward<Lambda>(lambda),
     capture_args = std::make_tuple(std::forward<Args>(args) ...)
-  ](auto&& ... original_args)mutable{
+  ]() mutable {
     return async::apply([&lambda](auto&& ... args){
       lambda(std::forward<decltype(args)>(args) ...);
       },
-      std::tuple_cat(
-        std::forward_as_tuple(original_args ...),
-        async::apply([](auto&& ... args){
-          return std::forward_as_tuple<Args ...>(
-            std::move(args) ...);
-        }, std::move(capture_args))
-    ));
+      std::move(capture_args));
   };
 }
 
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
 // Invoke a (lambda) function for context QObject with queued connection.
 template <typename F>
 void invoke(QObject* context, F&& function) {
   QMetaObject::invokeMethod(context, std::forward<F>(function), Qt::QueuedConnection);
 }
-#else
-// ... older Qt versions < 5.10
-namespace detail {
-template <typename F>
-struct FEvent : public QEvent {
-  using Fun = typename std::decay<F>::type;
-  Fun fun;
-  FEvent(Fun && fun) : QEvent(QEvent::None), fun(std::move(fun)) {}
-  FEvent(const Fun & fun) : QEvent(QEvent::None), fun(fun) {}
-  ~FEvent() { fun(); }
-}; }
-
-template <typename F>
-void invoke(QObject* context, F&& function) {
-  QCoreApplication::postEvent(context, new detail::FEvent<F>(std::forward<F>(function)));
-}
-#endif
 
 // --- Helpers to deduce std::function type from a lambda.
 template <typename>
@@ -106,16 +77,11 @@ auto makeSafeCallback_impl(QObject* context, F&& f, std::function<R(Args...)>, b
       return;
     }
 
-    #if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
     QMetaObject::invokeMethod(ctxPtr,
       capture_call(std::forward<F>(f), std::forward<Args>(args)...),
       autoConnection ? Qt::AutoConnection : Qt::QueuedConnection);
     // Note: if forceQueued is false and current thread is the same as
     // the context thread -> execute directly
-    #else
-    // For Qt < 5.10 the call is always queued via the event queue
-    async::invoke(ctxPtr, capture_call(std::forward<F>(f), std::forward<Args>(args)...));
-    #endif
   };
 }
 

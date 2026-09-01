@@ -1,0 +1,22 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Projecteur contributors"
+            }
+        ],
+        "Category": "Utilities",
+        "Description": "Quick controls for the Projecteur desktop spotlight",
+        "EnabledByDefault": true,
+        "Icon": "projecteur",
+        "License": "MIT",
+        "Name": "Projecteur",
+        "Version": "1.0",
+        "Website": "https://github.com/gbin/Projecteur"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-DBusActivationService": "org.projecteur.Projecteur",
+    "X-Plasma-NotificationArea": "true",
+    "X-Plasma-NotificationAreaCategory": "ApplicationStatus"
+}

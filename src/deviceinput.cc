@@ -4,9 +4,11 @@
 #include "deviceinput.h"
 
 #include "enum-helper.h"
-#include "logging.h"
+#include "projecteur_input_debug.h"
 #include "settings.h"
 #include "virtualdevice.h"
+
+#include <KLocalizedString>
 
 #include <algorithm>
 #include <list>
@@ -16,15 +18,9 @@
 
 #include <linux/input.h>
 
-LOGGING_CATEGORY(input, "input")
-
 namespace  {
-  // -----------------------------------------------------------------------------------------------
-  #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-  const auto registered_ = qRegisterMetaTypeStreamOperators<KeyEventSequence>()
-                           && qRegisterMetaTypeStreamOperators<MappedAction>();
-  #endif
-
+  const auto registeredMetaTypes_ = qRegisterMetaType<KeyEventSequence>()
+                                    && qRegisterMetaType<MappedAction>();
 
   // -----------------------------------------------------------------------------------------------
   void addKeyToString(QString& str, const QString& key)
@@ -393,11 +389,7 @@ QString NativeKeySequence::toString() const
   {
     if (i > 0) { seqString += QLatin1String(", "); }
 
-    #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-    const auto key = m_keySequence[i];
-    #else
     const auto key = m_keySequence[i].key();
-    #endif
 
     seqString += toString(key,
                           (i < m_nativeModifiers.size()) ? m_nativeModifiers[i]
@@ -627,13 +619,13 @@ void InputMapper::Impl::execAction(const std::shared_ptr<Action>& action, Device
 {
   if (!action || action->empty()) { return; }
 
-  logDebug(input) << "Input map execAction, type =" << toString(action->type())
+  qCDebug(PROJECTEUR_INPUT_LOG).noquote() << "Input map execAction, type =" << toString(action->type())
                   << ", partial_hit =" << (r == DeviceKeyMap::Result::PartialHit);
 
   if (action->type() == Action::Type::KeySequence)
   {
     const auto keySequenceAction = static_cast<KeySequenceAction*>(action.get());
-    logDebug(input) << "Emitting Key Sequence:" << keySequenceAction->keySequence.toString();
+    qCDebug(PROJECTEUR_INPUT_LOG).noquote() << "Emitting Key Sequence:" << keySequenceAction->keySequence.toString();
     emitNativeKeySequence(keySequenceAction->keySequence);
   }
   else
@@ -823,12 +815,12 @@ void InputMapper::addEvents(const input_event* input_events, size_t num)
   }
 
   if (input_events[num-1].type != EV_SYN) {
-    logWarning(input) << tr("Input mapper expects events separated by SYN event.");
+    qCWarning(PROJECTEUR_INPUT_LOG).noquote() << QStringLiteral("Input mapper expects events separated by SYN event.");
     return;
   }
 
   if (num == 1) {
-    logWarning(input) << tr("Ignoring single SYN event received.");
+    qCWarning(PROJECTEUR_INPUT_LOG).noquote() << QStringLiteral("Ignoring single SYN event received.");
     return;
   }
 
@@ -845,7 +837,7 @@ void InputMapper::addEvents(const input_event* input_events, size_t num)
 
   if (impl->m_recordingMode)
   {
-    logDebug(input) << "Recorded device event:" << KeyEvent{input_events, input_events + num - 1};
+    qCDebug(PROJECTEUR_INPUT_LOG).noquote() << "Recorded device event:" << KeyEvent{input_events, input_events + num - 1};
     impl->record(input_events, num-1); // exclude closing syn event for recording
     return;
   }
@@ -965,13 +957,13 @@ namespace SpecialKeys
 const std::map<Key, SpecialKeyEventSeqInfo>&  keyEventSequenceMap()
 {
   static const std::map<Key, SpecialKeyEventSeqInfo> keyMap {
-    {Key::NextHold, {InputMapper::tr("Next Hold"),
+    {Key::NextHold, {i18n("Next Hold"),
       KeyEventSequence{{{EV_KEY, to_integral(Key::NextHold), 1}}}}},
-    {Key::BackHold, {InputMapper::tr("Back Hold"),
+    {Key::BackHold, {i18n("Back Hold"),
       KeyEventSequence{{{EV_KEY, to_integral(Key::BackHold), 1}}}}},
-    {Key::NextHoldMove, {InputMapper::tr("Next Hold Move"),
+    {Key::NextHoldMove, {i18n("Next Hold Move"),
       makeSpecialKeyEventSequence(to_integral(Key::NextHoldMove)) }},
-    {Key::BackHoldMove, {InputMapper::tr("Back Hold Move"),
+    {Key::BackHoldMove, {i18n("Back Hold Move"),
       makeSpecialKeyEventSequence(to_integral(Key::BackHoldMove))}},
   };
   return keyMap;

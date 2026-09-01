@@ -1,0 +1,44 @@
+pkgbase = projecteur-git
+	pkgdesc = Virtual laser pointer for inertial pointer devices on KDE Plasma Wayland
+	pkgver = 1.0.0alpha.77.r723.8f187bf
+	pkgrel = 1
+	url = https://github.com/gbin/Projecteur
+	arch = x86_64
+	license = MIT
+	makedepends = cmake>=3.20
+	makedepends = extra-cmake-modules>=6.7
+	makedepends = gettext
+	makedepends = git
+	makedepends = qt6-shadertools>=6.10
+	depends = glibc
+	depends = hicolor-icon-theme
+	depends = kcolorscheme>=6.7
+	depends = kconfig>=6.7
+	depends = kconfigwidgets>=6.7
+	depends = kcoreaddons>=6.7
+	depends = kdbusaddons>=6.7
+	depends = kglobalaccel>=6.7
+	depends = kguiaddons>=6.7
+	depends = ki18n>=6.7
+	depends = kirigami>=6.7
+	depends = knotifications>=6.7
+	depends = kpipewire>=6.7
+	depends = kwidgetsaddons>=6.7
+	depends = kwindowsystem>=6.7
+	depends = kxmlgui>=6.7
+	depends = layer-shell-qt>=6.7
+	depends = libgcc
+	depends = libglvnd
+	depends = libplasma>=6.7
+	depends = libstdc++
+	depends = qt6-base>=6.10
+	depends = qt6-declarative>=6.10
+	depends = qt6-wayland>=6.10
+	depends = udev
+	depends = wayland
+	provides = projecteur
+	conflicts = projecteur
+	source = projecteur::git+https://github.com/gbin/Projecteur.git#branch=develop
+	sha256sums = SKIP
+
+pkgname = projecteur-git

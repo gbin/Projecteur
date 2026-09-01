@@ -2,14 +2,18 @@
 // - See LICENSE.md and README.md
 #pragma once
 
-#include <QDialog>
+#include <KConfigDialog>
+
 #include <QProxyStyle>
 #include <QToolButton>
+#include <QVariantMap>
 
 #include <memory>
 
 class QComboBox;
 class QGroupBox;
+class KActionCollection;
+class KShortcutsEditor;
 class Settings;
 class Spotlight;
 class DevicesWidget;
@@ -23,7 +27,7 @@ public:
 };
 
 // -------------------------------------------------------------------------------------------------
-class PreferencesDialog : public QDialog
+class PreferencesDialog : public KConfigDialog
 {
   Q_OBJECT
 
@@ -34,6 +38,7 @@ public:
   };
 
   explicit PreferencesDialog(Settings* settings, Spotlight* spotlight,
+                             KActionCollection* actionCollection,
                              Mode = Mode::ClosableDialog, QWidget* parent = nullptr);
   virtual ~PreferencesDialog() override = default;
 
@@ -41,19 +46,33 @@ public:
   Mode mode() const { return m_dialogMode; }
   void setMode(Mode dialogMode);
 
+public slots:
+  void accept() override;
+  void reject() override;
+
 signals:
   void dialogActiveChanged(bool active);
   void testButtonClicked();
   void exitApplicationRequested();
 
+protected slots:
+  void updateSettings() override;
+  void updateWidgets() override;
+  void updateWidgetsDefault() override;
+
 protected:
-  virtual bool event(QEvent* event) override;
-  virtual void closeEvent(QCloseEvent* e) override;
-  virtual void keyPressEvent(QKeyEvent* e) override;
+  bool event(QEvent* event) override;
+  void closeEvent(QCloseEvent* e) override;
+  void keyPressEvent(QKeyEvent* e) override;
+  bool hasChanged() override;
+  bool isDefault() override;
 
 private:
   void setDialogActive(bool active);
   void setDialogMode(Mode dialogMode);
+  void settingsModified();
+  void restoreAppliedSettings();
+  bool shortcutsAreDefault() const;
   void resetPresetCombo();
 
   QWidget* createSettingsTabWidget(Settings* settings);
@@ -65,18 +84,15 @@ private:
   QWidget* createMultiScreenWidget(Settings* settings);
   QGroupBox* createZoomGroupBox(Settings* settings);
   QWidget* createPresetSelector(Settings* settings);
-#if HAS_Qt_X11Extras
-  QWidget* createCompositorWarningWidget();
-#endif
-  QWidget* createLogTabWidget();
 
 private:
+  Settings* const m_settings;
+  KActionCollection* const m_actionCollection;
+  QVariantMap m_appliedSpotlightSettings;
   std::unique_ptr<PresetComboCustomStyle> m_presetComboStyle;
   QComboBox* m_presetCombo = nullptr;
-  QPushButton* m_closeMinimizeBtn = nullptr;
-  QPushButton* m_exitBtn = nullptr;
   DevicesWidget* m_deviceswidget = nullptr;
+  KShortcutsEditor* m_shortcutsEditor = nullptr;
   bool m_active = false;
   Mode m_dialogMode = Mode::ClosableDialog;
-  quint32 m_discardedLogCount = 0;
 };

@@ -3,84 +3,107 @@
 
 #include "linuxdesktop.h"
 
-#include "logging.h"
+#include "kwinscreencast.h"
+#include "projecteur_desktop_debug.h"
 
-#include <QApplication>
-#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-  #include <QDesktopWidget>
-#endif
-#include <QDir>
+#include <KLocalizedString>
+
+#include <QDBusInterface>
+#include <QDBusReply>
+#include <QDBusUnixFileDescriptor>
 #include <QFile>
+#include <QGuiApplication>
+#include <QImage>
 #include <QProcessEnvironment>
 #include <QScreen>
 
-#if HAS_Qt_DBus
-#include <QDBusInterface>
-#include <QDBusReply>
-#endif
-
-LOGGING_CATEGORY(desktop, "desktop")
+#include <fcntl.h>
+#include <limits>
+#include <unistd.h>
 
 namespace {
-#if HAS_Qt_DBus
-  // -----------------------------------------------------------------------------------------------
-  QPixmap grabScreenDBusGnome()
-  {
-    const auto filepath = QDir::temp().absoluteFilePath("000_projecteur_zoom_screenshot.png");
-    QDBusInterface interface(QStringLiteral("org.gnome.Shell"),
-                             QStringLiteral("/org/gnome/Shell/Screenshot"),
-                             QStringLiteral("org.gnome.Shell.Screenshot"));
-    QDBusReply<bool> reply = interface.call(QStringLiteral("Screenshot"), false, false, filepath);
+  constexpr auto kwinScreenshotService = "org.kde.KWin.ScreenShot2";
+  constexpr auto kwinScreenshotPath = "/org/kde/KWin/ScreenShot2";
+  constexpr auto kwinScreenshotInterface = "org.kde.KWin.ScreenShot2";
+  constexpr auto kwinService = "org.kde.KWin";
+  constexpr auto kwinEffectsPath = "/Effects";
+  constexpr auto kwinEffectsInterface = "org.kde.kwin.Effects";
+  constexpr auto shakeCursorEffect = "shakecursor";
 
-    if (reply.value())
+  // -----------------------------------------------------------------------------------------------
+  QPixmap grabScreenKWin(QScreen* screen)
+  {
+    int pipeDescriptors[2] = {-1, -1};
+    if (::pipe2(pipeDescriptors, O_CLOEXEC) != 0) {
+      qCCritical(PROJECTEUR_DESKTOP_LOG).noquote() << QStringLiteral("Could not create a pipe for the KWin screenshot.");
+      return {};
+    }
+
+    QFile readPipe;
+    if (!readPipe.open(pipeDescriptors[0], QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
+      ::close(pipeDescriptors[0]);
+      ::close(pipeDescriptors[1]);
+      qCCritical(PROJECTEUR_DESKTOP_LOG).noquote() << QStringLiteral("Could not open the KWin screenshot pipe.");
+      return {};
+    }
+
+    QDBusReply<QVariantMap> reply;
     {
-      QPixmap pm(filepath);
-      QFile::remove(filepath);
-      return pm;
-    }
-    logError(desktop) << LinuxDesktop::tr("Screenshot via GNOME DBus interface failed.");
-    return QPixmap();
-  }
+      QDBusUnixFileDescriptor writePipe;
+      writePipe.giveFileDescriptor(pipeDescriptors[1]);
+      QDBusInterface interface(kwinScreenshotService, kwinScreenshotPath,
+                               kwinScreenshotInterface);
 
-  // -----------------------------------------------------------------------------------------------
-  QPixmap grabScreenDBusKde()
-  {
-    QDBusInterface interface(QStringLiteral("org.kde.KWin"),
-                             QStringLiteral("/Screenshot"),
-                             QStringLiteral("org.kde.kwin.Screenshot"));
-    QDBusReply<QString> reply = interface.call(QStringLiteral("screenshotFullscreen"));
-    QPixmap pm(reply.value());
-    if (!pm.isNull()) {
-      QFile::remove(reply.value());
-    } else {
-      logError(desktop) << LinuxDesktop::tr("Screenshot via KDE DBus interface failed.");
-    }
-    return pm;
-  }
-#endif // HAS_Qt_DBus
+      QVariantMap options;
+      options.insert(QStringLiteral("hide-caller-windows"), true);
+      options.insert(QStringLiteral("native-resolution"), true);
 
-  // -----------------------------------------------------------------------------------------------
-  QPixmap grabScreenVirtualDesktop(QScreen* screen)
-  {
-    QRect g;
-    for (const auto s : QGuiApplication::screens()) {
-      g = g.united(s->geometry());
+      reply = interface.call(QStringLiteral("CaptureScreen"), screen->name(), options,
+                             QVariant::fromValue(writePipe));
     }
 
-    #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-    QPixmap pm(QApplication::primaryScreen()->grabWindow(
-                 QApplication::desktop()->winId(), g.x(), g.y(), g.width(), g.height()));
-    #else
-    QPixmap pm(QApplication::primaryScreen()->grabWindow(0, g.x(), g.y(), g.width(), g.height()));
-    #endif
-
-    if (!pm.isNull())
-    {
-      pm.setDevicePixelRatio(screen->devicePixelRatio());
-      return pm.copy(screen->geometry());
+    if (!reply.isValid()) {
+      auto message = i18n("Screenshot via KWin ScreenShot2 failed: %1",
+                          reply.error().message());
+      if (reply.error().name() == QStringLiteral("org.kde.KWin.ScreenShot2.Error.NoAuthorized")) {
+        message += i18n(
+          " Install Projecteur so KWin can associate the executable with its desktop metadata.");
+      }
+      qCCritical(PROJECTEUR_DESKTOP_LOG).noquote() << message;
+      return {};
     }
 
-    return pm;
+    const QVariantMap attributes = reply.value();
+    const quint32 width = attributes.value(QStringLiteral("width")).toUInt();
+    const quint32 height = attributes.value(QStringLiteral("height")).toUInt();
+    const quint32 stride = attributes.value(QStringLiteral("stride")).toUInt();
+    const quint32 formatValue = attributes.value(QStringLiteral("format")).toUInt();
+    const qreal scale = attributes.value(QStringLiteral("scale"), 1.0).toDouble();
+
+    const quint64 expectedBytes = quint64(stride) * height;
+    if (width == 0 || height == 0 || stride == 0
+        || expectedBytes > quint64(std::numeric_limits<qsizetype>::max())) {
+      qCCritical(PROJECTEUR_DESKTOP_LOG).noquote() << QStringLiteral("KWin returned invalid screenshot dimensions.");
+      return {};
+    }
+
+    const QByteArray pixels = readPipe.readAll();
+    if (quint64(pixels.size()) < expectedBytes) {
+      qCCritical(PROJECTEUR_DESKTOP_LOG).noquote() << QStringLiteral("KWin returned an incomplete screenshot.");
+      return {};
+    }
+
+    const auto format = static_cast<QImage::Format>(formatValue);
+    const QImage image(reinterpret_cast<const uchar*>(pixels.constData()),
+                       int(width), int(height), int(stride), format);
+    if (image.isNull()) {
+      qCCritical(PROJECTEUR_DESKTOP_LOG).noquote() << QStringLiteral("KWin returned an unsupported screenshot format.");
+      return {};
+    }
+
+    QPixmap pixmap = QPixmap::fromImage(image.copy());
+    pixmap.setDevicePixelRatio(scale > 0 ? scale : 1.0);
+    return pixmap;
   }
 } // end anonymous namespace
 
@@ -88,71 +111,94 @@ LinuxDesktop::LinuxDesktop(QObject* parent)
   : QObject(parent)
 {
   const auto env = QProcessEnvironment::systemEnvironment();
-  { // check for Kde and Gnome
-    const auto kdeFullSession = env.value(QStringLiteral("KDE_FULL_SESSION"));
-    const auto gnomeSessionId = env.value(QStringLiteral("GNOME_DESKTOP_SESSION_ID"));
-    const auto desktopSession = env.value(QStringLiteral("DESKTOP_SESSION"));
-    const auto xdgCurrentDesktop = env.value(QStringLiteral("XDG_CURRENT_DESKTOP"));
-    if (gnomeSessionId.size() || xdgCurrentDesktop.contains("Gnome", Qt::CaseInsensitive)) {
-      m_type = LinuxDesktop::Type::Gnome;
-    }
-    else if (kdeFullSession.size() || desktopSession == "kde-plasma") {
-      m_type = LinuxDesktop::Type::KDE;
-    }
+  const auto kdeFullSession = env.value(QStringLiteral("KDE_FULL_SESSION"));
+  const auto desktopSession = env.value(QStringLiteral("DESKTOP_SESSION"));
+  const auto xdgCurrentDesktop = env.value(QStringLiteral("XDG_CURRENT_DESKTOP"));
+
+  if (!kdeFullSession.isEmpty()
+      || desktopSession.contains(QStringLiteral("plasma"), Qt::CaseInsensitive)
+      || xdgCurrentDesktop.contains(QStringLiteral("KDE"), Qt::CaseInsensitive)) {
+    m_type = LinuxDesktop::Type::KDE;
   }
 
-  { // check for wayland session
-    const auto waylandDisplay = env.value(QStringLiteral("WAYLAND_DISPLAY"));
-    const auto xdgSessionType = env.value(QStringLiteral("XDG_SESSION_TYPE"));
-    m_wayland = (xdgSessionType == "wayland")
-                || waylandDisplay.contains("wayland", Qt::CaseInsensitive);
+  m_wayland = QGuiApplication::platformName().startsWith(QStringLiteral("wayland"),
+                                                         Qt::CaseInsensitive);
+  if (m_wayland && m_type == LinuxDesktop::Type::KDE) {
+    m_screencast = new KWinScreencast(this);
   }
+}
+
+LinuxDesktop::~LinuxDesktop()
+{
+  setShakeCursorEffectSuppressed(false);
 }
 
 QPixmap LinuxDesktop::grabScreen(QScreen* screen) const
 {
-  if (screen == nullptr) {
-    return QPixmap();
+  if (!screen) {
+    return {};
   }
-
-  if (isWayland()) {
-    return grabScreenWayland(screen);
+  if (!isWayland()) {
+    qCWarning(PROJECTEUR_DESKTOP_LOG).noquote() << QStringLiteral("Screen capture is only supported on Wayland.");
+    return {};
   }
-
-  #if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
-    const bool isVirtualDesktop = QApplication::primaryScreen()->virtualSiblings().size() > 1;
-  #else
-    const bool isVirtualDesktop = QApplication::desktop()->isVirtualDesktop();
-  #endif
-
-  if (isVirtualDesktop) {
-    return grabScreenVirtualDesktop(screen);
+  if (type() != LinuxDesktop::Type::KDE) {
+    qCWarning(PROJECTEUR_DESKTOP_LOG).noquote() << QStringLiteral("Screen capture is only supported on KDE Plasma.");
+    return {};
   }
-
-  // everything else.. usually X11
-  return screen->grabWindow(0);
+  return grabScreenKWin(screen);
 }
 
-QPixmap LinuxDesktop::grabScreenWayland(QScreen* screen) const
+QObject* LinuxDesktop::streamScreen(QScreen* screen, QObject* parent)
 {
-#if HAS_Qt_DBus
-  QPixmap pm;
-  switch (type())
-  {
-  case LinuxDesktop::Type::Gnome:
-    pm = grabScreenDBusGnome();
-    break;
-  case LinuxDesktop::Type::KDE:
-    pm = grabScreenDBusKde();
-    break;
-  default:
-    logWarning(desktop) << tr("Currently zoom on Wayland is only supported via DBus on KDE and GNOME.");
+  return m_screencast ? m_screencast->streamScreen(screen, parent) : nullptr;
+}
+
+void LinuxDesktop::setShakeCursorEffectSuppressed(bool suppressed)
+{
+  if (!isWayland() || type() != LinuxDesktop::Type::KDE
+      || suppressed == m_shakeCursorEffectSuppressed) {
+    return;
   }
-  return pm.isNull() ? pm : pm.copy(screen->geometry());
-#else
-  Q_UNUSED(screen);
-  logWarning(desktop) << tr("Projecteur was compiled without Qt DBus. Currently zoom on Wayland is "
-                            "only supported via DBus on KDE and GNOME.");
-  return QPixmap();
-#endif
+
+  QDBusInterface interface(kwinService, kwinEffectsPath, kwinEffectsInterface);
+  if (!interface.isValid()) {
+    qCWarning(PROJECTEUR_DESKTOP_LOG).noquote() << QStringLiteral("Could not access KWin's desktop effects interface.");
+    return;
+  }
+
+  if (suppressed)
+  {
+    const QDBusReply<bool> loadedReply =
+      interface.call(QStringLiteral("isEffectLoaded"), QString::fromLatin1(shakeCursorEffect));
+    if (!loadedReply.isValid()) {
+      qCWarning(PROJECTEUR_DESKTOP_LOG).noquote() << QStringLiteral("Could not query KWin's Shake Cursor effect: %1").arg(loadedReply.error().message());
+      return;
+    }
+    if (!loadedReply.value()) {
+      return;
+    }
+
+    const QDBusReply<void> unloadReply =
+      interface.call(QStringLiteral("unloadEffect"), QString::fromLatin1(shakeCursorEffect));
+    if (!unloadReply.isValid()) {
+      qCWarning(PROJECTEUR_DESKTOP_LOG).noquote() << QStringLiteral("Could not suppress KWin's Shake Cursor effect: %1").arg(unloadReply.error().message());
+      return;
+    }
+
+    m_shakeCursorEffectSuppressed = true;
+    return;
+  }
+
+  const QDBusReply<bool> loadReply =
+    interface.call(QStringLiteral("loadEffect"), QString::fromLatin1(shakeCursorEffect));
+  if (!loadReply.isValid() || !loadReply.value()) {
+    const auto error = loadReply.isValid()
+                         ? i18n("KWin refused to load the effect.")
+                         : loadReply.error().message();
+    qCWarning(PROJECTEUR_DESKTOP_LOG).noquote() << QStringLiteral("Could not restore KWin's Shake Cursor effect: %1").arg(error);
+    return;
+  }
+
+  m_shakeCursorEffectSuppressed = false;
 }
