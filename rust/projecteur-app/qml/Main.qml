@@ -9,7 +9,7 @@ ApplicationWindow {
     id: root
 
     width: 520
-    height: 310
+    height: 350
     visible: backend.showWindow
     title: qsTr("Projecteur Rust port")
 
@@ -52,6 +52,16 @@ ApplicationWindow {
             font.pixelSize: 22
             font.bold: true
             wrapMode: Text.Wrap
+        }
+
+        Label {
+            Layout.fillWidth: true
+            visible: backend.presenterConnected
+            text: backend.batteryLevel >= 0
+                  ? qsTr("Presenter battery: %1% (%2)")
+                        .arg(backend.batteryLevel)
+                        .arg(backend.batteryStatus)
+                  : qsTr("Presenter battery: unavailable")
         }
 
         Label {

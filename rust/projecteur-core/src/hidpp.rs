@@ -1,6 +1,12 @@
 //! Minimal HID++ 2.0 protocol support used by Logitech Spotlight devices.
 
-use std::{error::Error, fmt};
+use std::{
+    error::Error,
+    fmt,
+    io::{self, Read, Write},
+    os::fd::AsRawFd,
+    time::{Duration, Instant},
+};
 
 /// Projecteur's HID++ software identifier.
 pub const SOFTWARE_ID: u8 = 7;
@@ -278,6 +284,136 @@ impl fmt::Display for HidppError {
 }
 
 impl Error for HidppError {}
+
+/// Failure while requesting battery status from a hidraw device.
+#[derive(Debug)]
+pub enum BatteryQueryError {
+    Io(io::Error),
+    Protocol(HidppError),
+    Unsupported,
+    Timeout,
+}
+
+impl fmt::Display for BatteryQueryError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(error) => write!(formatter, "HID++ I/O failed: {error}"),
+            Self::Protocol(error) => write!(formatter, "invalid HID++ exchange: {error}"),
+            Self::Unsupported => formatter.write_str("presenter has no supported battery feature"),
+            Self::Timeout => formatter.write_str("HID++ request timed out"),
+        }
+    }
+}
+
+impl Error for BatteryQueryError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Io(error) => Some(error),
+            Self::Protocol(error) => Some(error),
+            Self::Unsupported | Self::Timeout => None,
+        }
+    }
+}
+
+impl From<io::Error> for BatteryQueryError {
+    fn from(error: io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+impl From<HidppError> for BatteryQueryError {
+    fn from(error: HidppError) -> Self {
+        Self::Protocol(error)
+    }
+}
+
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(4);
+
+/// Query battery status while preserving unrelated reports read from the same
+/// hidraw stream.
+///
+/// `on_unrelated_report` receives pointer, keyboard, and notification reports
+/// encountered while waiting for each HID++ response. Spotlight devices use
+/// device index 1 for direct Bluetooth and original USB receiver connections.
+///
+/// # Errors
+///
+/// Returns [`BatteryQueryError`] if the device cannot be read or written, a
+/// response times out, its framing is invalid, or neither battery feature is
+/// supported.
+pub fn query_battery<T: Read + Write + AsRawFd>(
+    device: &mut T,
+    device_index: u8,
+    mut on_unrelated_report: impl FnMut(&[u8]),
+) -> Result<BatteryInfo, BatteryQueryError> {
+    for feature in [FeatureCode::BatteryStatus, FeatureCode::UnifiedBattery] {
+        let lookup = feature_index_request(device_index, feature);
+        let response = exchange(device, &lookup, &mut on_unrelated_report)?;
+        let Some(feature_index) = decode_feature_index(&lookup, &response)? else {
+            continue;
+        };
+
+        let request = battery_request(device_index, feature_index, feature);
+        let response = exchange(device, &request, &mut on_unrelated_report)?;
+        return decode_battery_info(feature, &request, &response).map_err(Into::into);
+    }
+    Err(BatteryQueryError::Unsupported)
+}
+
+fn exchange<T: Read + Write + AsRawFd>(
+    device: &mut T,
+    request: &Message,
+    on_unrelated_report: &mut impl FnMut(&[u8]),
+) -> Result<Message, BatteryQueryError> {
+    device.write_all(request.as_bytes())?;
+    let deadline = Instant::now() + REQUEST_TIMEOUT;
+    let mut bytes = [0_u8; Message::LONG_LEN];
+
+    loop {
+        let now = Instant::now();
+        if now >= deadline {
+            return Err(BatteryQueryError::Timeout);
+        }
+        wait_readable(device, deadline.saturating_duration_since(now))?;
+        let length = device.read(&mut bytes)?;
+        if length == 0 {
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "hidraw closed").into());
+        }
+        let report = &bytes[..length];
+        let Ok(response) = Message::parse(report) else {
+            on_unrelated_report(report);
+            continue;
+        };
+        if response.is_response_to(request) || response.error_response_to(request).is_some() {
+            return Ok(response);
+        }
+        on_unrelated_report(report);
+    }
+}
+
+fn wait_readable(device: &impl AsRawFd, timeout: Duration) -> Result<(), BatteryQueryError> {
+    let timeout_ms = i32::try_from(timeout.as_millis()).unwrap_or(i32::MAX);
+    let mut descriptor = libc::pollfd {
+        fd: device.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    loop {
+        // SAFETY: `descriptor` points to one initialized pollfd for this call,
+        // and `poll` neither retains the pointer nor outlives `device`.
+        let result = unsafe { libc::poll(&raw mut descriptor, 1, timeout_ms) };
+        if result > 0 {
+            return Ok(());
+        }
+        if result == 0 {
+            return Err(BatteryQueryError::Timeout);
+        }
+        let error = io::Error::last_os_error();
+        if error.kind() != io::ErrorKind::Interrupted {
+            return Err(error.into());
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

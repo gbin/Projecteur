@@ -5,10 +5,10 @@ use core::pin::Pin;
 use std::{
     ffi::OsString,
     fmt::Write as _,
-    fs::File,
+    fs::{File, OpenOptions},
     io::{ErrorKind, Read},
     path::PathBuf,
-    sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError},
+    sync::mpsc::{self, Receiver, SyncSender, TryRecvError},
     thread,
     time::Duration,
 };
@@ -19,6 +19,7 @@ use projecteur_core::{
     config::{ConfigError, ProjecteurConfig},
     device_scan::{DeviceNodeKind, DiscoveredDevice, scan_devices},
     hid_report::{PresenterReport, decode_presenter_report},
+    hidpp::{BatteryInfo, query_battery},
     settings::{DotMode, SpotlightSettings, ZoomMode},
     uinput::{GrabbedEventDevice, VirtualKeyboard},
 };
@@ -58,6 +59,8 @@ pub mod ffi {
         #[qproperty(bool, presenter_connected)]
         #[qproperty(QString, presenter_device)]
         #[qproperty(bool, button_forwarding)]
+        #[qproperty(i32, battery_level)]
+        #[qproperty(QString, battery_status)]
         #[qproperty(i32, pointer_delta_x)]
         #[qproperty(i32, pointer_delta_y)]
         #[qproperty(i32, motion_serial)]
@@ -107,6 +110,8 @@ pub struct ProjecteurBackendRust {
     presenter_connected: bool,
     presenter_device: QString,
     button_forwarding: bool,
+    battery_level: i32,
+    battery_status: QString,
     pointer_delta_x: i32,
     pointer_delta_y: i32,
     motion_serial: i32,
@@ -206,6 +211,8 @@ impl ProjecteurBackendRust {
             presenter_connected: false,
             presenter_device: QString::default(),
             button_forwarding: false,
+            battery_level: -1,
+            battery_status: QString::default(),
             pointer_delta_x: 0,
             pointer_delta_y: 0,
             motion_serial: 0,
@@ -335,6 +342,7 @@ enum PresenterEvent {
     Disconnected,
     Report(PresenterReport),
     ButtonForwarding(bool),
+    Battery(BatteryInfo),
 }
 
 const PRESENTER_RESCAN_INTERVAL: Duration = Duration::from_millis(800);
@@ -361,15 +369,44 @@ fn start_presenter_manager(
                     thread::sleep(PRESENTER_RESCAN_INTERVAL);
                     continue;
                 };
-                let Ok(mut device) = File::open(&path) else {
-                    thread::sleep(PRESENTER_RESCAN_INTERVAL);
-                    continue;
+                let battery_device_index = scan_devices()
+                    .ok()
+                    .and_then(|devices| battery_device_index_for_path(&path, &devices));
+                let writable_device = OpenOptions::new().read(true).write(true).open(&path);
+                let (mut device, battery_device_index) = if let Ok(device) = writable_device {
+                    (device, battery_device_index)
+                } else {
+                    let Ok(device) = File::open(&path) else {
+                        thread::sleep(PRESENTER_RESCAN_INTERVAL);
+                        continue;
+                    };
+                    (device, None)
                 };
                 if presenter_sender
-                    .send(PresenterEvent::Connected(path))
+                    .send(PresenterEvent::Connected(path.clone()))
                     .is_err()
                 {
                     return;
+                }
+                if let Some(device_index) = battery_device_index {
+                    match query_battery(&mut device, device_index, |report| {
+                        forward_presenter_report(report, &presenter_sender);
+                    }) {
+                        Ok(info) => {
+                            if presenter_sender
+                                .send(PresenterEvent::Battery(info))
+                                .is_err()
+                            {
+                                return;
+                            }
+                        }
+                        Err(error) => {
+                            eprintln!(
+                                "projecteur-rs: battery status unavailable on {}: {error}",
+                                path.display()
+                            );
+                        }
+                    }
                 }
                 read_presenter(&mut device, &presenter_sender);
                 if presenter_sender.send(PresenterEvent::Disconnected).is_err() {
@@ -394,6 +431,17 @@ fn preferred_hidraw_path(devices: &[DiscoveredDevice]) -> Option<PathBuf> {
         .flat_map(|device| &device.nodes)
         .find(|node| node.kind == DeviceNodeKind::Hidraw && node.readable)
         .map(|node| node.path.clone())
+}
+
+fn battery_device_index_for_path(
+    path: &std::path::Path,
+    devices: &[DiscoveredDevice],
+) -> Option<u8> {
+    let device = devices
+        .iter()
+        .find(|device| device.nodes.iter().any(|node| node.path == path))?;
+    (device.id.vendor == 0x046d && matches!(device.id.product, 0xc53e | 0xb503 | 0xb506))
+        .then_some(1)
 }
 
 fn preferred_button_path(
@@ -468,14 +516,15 @@ fn read_presenter(device: &mut File, sender: &SyncSender<PresenterEvent>) {
             Ok(0) | Err(_) => return,
             Ok(length) => length,
         };
-        let Ok(report) = decode_presenter_report(&bytes[..length]) else {
-            continue;
-        };
-        match sender.try_send(PresenterEvent::Report(report)) {
-            Ok(()) | Err(TrySendError::Full(_)) => {}
-            Err(TrySendError::Disconnected(_)) => return,
-        }
+        forward_presenter_report(&bytes[..length], sender);
     }
+}
+
+fn forward_presenter_report(report: &[u8], sender: &SyncSender<PresenterEvent>) {
+    let Ok(report) = decode_presenter_report(report) else {
+        return;
+    };
+    let _ = sender.try_send(PresenterEvent::Report(report));
 }
 
 fn default_config_path() -> Option<PathBuf> {
@@ -553,6 +602,8 @@ impl ffi::ProjecteurBackend {
                 Some(Ok(PresenterEvent::Disconnected)) => {
                     self.as_mut().set_presenter_connected(false);
                     self.as_mut().set_presenter_device(QString::default());
+                    self.as_mut().set_battery_level(-1);
+                    self.as_mut().set_battery_status(QString::default());
                 }
                 Some(Ok(PresenterEvent::Report(PresenterReport::Pointer(pointer)))) => {
                     if pointer.x == 0 && pointer.y == 0 {
@@ -568,6 +619,12 @@ impl ffi::ProjecteurBackend {
                 Some(Ok(PresenterEvent::Report(PresenterReport::Keyboard(_)))) => {}
                 Some(Ok(PresenterEvent::ButtonForwarding(active))) => {
                     self.as_mut().set_button_forwarding(active);
+                }
+                Some(Ok(PresenterEvent::Battery(info))) => {
+                    self.as_mut()
+                        .set_battery_level(i32::from(info.current_level));
+                    self.as_mut()
+                        .set_battery_status(QString::from(info.status.as_str()));
                 }
                 Some(Err(TryRecvError::Empty)) | None => break,
                 Some(Err(TryRecvError::Disconnected)) => {
@@ -696,6 +753,10 @@ mod tests {
                 &devices
             ),
             Some(PathBuf::from("/dev/input/event15"))
+        );
+        assert_eq!(
+            battery_device_index_for_path(std::path::Path::new("/dev/hidraw5"), &devices),
+            Some(1)
         );
     }
 
