@@ -7,6 +7,7 @@
 use std::{error::Error, fmt, str::FromStr};
 
 pub mod config;
+pub mod device_scan;
 pub mod settings;
 
 /// The transport used by a supported presenter.
@@ -141,6 +142,47 @@ pub fn supported_devices() -> Vec<SupportedDevice> {
         .expect("the checked-in devices.conf must be valid")
 }
 
+/// Return every built-in presenter model, including Logitech Spotlight models.
+#[must_use]
+pub fn all_supported_devices() -> Vec<SupportedDevice> {
+    let mut devices = vec![
+        SupportedDevice {
+            id: DeviceId {
+                vendor: 0x046d,
+                product: 0xc53e,
+                bus: Bus::Usb,
+            },
+            name: "Logitech Spotlight (USB)".to_owned(),
+        },
+        SupportedDevice {
+            id: DeviceId {
+                vendor: 0x046d,
+                product: 0xb503,
+                bus: Bus::Bluetooth,
+            },
+            name: "Logitech Spotlight (Bluetooth)".to_owned(),
+        },
+        SupportedDevice {
+            id: DeviceId {
+                vendor: 0x046d,
+                product: 0xc548,
+                bus: Bus::Usb,
+            },
+            name: "Logitech Spotlight 2 (USB-C receiver)".to_owned(),
+        },
+        SupportedDevice {
+            id: DeviceId {
+                vendor: 0x046d,
+                product: 0xb506,
+                bus: Bus::Bluetooth,
+            },
+            name: "Logitech Spotlight 2 (Bluetooth)".to_owned(),
+        },
+    ];
+    devices.extend(supported_devices());
+    devices
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -155,6 +197,16 @@ mod tests {
         assert_eq!(devices[0].id.bus, Bus::Usb);
         assert_eq!(devices[0].name, "AVATTO H100 / August WP200");
         assert!(devices.iter().any(|device| device.id.bus == Bus::Bluetooth));
+    }
+
+    #[test]
+    fn complete_registry_includes_logitech_spotlight_models() {
+        let devices = all_supported_devices();
+
+        assert_eq!(devices.len(), 17);
+        assert_eq!(devices[0].id.vendor, 0x046d);
+        assert_eq!(devices[0].id.product, 0xc53e);
+        assert_eq!(devices[0].name, "Logitech Spotlight (USB)");
     }
 
     #[test]
