@@ -76,7 +76,9 @@ ApplicationWindow {
         Label {
             Layout.fillWidth: true
             text: backend.presenterConnected
-                  ? qsTr("Presenter input: connected at %1").arg(backend.presenterDevice)
+                  ? qsTr("Presenter input: connected at %1; buttons: %2")
+                        .arg(backend.presenterDevice)
+                        .arg(backend.buttonForwarding ? qsTr("forwarded") : qsTr("not grabbed"))
                   : qsTr("Presenter input: not connected")
         }
 

@@ -20,6 +20,7 @@ use projecteur_core::{
     device_scan::{DeviceNodeKind, DiscoveredDevice, scan_devices},
     hid_report::{PresenterReport, decode_presenter_report},
     settings::{DotMode, SpotlightSettings, ZoomMode},
+    uinput::{GrabbedEventDevice, VirtualKeyboard},
 };
 
 #[cxx_qt::bridge]
@@ -56,6 +57,7 @@ pub mod ffi {
         #[qproperty(bool, preview_timeout_enabled)]
         #[qproperty(bool, presenter_connected)]
         #[qproperty(QString, presenter_device)]
+        #[qproperty(bool, button_forwarding)]
         #[qproperty(i32, pointer_delta_x)]
         #[qproperty(i32, pointer_delta_y)]
         #[qproperty(i32, motion_serial)]
@@ -104,6 +106,7 @@ pub struct ProjecteurBackendRust {
     preview_timeout_enabled: bool,
     presenter_connected: bool,
     presenter_device: QString,
+    button_forwarding: bool,
     pointer_delta_x: i32,
     pointer_delta_y: i32,
     motion_serial: i32,
@@ -154,7 +157,7 @@ impl Default for ProjecteurBackendRust {
                 let _ = write!(status, "; presenter monitoring disabled");
                 None
             }
-            selection => match start_presenter_manager(selection) {
+            selection => match start_presenter_manager(selection, options.uinput_enabled) {
                 Ok(receiver) => {
                     let _ = write!(status, "; waiting for presenter input");
                     Some(receiver)
@@ -202,6 +205,7 @@ impl ProjecteurBackendRust {
             preview_timeout_enabled: overlay_active,
             presenter_connected: false,
             presenter_device: QString::default(),
+            button_forwarding: false,
             pointer_delta_x: 0,
             pointer_delta_y: 0,
             motion_serial: 0,
@@ -243,14 +247,30 @@ enum PresenterSelection {
     Disabled,
 }
 
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
+#[allow(clippy::struct_excessive_bools)]
 struct CliOptions {
     show_window: bool,
     overlay_preview: bool,
     config_path: Option<PathBuf>,
     config_path_is_explicit: bool,
     presenter: PresenterSelection,
+    uinput_enabled: bool,
     startup_error: Option<String>,
+}
+
+impl Default for CliOptions {
+    fn default() -> Self {
+        Self {
+            show_window: false,
+            overlay_preview: false,
+            config_path: None,
+            config_path_is_explicit: false,
+            presenter: PresenterSelection::Auto,
+            uinput_enabled: true,
+            startup_error: None,
+        }
+    }
 }
 
 impl CliOptions {
@@ -274,6 +294,8 @@ impl CliOptions {
                 };
             } else if argument == "--no-presenter" {
                 options.presenter = PresenterSelection::Disabled;
+            } else if argument == "--disable-uinput" || argument == "--no-uinput" {
+                options.uinput_enabled = false;
             } else if argument == "--cfg" {
                 let path = arguments
                     .next()
@@ -312,19 +334,23 @@ enum PresenterEvent {
     Connected(PathBuf),
     Disconnected,
     Report(PresenterReport),
+    ButtonForwarding(bool),
 }
 
 const PRESENTER_RESCAN_INTERVAL: Duration = Duration::from_millis(800);
 
 fn start_presenter_manager(
     selection: PresenterSelection,
+    uinput_enabled: bool,
 ) -> Result<Receiver<PresenterEvent>, String> {
     let (sender, receiver) = mpsc::sync_channel(256);
+    let presenter_selection = selection.clone();
+    let presenter_sender = sender.clone();
     thread::Builder::new()
         .name("projecteur-presenter".to_owned())
         .spawn(move || {
             loop {
-                let path = match &selection {
+                let path = match &presenter_selection {
                     PresenterSelection::Auto => scan_devices()
                         .ok()
                         .and_then(|devices| preferred_hidraw_path(&devices)),
@@ -339,17 +365,26 @@ fn start_presenter_manager(
                     thread::sleep(PRESENTER_RESCAN_INTERVAL);
                     continue;
                 };
-                if sender.send(PresenterEvent::Connected(path)).is_err() {
+                if presenter_sender
+                    .send(PresenterEvent::Connected(path))
+                    .is_err()
+                {
                     return;
                 }
-                read_presenter(&mut device, &sender);
-                if sender.send(PresenterEvent::Disconnected).is_err() {
+                read_presenter(&mut device, &presenter_sender);
+                if presenter_sender.send(PresenterEvent::Disconnected).is_err() {
                     return;
                 }
                 thread::sleep(PRESENTER_RESCAN_INTERVAL);
             }
         })
         .map_err(|error| format!("cannot start presenter monitor: {error}"))?;
+    if uinput_enabled {
+        thread::Builder::new()
+            .name("projecteur-presenter-buttons".to_owned())
+            .spawn(move || run_button_manager(&selection, &sender))
+            .map_err(|error| format!("cannot start presenter button forwarding: {error}"))?;
+    }
     Ok(receiver)
 }
 
@@ -359,6 +394,71 @@ fn preferred_hidraw_path(devices: &[DiscoveredDevice]) -> Option<PathBuf> {
         .flat_map(|device| &device.nodes)
         .find(|node| node.kind == DeviceNodeKind::Hidraw && node.readable)
         .map(|node| node.path.clone())
+}
+
+fn preferred_button_path(
+    selection: &PresenterSelection,
+    devices: &[DiscoveredDevice],
+) -> Option<PathBuf> {
+    let device = match selection {
+        PresenterSelection::Auto => devices.iter().find(|device| {
+            device
+                .nodes
+                .iter()
+                .any(|node| node.kind == DeviceNodeKind::Hidraw && node.readable)
+        }),
+        PresenterSelection::Explicit(path) => devices
+            .iter()
+            .find(|device| device.nodes.iter().any(|node| node.path == *path)),
+        PresenterSelection::Disabled => None,
+    }?;
+    device
+        .nodes
+        .iter()
+        .find(|node| {
+            node.kind == DeviceNodeKind::Event && node.readable && !node.has_relative_pointer
+        })
+        .map(|node| node.path.clone())
+}
+
+fn run_button_manager(selection: &PresenterSelection, sender: &SyncSender<PresenterEvent>) {
+    let mut reported_uinput_error = false;
+    loop {
+        let path = scan_devices()
+            .ok()
+            .and_then(|devices| preferred_button_path(selection, &devices));
+        let Some(path) = path else {
+            thread::sleep(PRESENTER_RESCAN_INTERVAL);
+            continue;
+        };
+        let Ok(mut keyboard) = VirtualKeyboard::create() else {
+            if !reported_uinput_error {
+                eprintln!("projecteur-rs: uinput unavailable; presenter buttons remain ungrabbed");
+                reported_uinput_error = true;
+            }
+            thread::sleep(PRESENTER_RESCAN_INTERVAL);
+            continue;
+        };
+        let Ok(mut source) = GrabbedEventDevice::open(&path) else {
+            thread::sleep(PRESENTER_RESCAN_INTERVAL);
+            continue;
+        };
+        if sender.send(PresenterEvent::ButtonForwarding(true)).is_err() {
+            return;
+        }
+        while let Ok(event) = source.read_event() {
+            if keyboard.emit(event).is_err() {
+                break;
+            }
+        }
+        if sender
+            .send(PresenterEvent::ButtonForwarding(false))
+            .is_err()
+        {
+            return;
+        }
+        thread::sleep(PRESENTER_RESCAN_INTERVAL);
+    }
 }
 
 fn read_presenter(device: &mut File, sender: &SyncSender<PresenterEvent>) {
@@ -466,6 +566,9 @@ impl ffi::ProjecteurBackend {
                     self.as_mut().set_preview_timeout_enabled(false);
                 }
                 Some(Ok(PresenterEvent::Report(PresenterReport::Keyboard(_)))) => {}
+                Some(Ok(PresenterEvent::ButtonForwarding(active))) => {
+                    self.as_mut().set_button_forwarding(active);
+                }
                 Some(Err(TryRecvError::Empty)) | None => break,
                 Some(Err(TryRecvError::Disconnected)) => {
                     self.as_mut().set_presenter_connected(false);
@@ -479,6 +582,8 @@ impl ffi::ProjecteurBackend {
 
 #[cfg(test)]
 mod tests {
+    use projecteur_core::{Bus, DeviceId, device_scan::DeviceNode};
+
     use super::*;
 
     #[test]
@@ -493,6 +598,7 @@ mod tests {
         assert!(options.show_window);
         assert!(!options.overlay_preview);
         assert!(options.config_path_is_explicit);
+        assert!(options.uinput_enabled);
         assert_eq!(options.presenter, PresenterSelection::Auto);
         assert_eq!(
             options.config_path,
@@ -533,6 +639,64 @@ mod tests {
 
         assert_eq!(automatic.presenter, PresenterSelection::Auto);
         assert_eq!(disabled.presenter, PresenterSelection::Disabled);
+    }
+
+    #[test]
+    fn parses_uinput_disable_aliases() {
+        let legacy = CliOptions::parse([OsString::from("--disable-uinput")]).unwrap();
+        let concise = CliOptions::parse([OsString::from("--no-uinput")]).unwrap();
+
+        assert!(!legacy.uinput_enabled);
+        assert!(!concise.uinput_enabled);
+    }
+
+    #[test]
+    fn button_forwarding_uses_only_the_selected_devices_non_pointer_node() {
+        let devices = [DiscoveredDevice {
+            id: DeviceId {
+                vendor: 0x046d,
+                product: 0xb506,
+                bus: Bus::Bluetooth,
+            },
+            physical_id: "presenter".to_owned(),
+            kernel_name: String::new(),
+            configured_name: "Spotlight".to_owned(),
+            nodes: vec![
+                DeviceNode {
+                    path: PathBuf::from("/dev/input/event16"),
+                    kind: DeviceNodeKind::Event,
+                    has_relative_pointer: true,
+                    readable: true,
+                    writable: true,
+                },
+                DeviceNode {
+                    path: PathBuf::from("/dev/input/event15"),
+                    kind: DeviceNodeKind::Event,
+                    has_relative_pointer: false,
+                    readable: true,
+                    writable: true,
+                },
+                DeviceNode {
+                    path: PathBuf::from("/dev/hidraw5"),
+                    kind: DeviceNodeKind::Hidraw,
+                    has_relative_pointer: false,
+                    readable: true,
+                    writable: true,
+                },
+            ],
+        }];
+
+        assert_eq!(
+            preferred_button_path(&PresenterSelection::Auto, &devices),
+            Some(PathBuf::from("/dev/input/event15"))
+        );
+        assert_eq!(
+            preferred_button_path(
+                &PresenterSelection::Explicit(PathBuf::from("/dev/hidraw5")),
+                &devices
+            ),
+            Some(PathBuf::from("/dev/input/event15"))
+        );
     }
 
     #[test]
