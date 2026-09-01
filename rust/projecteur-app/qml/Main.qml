@@ -37,7 +37,7 @@ ApplicationWindow {
     Timer {
         interval: 8
         repeat: true
-        running: backend.presenterConnected
+        running: true
         onTriggered: backend.pollPresenter()
     }
 
@@ -76,7 +76,7 @@ ApplicationWindow {
         Label {
             Layout.fillWidth: true
             text: backend.presenterConnected
-                  ? qsTr("Presenter input: connected")
+                  ? qsTr("Presenter input: connected at %1").arg(backend.presenterDevice)
                   : qsTr("Presenter input: not connected")
         }
 

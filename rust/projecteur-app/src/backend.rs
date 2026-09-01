@@ -7,15 +7,17 @@ use std::{
     fmt::Write as _,
     fs::File,
     io::{ErrorKind, Read},
-    path::{Path, PathBuf},
-    sync::mpsc::{self, Receiver, TryRecvError},
+    path::PathBuf,
+    sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError},
     thread,
+    time::Duration,
 };
 
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use projecteur_core::{
     config::{ConfigError, ProjecteurConfig},
+    device_scan::{DeviceNodeKind, DiscoveredDevice, scan_devices},
     hid_report::{PresenterReport, decode_presenter_report},
     settings::{DotMode, SpotlightSettings, ZoomMode},
 };
@@ -53,6 +55,7 @@ pub mod ffi {
         #[qproperty(bool, overlay_active)]
         #[qproperty(bool, preview_timeout_enabled)]
         #[qproperty(bool, presenter_connected)]
+        #[qproperty(QString, presenter_device)]
         #[qproperty(i32, pointer_delta_x)]
         #[qproperty(i32, pointer_delta_y)]
         #[qproperty(i32, motion_serial)]
@@ -100,6 +103,7 @@ pub struct ProjecteurBackendRust {
     overlay_active: bool,
     preview_timeout_enabled: bool,
     presenter_connected: bool,
+    presenter_device: QString,
     pointer_delta_x: i32,
     pointer_delta_y: i32,
     motion_serial: i32,
@@ -128,7 +132,7 @@ pub struct ProjecteurBackendRust {
     multi_screen_overlay: bool,
     presentation_timer_enabled: bool,
     presentation_timer_duration_seconds: i32,
-    presenter_reports: Option<Receiver<PresenterReport>>,
+    presenter_events: Option<Receiver<PresenterEvent>>,
 }
 
 impl Default for ProjecteurBackendRust {
@@ -145,25 +149,27 @@ impl Default for ProjecteurBackendRust {
             }
         };
         let (settings, config_path, mut status) = load_settings(&options);
-        let presenter_reports =
-            options
-                .presenter_path
-                .as_deref()
-                .and_then(|path| match start_presenter_reader(path) {
-                    Ok(receiver) => {
-                        let _ = write!(status, "; monitoring presenter at {}", path.display());
-                        Some(receiver)
-                    }
-                    Err(error) => {
-                        let _ = write!(status, "; {error}");
-                        eprintln!("projecteur-rs: {error}");
-                        None
-                    }
-                });
+        let presenter_events = match options.presenter {
+            PresenterSelection::Disabled => {
+                let _ = write!(status, "; presenter monitoring disabled");
+                None
+            }
+            selection => match start_presenter_manager(selection) {
+                Ok(receiver) => {
+                    let _ = write!(status, "; waiting for presenter input");
+                    Some(receiver)
+                }
+                Err(error) => {
+                    let _ = write!(status, "; {error}");
+                    eprintln!("projecteur-rs: {error}");
+                    None
+                }
+            },
+        };
         Self::from_settings(
             options.show_window,
             options.overlay_preview,
-            presenter_reports,
+            presenter_events,
             &settings,
             config_path.as_deref(),
             &status,
@@ -175,7 +181,7 @@ impl ProjecteurBackendRust {
     fn from_settings(
         show_window: bool,
         overlay_active: bool,
-        presenter_reports: Option<Receiver<PresenterReport>>,
+        presenter_events: Option<Receiver<PresenterEvent>>,
         settings: &SpotlightSettings,
         config_path: Option<&std::path::Path>,
         status: &str,
@@ -194,7 +200,8 @@ impl ProjecteurBackendRust {
             show_window,
             overlay_active,
             preview_timeout_enabled: overlay_active,
-            presenter_connected: presenter_reports.is_some(),
+            presenter_connected: false,
+            presenter_device: QString::default(),
             pointer_delta_x: 0,
             pointer_delta_y: 0,
             motion_serial: 0,
@@ -223,9 +230,17 @@ impl ProjecteurBackendRust {
             multi_screen_overlay: settings.multi_screen_overlay,
             presentation_timer_enabled: settings.presentation_timer_enabled,
             presentation_timer_duration_seconds: settings.presentation_timer_duration_seconds,
-            presenter_reports,
+            presenter_events,
         }
     }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+enum PresenterSelection {
+    #[default]
+    Auto,
+    Explicit(PathBuf),
+    Disabled,
 }
 
 #[derive(Debug, Default, Eq, PartialEq)]
@@ -234,7 +249,7 @@ struct CliOptions {
     overlay_preview: bool,
     config_path: Option<PathBuf>,
     config_path_is_explicit: bool,
-    presenter_path: Option<PathBuf>,
+    presenter: PresenterSelection,
     startup_error: Option<String>,
 }
 
@@ -252,7 +267,13 @@ impl CliOptions {
                 let path = arguments
                     .next()
                     .ok_or_else(|| "--presenter requires a hidraw path".to_owned())?;
-                options.presenter_path = Some(PathBuf::from(path));
+                options.presenter = if path == "auto" {
+                    PresenterSelection::Auto
+                } else {
+                    PresenterSelection::Explicit(PathBuf::from(path))
+                };
+            } else if argument == "--no-presenter" {
+                options.presenter = PresenterSelection::Disabled;
             } else if argument == "--cfg" {
                 let path = arguments
                     .next()
@@ -270,7 +291,11 @@ impl CliOptions {
                     if path.is_empty() {
                         return Err("--presenter requires a hidraw path".to_owned());
                     }
-                    options.presenter_path = Some(PathBuf::from(path));
+                    options.presenter = if path == "auto" {
+                        PresenterSelection::Auto
+                    } else {
+                        PresenterSelection::Explicit(PathBuf::from(path))
+                    };
                 }
             }
         }
@@ -282,31 +307,75 @@ impl CliOptions {
     }
 }
 
-fn start_presenter_reader(path: &Path) -> Result<Receiver<PresenterReport>, String> {
-    let mut device = File::open(path)
-        .map_err(|error| format!("cannot open presenter {}: {error}", path.display()))?;
+#[derive(Debug)]
+enum PresenterEvent {
+    Connected(PathBuf),
+    Disconnected,
+    Report(PresenterReport),
+}
+
+const PRESENTER_RESCAN_INTERVAL: Duration = Duration::from_millis(800);
+
+fn start_presenter_manager(
+    selection: PresenterSelection,
+) -> Result<Receiver<PresenterEvent>, String> {
     let (sender, receiver) = mpsc::sync_channel(256);
-    let thread_name = format!("projecteur-hid-{}", path.display());
     thread::Builder::new()
-        .name(thread_name)
+        .name("projecteur-presenter".to_owned())
         .spawn(move || {
-            let mut report = [0_u8; 256];
             loop {
-                match device.read(&mut report) {
-                    Ok(0) | Err(_) => break,
-                    Ok(length) => {
-                        let Ok(report) = decode_presenter_report(&report[..length]) else {
-                            continue;
-                        };
-                        if sender.send(report).is_err() {
-                            break;
-                        }
-                    }
+                let path = match &selection {
+                    PresenterSelection::Auto => scan_devices()
+                        .ok()
+                        .and_then(|devices| preferred_hidraw_path(&devices)),
+                    PresenterSelection::Explicit(path) => Some(path.clone()),
+                    PresenterSelection::Disabled => return,
+                };
+                let Some(path) = path else {
+                    thread::sleep(PRESENTER_RESCAN_INTERVAL);
+                    continue;
+                };
+                let Ok(mut device) = File::open(&path) else {
+                    thread::sleep(PRESENTER_RESCAN_INTERVAL);
+                    continue;
+                };
+                if sender.send(PresenterEvent::Connected(path)).is_err() {
+                    return;
                 }
+                read_presenter(&mut device, &sender);
+                if sender.send(PresenterEvent::Disconnected).is_err() {
+                    return;
+                }
+                thread::sleep(PRESENTER_RESCAN_INTERVAL);
             }
         })
-        .map_err(|error| format!("cannot start presenter reader: {error}"))?;
+        .map_err(|error| format!("cannot start presenter monitor: {error}"))?;
     Ok(receiver)
+}
+
+fn preferred_hidraw_path(devices: &[DiscoveredDevice]) -> Option<PathBuf> {
+    devices
+        .iter()
+        .flat_map(|device| &device.nodes)
+        .find(|node| node.kind == DeviceNodeKind::Hidraw && node.readable)
+        .map(|node| node.path.clone())
+}
+
+fn read_presenter(device: &mut File, sender: &SyncSender<PresenterEvent>) {
+    let mut bytes = [0_u8; 256];
+    loop {
+        let length = match device.read(&mut bytes) {
+            Ok(0) | Err(_) => return,
+            Ok(length) => length,
+        };
+        let Ok(report) = decode_presenter_report(&bytes[..length]) else {
+            continue;
+        };
+        match sender.try_send(PresenterEvent::Report(report)) {
+            Ok(()) | Err(TrySendError::Full(_)) => {}
+            Err(TrySendError::Disconnected(_)) => return,
+        }
+    }
 }
 
 fn default_config_path() -> Option<PathBuf> {
@@ -369,14 +438,23 @@ impl ffi::ProjecteurBackend {
 
     fn poll_presenter(mut self: Pin<&mut Self>) {
         loop {
-            let report = self
+            let event = self
                 .as_ref()
                 .rust()
-                .presenter_reports
+                .presenter_events
                 .as_ref()
                 .map(Receiver::try_recv);
-            match report {
-                Some(Ok(PresenterReport::Pointer(pointer))) => {
+            match event {
+                Some(Ok(PresenterEvent::Connected(path))) => {
+                    self.as_mut().set_presenter_connected(true);
+                    self.as_mut()
+                        .set_presenter_device(QString::from(path.to_str().unwrap_or("presenter")));
+                }
+                Some(Ok(PresenterEvent::Disconnected)) => {
+                    self.as_mut().set_presenter_connected(false);
+                    self.as_mut().set_presenter_device(QString::default());
+                }
+                Some(Ok(PresenterEvent::Report(PresenterReport::Pointer(pointer)))) => {
                     if pointer.x == 0 && pointer.y == 0 {
                         continue;
                     }
@@ -387,10 +465,11 @@ impl ffi::ProjecteurBackend {
                     self.as_mut().set_overlay_active(true);
                     self.as_mut().set_preview_timeout_enabled(false);
                 }
-                Some(Ok(PresenterReport::Keyboard(_))) => {}
+                Some(Ok(PresenterEvent::Report(PresenterReport::Keyboard(_)))) => {}
                 Some(Err(TryRecvError::Empty)) | None => break,
                 Some(Err(TryRecvError::Disconnected)) => {
                     self.as_mut().set_presenter_connected(false);
+                    self.as_mut().set_presenter_device(QString::default());
                     break;
                 }
             }
@@ -414,7 +493,7 @@ mod tests {
         assert!(options.show_window);
         assert!(!options.overlay_preview);
         assert!(options.config_path_is_explicit);
-        assert!(options.presenter_path.is_none());
+        assert_eq!(options.presenter, PresenterSelection::Auto);
         assert_eq!(
             options.config_path,
             Some(PathBuf::from("/tmp/projecteur-test.rc"))
@@ -438,10 +517,22 @@ mod tests {
         let equals = CliOptions::parse([OsString::from("--presenter=/dev/hidraw6")]).unwrap();
 
         assert_eq!(
-            separated.presenter_path,
-            Some(PathBuf::from("/dev/hidraw5"))
+            separated.presenter,
+            PresenterSelection::Explicit(PathBuf::from("/dev/hidraw5"))
         );
-        assert_eq!(equals.presenter_path, Some(PathBuf::from("/dev/hidraw6")));
+        assert_eq!(
+            equals.presenter,
+            PresenterSelection::Explicit(PathBuf::from("/dev/hidraw6"))
+        );
+    }
+
+    #[test]
+    fn parses_presenter_auto_and_disabled_modes() {
+        let automatic = CliOptions::parse([OsString::from("--presenter=auto")]).unwrap();
+        let disabled = CliOptions::parse([OsString::from("--no-presenter")]).unwrap();
+
+        assert_eq!(automatic.presenter, PresenterSelection::Auto);
+        assert_eq!(disabled.presenter, PresenterSelection::Disabled);
     }
 
     #[test]
