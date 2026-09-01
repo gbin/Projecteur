@@ -32,3 +32,9 @@ also closes it:
 ```sh
 cargo run --bin projecteur-rs -- --show-window --overlay-preview
 ```
+
+Read-only presenter discovery runs without starting Qt or grabbing devices:
+
+```sh
+cargo run --bin projecteur-rs -- --device-scan
+```
