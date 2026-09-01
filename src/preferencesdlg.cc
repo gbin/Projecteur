@@ -105,6 +105,8 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
   connect(settings, &Settings::dotSizeChanged, this, modified);
   connect(settings, &Settings::dotColorChanged, this, modified);
   connect(settings, &Settings::dotOpacityChanged, this, modified);
+  connect(settings, &Settings::dotModeChanged, this, modified);
+  connect(settings, &Settings::dotTrailEnabledChanged, this, modified);
   connect(settings, &Settings::shadeColorChanged, this, modified);
   connect(settings, &Settings::shadeOpacityChanged, this, modified);
   connect(settings, &Settings::cursorChanged, this, modified);
@@ -465,16 +467,40 @@ QGroupBox* PreferencesDialog::createDotGroupBox(Settings* settings)
   connect(settings, &Settings::dotSizeChanged, this, &PreferencesDialog::resetPresetCombo);
 
   const auto dotGrid = new QGridLayout(dotGroup);
-  dotGrid->addWidget(new QLabel(i18n("Dot Size"), this), 0, 0);
-  dotGrid->addLayout(dotsizeHBox, 0, 1);
+  const auto dotModeCombo = new QComboBox(this);
+  dotModeCombo->addItem(i18n("Solid"), QStringLiteral("solid"));
+  dotModeCombo->addItem(i18n("Diffuse scintillating"), QStringLiteral("diffuse"));
+  dotModeCombo->setCurrentIndex(dotModeCombo->findData(settings->dotMode()));
+  connect(dotModeCombo, &QComboBox::currentIndexChanged, settings,
+    [settings, dotModeCombo](int index) {
+      settings->setDotMode(dotModeCombo->itemData(index).toString());
+    });
+  connect(settings, &Settings::dotModeChanged, dotModeCombo,
+    [dotModeCombo](const QString& mode) {
+      const auto index = dotModeCombo->findData(mode);
+      if (index >= 0) { dotModeCombo->setCurrentIndex(index); }
+    });
+  connect(settings, &Settings::dotModeChanged, this, &PreferencesDialog::resetPresetCombo);
+  dotGrid->addWidget(new QLabel(i18n("Appearance"), this), 0, 0);
+  dotGrid->addWidget(dotModeCombo, 0, 1);
+
+  const auto dotTrailCheckBox = new QCheckBox(i18n("Show quickly fading trail"), this);
+  dotTrailCheckBox->setChecked(settings->dotTrailEnabled());
+  connect(dotTrailCheckBox, &QCheckBox::toggled, settings, &Settings::setDotTrailEnabled);
+  connect(settings, &Settings::dotTrailEnabledChanged, dotTrailCheckBox, &QCheckBox::setChecked);
+  connect(settings, &Settings::dotTrailEnabledChanged, this, &PreferencesDialog::resetPresetCombo);
+  dotGrid->addWidget(dotTrailCheckBox, 1, 0, 1, 2);
+
+  dotGrid->addWidget(new QLabel(i18n("Dot Size"), this), 2, 0);
+  dotGrid->addLayout(dotsizeHBox, 2, 1);
 
   const auto dotColor = new KColorButton(settings->dotColor(), this);
   dotColor->setAccessibleName(i18n("Dot Color"));
   connect(dotColor, &KColorButton::changed, settings, &Settings::setDotColor);
   connect(settings, &Settings::dotColorChanged, dotColor, &KColorButton::setColor);
   connect(settings, &Settings::dotColorChanged, this, &PreferencesDialog::resetPresetCombo);
-  dotGrid->addWidget(new QLabel(i18n("Dot Color"), this), 1, 0);
-  dotGrid->addWidget(dotColor, 1, 1);
+  dotGrid->addWidget(new QLabel(i18n("Dot Color"), this), 3, 0);
+  dotGrid->addWidget(dotColor, 3, 1);
 
 
   // Spotlight dot opacity setting
@@ -486,10 +512,10 @@ QGroupBox* PreferencesDialog::createDotGroupBox(Settings* settings)
   dotOpacitySb->setValue(settings->dotOpacity());
   connect(dotOpacitySb, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
           settings, &Settings::setDotOpacity);
-  connect(settings, &Settings::borderOpacityChanged, dotOpacitySb, &QDoubleSpinBox::setValue);
-  connect(settings, &Settings::borderOpacityChanged, this, &PreferencesDialog::resetPresetCombo);
-  dotGrid->addWidget(new QLabel(i18n("Dot Opacity"), this), 2, 0);
-  dotGrid->addWidget(dotOpacitySb, 2, 1);
+  connect(settings, &Settings::dotOpacityChanged, dotOpacitySb, &QDoubleSpinBox::setValue);
+  connect(settings, &Settings::dotOpacityChanged, this, &PreferencesDialog::resetPresetCombo);
+  dotGrid->addWidget(new QLabel(i18n("Dot Opacity"), this), 4, 0);
+  dotGrid->addWidget(dotOpacitySb, 4, 1);
 
   dotGrid->addWidget(new QWidget(this), 100, 0);
   dotGrid->setRowStretch(100, 100);

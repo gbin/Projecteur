@@ -126,6 +126,8 @@ ProjecteurControl::ProjecteurControl(ProjecteurApplication* application, Setting
   connect(m_settings, &Settings::dotSizeChanged, this, settingsChanged);
   connect(m_settings, &Settings::dotColorChanged, this, settingsChanged);
   connect(m_settings, &Settings::dotOpacityChanged, this, settingsChanged);
+  connect(m_settings, &Settings::dotModeChanged, this, settingsChanged);
+  connect(m_settings, &Settings::dotTrailEnabledChanged, this, settingsChanged);
   connect(m_settings, &Settings::shadeColorChanged, this, settingsChanged);
   connect(m_settings, &Settings::shadeOpacityChanged, this, settingsChanged);
   connect(m_settings, &Settings::cursorChanged, this, settingsChanged);

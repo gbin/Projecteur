@@ -27,7 +27,7 @@ Under **Preferences → Spotlight**, you can configure:
 
 - spotlight size, shape, and rotation;
 - shade color and opacity;
-- center dot and border;
+- center-dot appearance and fading trail, plus the spotlight border;
 - cursor appearance;
 - zoom level and content type;
 - multi-screen behavior.
