@@ -1,0 +1,139 @@
+import QtQuick
+import QtQuick.Effects
+import QtQuick.Window
+import org.kde.layershell as LayerShell
+
+Window {
+    id: root
+
+    required property QtObject backend
+
+    visible: backend.overlayPreview
+    width: Screen.width
+    height: Screen.height
+    color: "transparent"
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
+
+    LayerShell.Window.scope: "projecteur-rust-overlay-preview"
+    LayerShell.Window.layer: LayerShell.Window.LayerOverlay
+    LayerShell.Window.anchors: LayerShell.Window.AnchorTop
+                               | LayerShell.Window.AnchorBottom
+                               | LayerShell.Window.AnchorLeft
+                               | LayerShell.Window.AnchorRight
+    LayerShell.Window.exclusionZone: 0
+    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
+    LayerShell.Window.activateOnShow: false
+
+    readonly property real spotDiameter: Math.max(50, Math.min(height, height * backend.spotSize / 100))
+    readonly property real spotX: (pointer.containsMouse ? pointer.mouseX : width / 2) - spotDiameter / 2
+    readonly property real spotY: (pointer.containsMouse ? pointer.mouseY : height / 2) - spotDiameter / 2
+
+    MouseArea {
+        id: pointer
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: backend.cursor
+        onClicked: root.visible = false
+    }
+
+    Rectangle {
+        visible: backend.showSpotShade
+        color: backend.shadeColor
+        opacity: backend.shadeOpacity
+        anchors { top: parent.top; bottom: aperture.top; left: parent.left; right: parent.right }
+    }
+
+    Rectangle {
+        visible: backend.showSpotShade
+        color: backend.shadeColor
+        opacity: backend.shadeOpacity
+        anchors { top: aperture.bottom; bottom: parent.bottom; left: parent.left; right: parent.right }
+    }
+
+    Rectangle {
+        visible: backend.showSpotShade
+        color: backend.shadeColor
+        opacity: backend.shadeOpacity
+        anchors { top: aperture.top; bottom: aperture.bottom; left: parent.left; right: aperture.left }
+    }
+
+    Rectangle {
+        visible: backend.showSpotShade
+        color: backend.shadeColor
+        opacity: backend.shadeOpacity
+        anchors { top: aperture.top; bottom: aperture.bottom; left: aperture.right; right: parent.right }
+    }
+
+    Rectangle {
+        id: aperture
+        x: root.spotX
+        y: root.spotY
+        width: root.spotDiameter
+        height: width
+        radius: width / 2
+        color: "transparent"
+        border.width: backend.showBorder ? Math.max(0, backend.borderSize) : 0
+        border.color: backend.borderColor
+        opacity: backend.borderOpacity
+    }
+
+    Rectangle {
+        id: centerShade
+        anchors.fill: aperture
+        visible: false
+        color: backend.shadeColor
+        layer.enabled: true
+    }
+
+    Rectangle {
+        id: circularMask
+        anchors.fill: aperture
+        visible: false
+        radius: width / 2
+        layer.enabled: true
+    }
+
+    MultiEffect {
+        anchors.fill: aperture
+        visible: backend.showSpotShade
+        source: centerShade
+        opacity: backend.shadeOpacity
+        maskEnabled: true
+        maskInverted: true
+        maskSource: circularMask
+        enabled: false
+    }
+
+    Rectangle {
+        anchors.centerIn: aperture
+        visible: backend.showCenterDot
+        width: backend.dotSize
+        height: width
+        radius: width / 2
+        color: backend.dotColor
+        opacity: backend.dotOpacity
+    }
+
+    Rectangle {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 24
+        width: safetyText.implicitWidth + 32
+        height: safetyText.implicitHeight + 20
+        radius: 8
+        color: "#d0202020"
+
+        Text {
+            id: safetyText
+            anchors.centerIn: parent
+            color: "white"
+            text: qsTr("Overlay preview — click anywhere to close (auto-closes in 12 seconds)")
+        }
+    }
+
+    Timer {
+        interval: 12000
+        running: root.visible
+        onTriggered: root.visible = false
+    }
+}

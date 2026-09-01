@@ -40,6 +40,7 @@ pub mod ffi {
         #[qobject]
         #[qml_element]
         #[qproperty(bool, show_window)]
+        #[qproperty(bool, overlay_preview)]
         #[qproperty(QString, status)]
         #[qproperty(QString, config_path)]
         #[qproperty(bool, show_spot_shade)]
@@ -78,6 +79,7 @@ pub mod ffi {
 #[allow(clippy::struct_excessive_bools)]
 pub struct ProjecteurBackendRust {
     show_window: bool,
+    overlay_preview: bool,
     status: QString,
     config_path: QString,
     show_spot_shade: bool,
@@ -121,6 +123,7 @@ impl Default for ProjecteurBackendRust {
         let (settings, config_path, status) = load_settings(&options);
         Self::from_settings(
             options.show_window,
+            options.overlay_preview,
             &settings,
             config_path.as_deref(),
             &status,
@@ -131,6 +134,7 @@ impl Default for ProjecteurBackendRust {
 impl ProjecteurBackendRust {
     fn from_settings(
         show_window: bool,
+        overlay_preview: bool,
         settings: &SpotlightSettings,
         config_path: Option<&std::path::Path>,
         status: &str,
@@ -147,6 +151,7 @@ impl ProjecteurBackendRust {
 
         Self {
             show_window,
+            overlay_preview,
             status: QString::from(status),
             config_path: QString::from(config_path.and_then(std::path::Path::to_str).unwrap_or("")),
             show_spot_shade: settings.show_spot_shade,
@@ -179,6 +184,7 @@ impl ProjecteurBackendRust {
 #[derive(Debug, Default, Eq, PartialEq)]
 struct CliOptions {
     show_window: bool,
+    overlay_preview: bool,
     config_path: Option<PathBuf>,
     config_path_is_explicit: bool,
     startup_error: Option<String>,
@@ -192,6 +198,8 @@ impl CliOptions {
         while let Some(argument) = arguments.next() {
             if argument == "--show-window" {
                 options.show_window = true;
+            } else if argument == "--overlay-preview" {
+                options.overlay_preview = true;
             } else if argument == "--cfg" {
                 let path = arguments
                     .next()
@@ -289,11 +297,19 @@ mod tests {
         .unwrap();
 
         assert!(options.show_window);
+        assert!(!options.overlay_preview);
         assert!(options.config_path_is_explicit);
         assert_eq!(
             options.config_path,
             Some(PathBuf::from("/tmp/projecteur-test.rc"))
         );
+    }
+
+    #[test]
+    fn parses_overlay_preview_flag() {
+        let options = CliOptions::parse([OsString::from("--overlay-preview")]).unwrap();
+
+        assert!(options.overlay_preview);
     }
 
     #[test]

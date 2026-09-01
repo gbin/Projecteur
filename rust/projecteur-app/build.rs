@@ -24,7 +24,7 @@ inline void load_qml_module(QQmlApplicationEngine& engine,
     CxxQtBuilder::new_qml_module(
         QmlModule::new("org.projecteur.rust")
             .version(1, 0)
-            .qml_files(["qml/Main.qml"]),
+            .qml_files(["qml/Main.qml", "qml/OverlayPreview.qml"]),
     )
     .include_dir(output_directory)
     .file("src/backend.rs")

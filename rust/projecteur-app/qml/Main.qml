@@ -30,6 +30,10 @@ Window {
         Component.onCompleted: confirmQmlLoaded()
     }
 
+    OverlayPreview {
+        backend: backend
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 24
