@@ -8,6 +8,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::DeviceId;
+
 /// Projecteur's HID++ software identifier.
 pub const SOFTWARE_ID: u8 = 7;
 
@@ -17,6 +19,31 @@ pub const SOFTWARE_ID: u8 = 7;
 pub enum FeatureCode {
     BatteryStatus = 0x1000,
     UnifiedBattery = 0x1004,
+    Haptic = 0x19b0,
+    PresenterControl = 0x1a00,
+}
+
+/// Battery feature variant used to select its request and response layout.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BatteryFeature {
+    BatteryStatus,
+    UnifiedBattery,
+}
+
+impl BatteryFeature {
+    fn code(self) -> FeatureCode {
+        match self {
+            Self::BatteryStatus => FeatureCode::BatteryStatus,
+            Self::UnifiedBattery => FeatureCode::UnifiedBattery,
+        }
+    }
+}
+
+/// Vibration protocol selected from the presenter's advertised features.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VibrationProtocol {
+    PresenterControl,
+    Haptic,
 }
 
 /// Battery state reported by HID++ battery features.
@@ -205,10 +232,10 @@ pub fn decode_feature_index(
 
 /// Construct a battery information request for the selected feature.
 #[must_use]
-pub fn battery_request(device_index: u8, feature_index: u8, feature: FeatureCode) -> Message {
+pub fn battery_request(device_index: u8, feature_index: u8, feature: BatteryFeature) -> Message {
     let function = match feature {
-        FeatureCode::BatteryStatus => 0,
-        FeatureCode::UnifiedBattery => 1,
+        BatteryFeature::BatteryStatus => 0,
+        BatteryFeature::UnifiedBattery => 1,
     };
     Message::long_request(device_index, feature_index, function, &[])
 }
@@ -220,7 +247,7 @@ pub fn battery_request(device_index: u8, feature_index: u8, feature: FeatureCode
 /// Returns [`HidppError`] when the message is an error, unrelated to the
 /// request, or lacks its battery payload.
 pub fn decode_battery_info(
-    feature: FeatureCode,
+    feature: BatteryFeature,
     request: &Message,
     response: &Message,
 ) -> Result<BatteryInfo, HidppError> {
@@ -232,8 +259,8 @@ pub fn decode_battery_info(
     Ok(BatteryInfo {
         current_level: payload[0],
         next_reported_level: match feature {
-            FeatureCode::BatteryStatus => payload[1],
-            FeatureCode::UnifiedBattery => payload[0],
+            BatteryFeature::BatteryStatus => payload[1],
+            BatteryFeature::UnifiedBattery => payload[0],
         },
         status: BatteryStatus::from(payload[2]),
     })
@@ -346,8 +373,11 @@ pub fn query_battery<T: Read + Write + AsRawFd>(
     device_index: u8,
     mut on_unrelated_report: impl FnMut(&[u8]),
 ) -> Result<BatteryInfo, BatteryQueryError> {
-    for feature in [FeatureCode::BatteryStatus, FeatureCode::UnifiedBattery] {
-        let lookup = feature_index_request(device_index, feature);
+    for feature in [
+        BatteryFeature::BatteryStatus,
+        BatteryFeature::UnifiedBattery,
+    ] {
+        let lookup = feature_index_request(device_index, feature.code());
         let response = exchange(device, &lookup, &mut on_unrelated_report)?;
         let Some(feature_index) = decode_feature_index(&lookup, &response)? else {
             continue;
@@ -358,6 +388,84 @@ pub fn query_battery<T: Read + Write + AsRawFd>(
         return decode_battery_info(feature, &request, &response).map_err(Into::into);
     }
     Err(BatteryQueryError::Unsupported)
+}
+
+/// Return the fixed HID++ device index for direct Spotlight connections.
+///
+/// The Spotlight 2 USB-C/Bolt receiver is intentionally excluded because its
+/// presenter may occupy any receiver slot from one through six.
+#[must_use]
+pub fn spotlight_device_index(id: DeviceId) -> Option<u8> {
+    (id.vendor == 0x046d && matches!(id.product, 0xc53e | 0xb503 | 0xb506)).then_some(1)
+}
+
+/// Send one vibration command using the first protocol advertised by the
+/// presenter, preserving unrelated reports from the shared hidraw stream.
+///
+/// # Errors
+///
+/// Returns [`BatteryQueryError`] for transport and HID++ protocol failures, or
+/// when the presenter advertises neither supported vibration feature.
+pub fn send_vibration<T: Read + Write + AsRawFd>(
+    device: &mut T,
+    device_index: u8,
+    intensity: u8,
+    length: u8,
+    mut on_unrelated_report: impl FnMut(&[u8]),
+) -> Result<VibrationProtocol, BatteryQueryError> {
+    const COMPLETED_WAVEFORM: u8 = 0x07;
+
+    if let Some(index) = lookup_feature(
+        device,
+        device_index,
+        FeatureCode::PresenterControl,
+        &mut on_unrelated_report,
+    )? {
+        let request =
+            Message::long_request(device_index, index, 1, &[length.min(10), 0xe8, intensity]);
+        let response = exchange(device, &request, &mut on_unrelated_report)?;
+        ensure_response(&request, &response)?;
+        return Ok(VibrationProtocol::PresenterControl);
+    }
+
+    let Some(index) = lookup_feature(
+        device,
+        device_index,
+        FeatureCode::Haptic,
+        &mut on_unrelated_report,
+    )?
+    else {
+        return Err(BatteryQueryError::Unsupported);
+    };
+    let enabled = u8::from(intensity != 0);
+    let level = if intensity == 0 {
+        50
+    } else {
+        haptic_level(intensity)
+    };
+    let set_level = Message::long_request(device_index, index, 2, &[enabled, level]);
+    let response = exchange(device, &set_level, &mut on_unrelated_report)?;
+    ensure_response(&set_level, &response)?;
+
+    let play = Message::long_request(device_index, index, 4, &[COMPLETED_WAVEFORM]);
+    let response = exchange(device, &play, &mut on_unrelated_report)?;
+    ensure_response(&play, &response)?;
+    Ok(VibrationProtocol::Haptic)
+}
+
+fn lookup_feature<T: Read + Write + AsRawFd>(
+    device: &mut T,
+    device_index: u8,
+    feature: FeatureCode,
+    on_unrelated_report: &mut impl FnMut(&[u8]),
+) -> Result<Option<u8>, BatteryQueryError> {
+    let request = feature_index_request(device_index, feature);
+    let response = exchange(device, &request, on_unrelated_report)?;
+    decode_feature_index(&request, &response).map_err(Into::into)
+}
+
+fn haptic_level(intensity: u8) -> u8 {
+    u8::try_from((u16::from(intensity) * 100 + 127) / 255).unwrap_or(100)
 }
 
 fn exchange<T: Read + Write + AsRawFd>(
@@ -437,6 +545,7 @@ fn poll_readable(device: &impl AsRawFd, timeout: Duration) -> io::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Bus;
 
     #[test]
     fn builds_root_feature_requests_in_network_byte_order() {
@@ -469,14 +578,14 @@ mod tests {
 
     #[test]
     fn decodes_both_battery_feature_layouts() {
-        let legacy_request = battery_request(1, 0x0d, FeatureCode::BatteryStatus);
+        let legacy_request = battery_request(1, 0x0d, BatteryFeature::BatteryStatus);
         let legacy_response = Message::parse(&[
             0x10, 1, 0x0d, 0x07, 67, 60, 0, // current, next, discharging
         ])
         .unwrap();
         assert_eq!(
             decode_battery_info(
-                FeatureCode::BatteryStatus,
+                BatteryFeature::BatteryStatus,
                 &legacy_request,
                 &legacy_response
             ),
@@ -487,14 +596,14 @@ mod tests {
             })
         );
 
-        let unified_request = battery_request(1, 0x0e, FeatureCode::UnifiedBattery);
+        let unified_request = battery_request(1, 0x0e, BatteryFeature::UnifiedBattery);
         let unified_response = Message::parse(&[
             0x11, 1, 0x0e, 0x17, 82, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ])
         .unwrap();
         assert_eq!(
             decode_battery_info(
-                FeatureCode::UnifiedBattery,
+                BatteryFeature::UnifiedBattery,
                 &unified_request,
                 &unified_response
             ),
@@ -525,6 +634,29 @@ mod tests {
         assert_eq!(
             decode_feature_index(&request, &response),
             Err(HidppError::UnrelatedResponse)
+        );
+    }
+
+    #[test]
+    fn identifies_fixed_index_spotlights_and_scales_haptic_levels() {
+        assert_eq!(haptic_level(0), 0);
+        assert_eq!(haptic_level(128), 50);
+        assert_eq!(haptic_level(255), 100);
+        assert_eq!(
+            spotlight_device_index(DeviceId {
+                vendor: 0x046d,
+                product: 0xb506,
+                bus: Bus::Bluetooth,
+            }),
+            Some(1)
+        );
+        assert_eq!(
+            spotlight_device_index(DeviceId {
+                vendor: 0x046d,
+                product: 0xc548,
+                bus: Bus::Usb,
+            }),
+            None
         );
     }
 }

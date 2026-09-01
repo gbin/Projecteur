@@ -19,7 +19,7 @@ use projecteur_core::{
     config::{ConfigError, ProjecteurConfig},
     device_scan::{DeviceNodeKind, DiscoveredDevice, scan_devices},
     hid_report::{PresenterReport, decode_presenter_report},
-    hidpp::{BatteryInfo, query_battery, read_report_with_timeout},
+    hidpp::{BatteryInfo, query_battery, read_report_with_timeout, spotlight_device_index},
     settings::{DotMode, SpotlightSettings, ZoomMode},
     uinput::{GrabbedEventDevice, VirtualKeyboard},
 };
@@ -420,8 +420,7 @@ fn battery_device_index_for_path(
     let device = devices
         .iter()
         .find(|device| device.nodes.iter().any(|node| node.path == path))?;
-    (device.id.vendor == 0x046d && matches!(device.id.product, 0xc53e | 0xb503 | 0xb506))
-        .then_some(1)
+    spotlight_device_index(device.id)
 }
 
 fn preferred_button_path(

@@ -1,16 +1,24 @@
 mod backend;
 
-use std::fmt::Write as _;
+use std::{ffi::OsString, fmt::Write as _, fs::OpenOptions, path::PathBuf};
 
 use cxx_qt_lib::{QAnyStringView, QGuiApplication, QQmlApplicationEngine, QString};
 use projecteur_core::{
     Bus,
     device_scan::{DeviceNodeKind, DiscoveredDevice, scan_devices},
+    hidpp::{send_vibration, spotlight_device_index},
 };
 
 fn main() {
-    if std::env::args_os().any(|argument| argument == "--device-scan" || argument == "-d") {
+    let arguments: Vec<_> = std::env::args_os().skip(1).collect();
+    if arguments
+        .iter()
+        .any(|argument| argument == "--device-scan" || argument == "-d")
+    {
         std::process::exit(run_device_scan());
+    }
+    if let Some(command) = parse_vibration_command(&arguments) {
+        std::process::exit(run_vibration(&command));
     }
     cxx_qt::init_crate!(projecteur_app);
     cxx_qt::init_qml_module!("org.projecteur.rust");
@@ -45,6 +53,119 @@ fn main() {
     eprintln!("projecteur-rs: QML load call completed");
 
     std::process::exit(application.pin_mut().exec());
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct VibrationCommand {
+    intensity: u8,
+    length: u8,
+    presenter: Option<PathBuf>,
+}
+
+fn parse_vibration_command(arguments: &[OsString]) -> Option<VibrationCommand> {
+    let mut value = None;
+    let mut presenter = None;
+    let mut index = 0;
+    while index < arguments.len() {
+        let argument = arguments[index].to_str()?;
+        if argument == "--vibrate" {
+            value = Some("");
+        } else if let Some(command) = argument.strip_prefix("--vibrate=") {
+            value = Some(command);
+        } else if (argument == "-c" || argument == "--command")
+            && arguments.get(index + 1).is_some()
+        {
+            index += 1;
+            let command = arguments[index].to_str()?;
+            if command == "vibrate" {
+                value = Some("");
+            } else if let Some(command) = command.strip_prefix("vibrate=") {
+                value = Some(command);
+            }
+        } else if argument == "--presenter" {
+            index += 1;
+            presenter = arguments.get(index).map(PathBuf::from);
+        } else if let Some(path) = argument.strip_prefix("--presenter=") {
+            presenter = Some(PathBuf::from(path));
+        }
+        index += 1;
+    }
+
+    let value = value?;
+    let mut fields = value.split(',');
+    let intensity = parse_clamped(fields.next(), 128, 255);
+    let length = parse_clamped(fields.next(), 0, 10);
+    Some(VibrationCommand {
+        intensity,
+        length,
+        presenter,
+    })
+}
+
+fn parse_clamped(value: Option<&str>, default: u8, maximum: u8) -> u8 {
+    value
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<i32>().ok())
+        .map_or(default, |value| {
+            u8::try_from(value.clamp(0, i32::from(maximum))).unwrap_or(maximum)
+        })
+}
+
+fn run_vibration(command: &VibrationCommand) -> i32 {
+    let devices = match scan_devices() {
+        Ok(devices) => devices,
+        Err(error) => {
+            eprintln!("projecteur-rs: {error}");
+            return 1;
+        }
+    };
+    let selected = devices.iter().find_map(|device| {
+        let device_index = spotlight_device_index(device.id)?;
+        let node = device.nodes.iter().find(|node| {
+            node.kind == DeviceNodeKind::Hidraw
+                && node.readable
+                && node.writable
+                && command
+                    .presenter
+                    .as_ref()
+                    .is_none_or(|path| node.path == *path)
+        })?;
+        Some((device_index, node.path.clone()))
+    });
+    let Some((device_index, path)) = selected else {
+        eprintln!("projecteur-rs: no writable Spotlight HID++ device found");
+        return 1;
+    };
+    let Ok(mut device) = OpenOptions::new().read(true).write(true).open(&path) else {
+        eprintln!(
+            "projecteur-rs: cannot open {} for HID++ commands",
+            path.display()
+        );
+        return 1;
+    };
+    match send_vibration(
+        &mut device,
+        device_index,
+        command.intensity,
+        command.length,
+        |_| {},
+    ) {
+        Ok(protocol) => {
+            println!(
+                "Sent vibration at intensity {} through {protocol:?} on {}.",
+                command.intensity,
+                path.display()
+            );
+            0
+        }
+        Err(error) => {
+            eprintln!(
+                "projecteur-rs: vibration failed on {}: {error}",
+                path.display()
+            );
+            1
+        }
+    }
 }
 
 fn run_device_scan() -> i32 {
@@ -151,5 +272,35 @@ mod tests {
         assert!(output.contains("physical-id: usb-1"));
         assert!(output.contains("relative-pointer=yes"));
         assert!(output.contains("readable=true, writable=false"));
+    }
+
+    #[test]
+    fn parses_convenience_and_legacy_vibration_commands() {
+        assert_eq!(
+            parse_vibration_command(&[OsString::from("--vibrate=300,20")]),
+            Some(VibrationCommand {
+                intensity: 255,
+                length: 10,
+                presenter: None,
+            })
+        );
+        assert_eq!(
+            parse_vibration_command(&[
+                OsString::from("-c"),
+                OsString::from("vibrate=64,3"),
+                OsString::from("--presenter=/dev/hidraw5"),
+            ]),
+            Some(VibrationCommand {
+                intensity: 64,
+                length: 3,
+                presenter: Some(PathBuf::from("/dev/hidraw5")),
+            })
+        );
+        assert_eq!(
+            parse_vibration_command(&[OsString::from("--vibrate")])
+                .unwrap()
+                .intensity,
+            128
+        );
     }
 }
