@@ -8,6 +8,7 @@ use std::{error::Error, fmt, str::FromStr};
 
 pub mod config;
 pub mod device_scan;
+pub mod hid_report;
 pub mod input_event;
 pub mod settings;
 

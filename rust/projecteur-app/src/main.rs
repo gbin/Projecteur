@@ -12,6 +12,7 @@ use cxx_qt_lib::{QAnyStringView, QGuiApplication, QQmlApplicationEngine, QString
 use projecteur_core::{
     Bus,
     device_scan::{DeviceNodeKind, DiscoveredDevice, scan_devices},
+    hid_report::{PresenterReport, decode_presenter_report},
     input_event::{EV_KEY, EV_MSC, EV_REL, EV_SYN, InputEvent, read_input_event},
 };
 
@@ -132,7 +133,7 @@ fn run_hidraw_monitor(path: &Path) -> i32 {
             }
             Ok(length) => println!(
                 "HIDRAW {length:3}: {}",
-                format_hex_report(&report[..length])
+                format_hid_report(&report[..length])
             ),
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
             Err(error) => {
@@ -152,6 +153,29 @@ fn format_hex_report(report: &[u8]) -> String {
         let _ = write!(output, "{byte:02x}");
     }
     output
+}
+
+fn format_hid_report(report: &[u8]) -> String {
+    match decode_presenter_report(report) {
+        Ok(PresenterReport::Pointer(pointer)) => format!(
+            "pointer x={:+5} y={:+5} buttons={:#04x} wheel={:+4} pan={:+4}",
+            pointer.x, pointer.y, pointer.buttons, pointer.wheel, pointer.pan
+        ),
+        Ok(PresenterReport::Keyboard(keyboard)) => {
+            let usages = keyboard
+                .usages
+                .into_iter()
+                .filter(|usage| *usage != 0)
+                .map(|usage| format!("{usage:#04x}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!(
+                "keyboard modifiers={:#04x} usages=[{usages}]",
+                keyboard.modifiers
+            )
+        }
+        Err(_) => format_hex_report(report),
+    }
 }
 
 fn run_event_monitor(path: &Path) -> i32 {
@@ -372,5 +396,17 @@ mod tests {
     fn formats_raw_hid_reports_as_hex() {
         assert_eq!(format_hex_report(&[0x20, 0xff, 0x01]), "20 ff 01");
         assert!(format_hex_report(&[]).is_empty());
+    }
+
+    #[test]
+    fn formats_decoded_presenter_reports() {
+        assert_eq!(
+            format_hid_report(&[0x02, 0, 0, 0x0d, 0x60, 0, 0, 0]),
+            "pointer x=  +13 y=   +6 buttons=0x00 wheel=  +0 pan=  +0"
+        );
+        assert_eq!(
+            format_hid_report(&[0x01, 0, 0x4f, 0, 0, 0, 0, 0]),
+            "keyboard modifiers=0x00 usages=[0x4f]"
+        );
     }
 }
