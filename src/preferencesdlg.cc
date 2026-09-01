@@ -69,12 +69,12 @@ PreferencesDialog::PreferencesDialog(Settings* settings, Spotlight* spotlight,
 
   const auto spotlightPage = new QWidget(this);
   const auto spotlightLayout = new QVBoxLayout(spotlightPage);
-  const auto overlayCheckBox = new QCheckBox(i18n("Overlay"), spotlightPage);
+  const auto overlayCheckBox = new QCheckBox(i18n("Enable"), spotlightPage);
   overlayCheckBox->setChecked(!settings->overlayDisabled());
   spotlightLayout->addWidget(overlayCheckBox);
   spotlightLayout->addWidget(settingsWidget);
 
-  addPage(spotlightPage, i18n("Spotlight"), QStringLiteral("preferences-desktop-display"),
+  addPage(spotlightPage, i18n("Overlay"), QStringLiteral("preferences-desktop-display"),
           QString(), false);
   m_deviceswidget = new DevicesWidget(settings, spotlight, this);
   addPage(m_deviceswidget, i18n("Devices"), QStringLiteral("input-mouse"), QString(), false);
