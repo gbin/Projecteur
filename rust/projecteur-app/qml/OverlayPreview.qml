@@ -44,6 +44,7 @@ Window {
                                                    root.presenterX + backend.pointerDeltaX))
             root.presenterY = Math.max(0, Math.min(root.height,
                                                    root.presenterY + backend.pointerDeltaY))
+            liveIdleTimer.restart()
         }
     }
 
@@ -148,6 +149,15 @@ Window {
             anchors.centerIn: parent
             color: "white"
             text: qsTr("Move the pointer to test the aperture — click to close (12-second timeout)")
+        }
+    }
+
+    Timer {
+        id: liveIdleTimer
+        interval: 600
+        onTriggered: {
+            if (!backend.previewTimeoutEnabled)
+                backend.overlayActive = false
         }
     }
 
