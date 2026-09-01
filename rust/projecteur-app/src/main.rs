@@ -14,6 +14,7 @@ use projecteur_core::{
     device_scan::{DeviceNodeKind, DiscoveredDevice, scan_devices},
     hid_report::{PresenterReport, decode_presenter_report},
     input_event::{EV_KEY, EV_MSC, EV_REL, EV_SYN, InputEvent, read_input_event},
+    uinput::{GrabbedEventDevice, VirtualKeyboard},
 };
 
 fn main() {
@@ -40,6 +41,19 @@ fn main() {
     ) {
         std::process::exit(match result {
             Ok(path) => run_hidraw_monitor(Path::new(&path)),
+            Err(message) => {
+                eprintln!("projecteur-rs: {message}");
+                2
+            }
+        });
+    }
+    if let Some(result) = path_argument(
+        std::env::args_os().skip(1),
+        "--event-forward",
+        "a /dev/input/event path",
+    ) {
+        std::process::exit(match result {
+            Ok(path) => run_event_forward(Path::new(&path)),
             Err(message) => {
                 eprintln!("projecteur-rs: {message}");
                 2
@@ -201,6 +215,43 @@ fn run_event_monitor(path: &Path) -> i32 {
     }
 }
 
+fn run_event_forward(path: &Path) -> i32 {
+    let mut keyboard = match VirtualKeyboard::create() {
+        Ok(keyboard) => keyboard,
+        Err(error) => {
+            eprintln!("projecteur-rs: cannot create virtual keyboard through /dev/uinput: {error}");
+            return 1;
+        }
+    };
+    let mut source = match GrabbedEventDevice::open(path) {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!(
+                "projecteur-rs: cannot exclusively grab {}: {error}",
+                path.display()
+            );
+            return 1;
+        }
+    };
+    println!(
+        "Forwarding {} through a virtual keyboard under an exclusive grab; press Ctrl-C to stop.",
+        path.display()
+    );
+    loop {
+        let event = match source.read_event() {
+            Ok(event) => event,
+            Err(error) => {
+                eprintln!("projecteur-rs: cannot read {}: {error}", path.display());
+                return 1;
+            }
+        };
+        if let Err(error) = keyboard.emit(event) {
+            eprintln!("projecteur-rs: cannot forward input event: {error}");
+            return 1;
+        }
+    }
+}
+
 fn format_input_event(event: InputEvent) -> String {
     let event_type = match event.event_type {
         EV_SYN => "SYN",
@@ -358,6 +409,14 @@ mod tests {
             path_argument(
                 [OsString::from("--event-monitor=/dev/input/event15")],
                 "--event-monitor",
+                "an event path"
+            ),
+            Some(Ok(OsString::from("/dev/input/event15")))
+        );
+        assert_eq!(
+            path_argument(
+                [OsString::from("--event-forward=/dev/input/event15")],
+                "--event-forward",
                 "an event path"
             ),
             Some(Ok(OsString::from("/dev/input/event15")))

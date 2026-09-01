@@ -6,6 +6,9 @@ license.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[dependencies]
+libc = "0.2.189"
+linux-raw-sys = { version = "0.12.1", features = ["ioctl"] }
+
 [lints]
 workspace = true
-

@@ -11,6 +11,7 @@ pub mod device_scan;
 pub mod hid_report;
 pub mod input_event;
 pub mod settings;
+pub mod uinput;
 
 /// The transport used by a supported presenter.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
