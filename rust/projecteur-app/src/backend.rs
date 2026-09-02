@@ -35,11 +35,16 @@ pub mod ffi {
 
         include!("cxx-qt-lib/qqmlapplicationengine.h");
         type QQmlApplicationEngine = cxx_qt_lib::QQmlApplicationEngine;
+
+        include!("cxx-qt-lib/qguiapplication.h");
+        type QGuiApplication = cxx_qt_lib::QGuiApplication;
     }
 
     #[namespace = "projecteur::generated"]
     unsafe extern "C++" {
         include!("projecteur_qml_loader.h");
+
+        fn create_widget_application() -> UniquePtr<QGuiApplication>;
 
         fn load_qml_module(
             engine: Pin<&mut QQmlApplicationEngine>,
@@ -54,6 +59,8 @@ pub mod ffi {
         #[qobject]
         #[qml_element]
         #[qproperty(bool, show_window)]
+        #[qproperty(bool, tray_visible)]
+        #[qproperty(bool, overlay_disabled)]
         #[qproperty(bool, overlay_active)]
         #[qproperty(bool, preview_timeout_enabled)]
         #[qproperty(bool, presenter_connected)]
@@ -93,6 +100,7 @@ pub mod ffi {
         #[qproperty(bool, multi_screen_overlay)]
         #[qproperty(bool, presentation_timer_enabled)]
         #[qproperty(i32, presentation_timer_duration_seconds)]
+        #[qproperty(QString, preset_names)]
         type ProjecteurBackend = super::ProjecteurBackendRust;
 
         #[qinvokable]
@@ -103,6 +111,27 @@ pub mod ffi {
 
         #[qinvokable]
         fn save_settings(self: Pin<&mut ProjecteurBackend>) -> bool;
+
+        #[qinvokable]
+        fn begin_preferences(self: Pin<&mut ProjecteurBackend>);
+
+        #[qinvokable]
+        fn restore_applied_settings(self: Pin<&mut ProjecteurBackend>);
+
+        #[qinvokable]
+        fn restore_default_settings(self: Pin<&mut ProjecteurBackend>);
+
+        #[qinvokable]
+        fn show_overlay_test(self: Pin<&mut ProjecteurBackend>);
+
+        #[qinvokable]
+        fn load_preset(self: Pin<&mut ProjecteurBackend>, name: &QString) -> bool;
+
+        #[qinvokable]
+        fn save_preset(self: Pin<&mut ProjecteurBackend>, name: &QString) -> bool;
+
+        #[qinvokable]
+        fn remove_preset(self: Pin<&mut ProjecteurBackend>, name: &QString) -> bool;
     }
 
     impl cxx_qt::Initialize for ProjecteurBackend {}
@@ -112,6 +141,8 @@ pub mod ffi {
 #[allow(clippy::struct_excessive_bools)]
 pub struct ProjecteurBackendRust {
     show_window: bool,
+    tray_visible: bool,
+    overlay_disabled: bool,
     overlay_active: bool,
     preview_timeout_enabled: bool,
     presenter_connected: bool,
@@ -151,6 +182,8 @@ pub struct ProjecteurBackendRust {
     multi_screen_overlay: bool,
     presentation_timer_enabled: bool,
     presentation_timer_duration_seconds: i32,
+    preset_names: QString,
+    applied_settings: SpotlightSettings,
     presenter_events: Option<Receiver<PresenterEvent>>,
 }
 
@@ -168,7 +201,7 @@ impl Default for ProjecteurBackendRust {
             }
         };
         let (settings, config_path, mut status) = load_settings(&options);
-        let presenter_events = match options.presenter {
+        let presenter_events = match options.presenter.clone() {
             PresenterSelection::Disabled => {
                 let _ = write!(status, "; presenter monitoring disabled");
                 None
@@ -186,8 +219,7 @@ impl Default for ProjecteurBackendRust {
             },
         };
         Self::from_settings(
-            options.show_window,
-            options.overlay_preview,
+            &options,
             presenter_events,
             &settings,
             config_path.as_deref(),
@@ -198,8 +230,7 @@ impl Default for ProjecteurBackendRust {
 
 impl ProjecteurBackendRust {
     fn from_settings(
-        show_window: bool,
-        overlay_active: bool,
+        options: &CliOptions,
         presenter_events: Option<Receiver<PresenterEvent>>,
         settings: &SpotlightSettings,
         config_path: Option<&std::path::Path>,
@@ -216,9 +247,11 @@ impl ProjecteurBackendRust {
         };
 
         Self {
-            show_window,
-            overlay_active,
-            preview_timeout_enabled: overlay_active,
+            show_window: options.show_window,
+            tray_visible: options.tray_visible,
+            overlay_disabled: options.overlay_disabled,
+            overlay_active: options.overlay_preview,
+            preview_timeout_enabled: options.overlay_preview,
             presenter_connected: false,
             presenter_device: QString::default(),
             button_forwarding: false,
@@ -256,6 +289,8 @@ impl ProjecteurBackendRust {
             multi_screen_overlay: settings.multi_screen_overlay,
             presentation_timer_enabled: settings.presentation_timer_enabled,
             presentation_timer_duration_seconds: settings.presentation_timer_duration_seconds,
+            preset_names: QString::from(preset_names(config_path)),
+            applied_settings: settings.clone(),
             presenter_events,
         }
     }
@@ -273,6 +308,8 @@ enum PresenterSelection {
 #[allow(clippy::struct_excessive_bools)]
 struct CliOptions {
     show_window: bool,
+    tray_visible: bool,
+    overlay_disabled: bool,
     overlay_preview: bool,
     config_path: Option<PathBuf>,
     config_path_is_explicit: bool,
@@ -285,6 +322,8 @@ impl Default for CliOptions {
     fn default() -> Self {
         Self {
             show_window: false,
+            tray_visible: true,
+            overlay_disabled: false,
             overlay_preview: false,
             config_path: None,
             config_path_is_explicit: false,
@@ -301,8 +340,12 @@ impl CliOptions {
         let mut arguments = arguments.into_iter();
 
         while let Some(argument) = arguments.next() {
-            if argument == "--show-window" {
+            if argument == "--show-window" || argument == "--show-dialog" {
                 options.show_window = true;
+            } else if argument == "--hide-systray-icon" {
+                options.tray_visible = false;
+            } else if argument == "--disable-overlay" {
+                options.overlay_disabled = true;
             } else if argument == "--overlay-preview" {
                 options.overlay_preview = true;
             } else if argument == "--presenter" {
@@ -602,6 +645,20 @@ fn load_settings(options: &CliOptions) -> (SpotlightSettings, Option<PathBuf>, S
     }
 }
 
+fn preset_names(path: Option<&std::path::Path>) -> String {
+    let Some(path) = path else {
+        return String::new();
+    };
+    let Ok(config) = ProjecteurConfig::read(path) else {
+        return String::new();
+    };
+    config
+        .group_names()
+        .filter_map(|name| name.strip_prefix("Preset_"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 impl cxx_qt::Initialize for ffi::ProjecteurBackend {
     fn initialize(self: Pin<&mut Self>) {}
 }
@@ -613,41 +670,8 @@ impl ffi::ProjecteurBackend {
     }
 
     fn save_settings(mut self: Pin<&mut Self>) -> bool {
-        let (path, settings) = {
-            let pinned = self.as_ref();
-            let rust = pinned.rust();
-            let path = PathBuf::from(String::from(&rust.config_path));
-            let settings = SpotlightSettings {
-                show_spot_shade: rust.show_spot_shade,
-                spot_size: rust.spot_size,
-                show_center_dot: rust.show_center_dot,
-                dot_size: rust.dot_size,
-                dot_color: String::from(&rust.dot_color),
-                dot_opacity: rust.dot_opacity,
-                dot_mode: String::from(&rust.dot_mode).parse().unwrap_or_default(),
-                dot_trail_enabled: rust.dot_trail_enabled,
-                shade_color: String::from(&rust.shade_color),
-                shade_opacity: rust.shade_opacity,
-                cursor: rust.cursor,
-                spot_shape: String::from(&rust.spot_shape),
-                spot_rotation: rust.spot_rotation,
-                square_radius: rust.square_radius,
-                star_points: rust.star_points,
-                star_inner_radius: rust.star_inner_radius,
-                ngon_sides: rust.ngon_sides,
-                show_border: rust.show_border,
-                border_color: String::from(&rust.border_color),
-                border_size: rust.border_size,
-                border_opacity: rust.border_opacity,
-                zoom_enabled: rust.zoom_enabled,
-                zoom_factor: rust.zoom_factor,
-                zoom_mode: String::from(&rust.zoom_mode).parse().unwrap_or_default(),
-                multi_screen_overlay: rust.multi_screen_overlay,
-                presentation_timer_enabled: rust.presentation_timer_enabled,
-                presentation_timer_duration_seconds: rust.presentation_timer_duration_seconds,
-            };
-            (path, settings)
-        };
+        let path = PathBuf::from(String::from(&self.as_ref().rust().config_path));
+        let settings = self.as_ref().current_spotlight_settings();
         if path.as_os_str().is_empty() {
             self.as_mut()
                 .set_status(QString::from("Cannot save settings without a config path"));
@@ -667,6 +691,7 @@ impl ffi::ProjecteurBackend {
         config.set_spotlight_settings(&settings);
         match config.write(&path) {
             Ok(()) => {
+                self.as_mut().rust_mut().applied_settings = settings;
                 self.as_mut().set_status(QString::from(format!(
                     "Saved settings to {}",
                     path.display()
@@ -679,6 +704,166 @@ impl ffi::ProjecteurBackend {
                 false
             }
         }
+    }
+
+    fn current_spotlight_settings(self: Pin<&Self>) -> SpotlightSettings {
+        let rust = self.rust();
+        SpotlightSettings {
+            show_spot_shade: rust.show_spot_shade,
+            spot_size: rust.spot_size,
+            show_center_dot: rust.show_center_dot,
+            dot_size: rust.dot_size,
+            dot_color: String::from(&rust.dot_color),
+            dot_opacity: rust.dot_opacity,
+            dot_mode: String::from(&rust.dot_mode).parse().unwrap_or_default(),
+            dot_trail_enabled: rust.dot_trail_enabled,
+            shade_color: String::from(&rust.shade_color),
+            shade_opacity: rust.shade_opacity,
+            cursor: rust.cursor,
+            spot_shape: String::from(&rust.spot_shape),
+            spot_rotation: rust.spot_rotation,
+            square_radius: rust.square_radius,
+            star_points: rust.star_points,
+            star_inner_radius: rust.star_inner_radius,
+            ngon_sides: rust.ngon_sides,
+            show_border: rust.show_border,
+            border_color: String::from(&rust.border_color),
+            border_size: rust.border_size,
+            border_opacity: rust.border_opacity,
+            zoom_enabled: rust.zoom_enabled,
+            zoom_factor: rust.zoom_factor,
+            zoom_mode: String::from(&rust.zoom_mode).parse().unwrap_or_default(),
+            multi_screen_overlay: rust.multi_screen_overlay,
+            presentation_timer_enabled: rust.presentation_timer_enabled,
+            presentation_timer_duration_seconds: rust.presentation_timer_duration_seconds,
+        }
+    }
+
+    fn apply_spotlight_settings(mut self: Pin<&mut Self>, settings: &SpotlightSettings) {
+        self.as_mut().set_show_spot_shade(settings.show_spot_shade);
+        self.as_mut().set_spot_size(settings.spot_size);
+        self.as_mut().set_show_center_dot(settings.show_center_dot);
+        self.as_mut().set_dot_size(settings.dot_size);
+        self.as_mut()
+            .set_dot_color(QString::from(&settings.dot_color));
+        self.as_mut().set_dot_opacity(settings.dot_opacity);
+        self.as_mut()
+            .set_dot_mode(QString::from(match settings.dot_mode {
+                DotMode::Solid => "solid",
+                DotMode::Diffuse => "diffuse",
+            }));
+        self.as_mut()
+            .set_dot_trail_enabled(settings.dot_trail_enabled);
+        self.as_mut()
+            .set_shade_color(QString::from(&settings.shade_color));
+        self.as_mut().set_shade_opacity(settings.shade_opacity);
+        self.as_mut().set_cursor(settings.cursor);
+        self.as_mut()
+            .set_spot_shape(QString::from(&settings.spot_shape));
+        self.as_mut().set_spot_rotation(settings.spot_rotation);
+        self.as_mut().set_square_radius(settings.square_radius);
+        self.as_mut().set_star_points(settings.star_points);
+        self.as_mut()
+            .set_star_inner_radius(settings.star_inner_radius);
+        self.as_mut().set_ngon_sides(settings.ngon_sides);
+        self.as_mut().set_show_border(settings.show_border);
+        self.as_mut()
+            .set_border_color(QString::from(&settings.border_color));
+        self.as_mut().set_border_size(settings.border_size);
+        self.as_mut().set_border_opacity(settings.border_opacity);
+        self.as_mut().set_zoom_enabled(settings.zoom_enabled);
+        self.as_mut().set_zoom_factor(settings.zoom_factor);
+        self.as_mut()
+            .set_zoom_mode(QString::from(match settings.zoom_mode {
+                ZoomMode::Smooth => "smooth",
+                ZoomMode::Text => "text",
+                ZoomMode::Pixel => "pixel",
+            }));
+        self.as_mut()
+            .set_multi_screen_overlay(settings.multi_screen_overlay);
+        self.as_mut()
+            .set_presentation_timer_enabled(settings.presentation_timer_enabled);
+        self.as_mut()
+            .set_presentation_timer_duration_seconds(settings.presentation_timer_duration_seconds);
+    }
+
+    fn begin_preferences(mut self: Pin<&mut Self>) {
+        let current = self.as_ref().current_spotlight_settings();
+        self.as_mut().rust_mut().applied_settings = current;
+    }
+
+    fn restore_applied_settings(mut self: Pin<&mut Self>) {
+        let settings = self.as_ref().rust().applied_settings.clone();
+        self.as_mut().apply_spotlight_settings(&settings);
+    }
+
+    fn restore_default_settings(mut self: Pin<&mut Self>) {
+        self.as_mut()
+            .apply_spotlight_settings(&SpotlightSettings::default());
+    }
+
+    fn show_overlay_test(mut self: Pin<&mut Self>) {
+        self.as_mut().set_preview_timeout_enabled(true);
+        self.as_mut().set_overlay_active(true);
+    }
+
+    fn load_preset(mut self: Pin<&mut Self>, name: &QString) -> bool {
+        let name = String::from(name).trim().to_owned();
+        if name.is_empty() {
+            return false;
+        }
+        let path = PathBuf::from(String::from(&self.as_ref().rust().config_path));
+        let Ok(config) = ProjecteurConfig::read(&path) else {
+            return false;
+        };
+        let group = format!("Preset_{name}");
+        if config.group(&group).is_none() {
+            return false;
+        }
+        let settings = config.spotlight_settings_from_group(&group);
+        self.as_mut().apply_spotlight_settings(&settings);
+        true
+    }
+
+    fn save_preset(mut self: Pin<&mut Self>, name: &QString) -> bool {
+        let name = String::from(name).trim().to_owned();
+        if name.is_empty() {
+            return false;
+        }
+        let path = PathBuf::from(String::from(&self.as_ref().rust().config_path));
+        let mut config = match ProjecteurConfig::read(&path) {
+            Ok(config) => config,
+            Err(ConfigError::Io { source, .. }) if source.kind() == ErrorKind::NotFound => {
+                ProjecteurConfig::default()
+            }
+            Err(_) => return false,
+        };
+        let settings = self.as_ref().current_spotlight_settings();
+        config.set_spotlight_settings_in_group(&format!("Preset_{name}"), &settings);
+        if config.write(&path).is_err() {
+            return false;
+        }
+        self.as_mut()
+            .set_preset_names(QString::from(preset_names(Some(&path))));
+        true
+    }
+
+    fn remove_preset(mut self: Pin<&mut Self>, name: &QString) -> bool {
+        let name = String::from(name).trim().to_owned();
+        if name.is_empty() {
+            return false;
+        }
+        let path = PathBuf::from(String::from(&self.as_ref().rust().config_path));
+        let Ok(mut config) = ProjecteurConfig::read(&path) else {
+            return false;
+        };
+        config.remove_group(&format!("Preset_{name}"));
+        if config.write(&path).is_err() {
+            return false;
+        }
+        self.as_mut()
+            .set_preset_names(QString::from(preset_names(Some(&path))));
+        true
     }
 
     fn poll_presenter(mut self: Pin<&mut Self>) {
@@ -709,7 +894,9 @@ impl ffi::ProjecteurBackend {
                     self.as_mut().set_pointer_delta_y(i32::from(pointer.y));
                     let serial = self.as_ref().motion_serial().wrapping_add(1);
                     self.as_mut().set_motion_serial(serial);
-                    self.as_mut().set_overlay_active(true);
+                    if !self.as_ref().overlay_disabled() {
+                        self.as_mut().set_overlay_active(true);
+                    }
                     self.as_mut().set_preview_timeout_enabled(false);
                 }
                 Some(Ok(PresenterEvent::Report(PresenterReport::Keyboard(_)))) => {}
@@ -764,6 +951,20 @@ mod tests {
         let options = CliOptions::parse([OsString::from("--overlay-preview")]).unwrap();
 
         assert!(options.overlay_preview);
+    }
+
+    #[test]
+    fn parses_legacy_desktop_flags() {
+        let options = CliOptions::parse([
+            OsString::from("--show-dialog"),
+            OsString::from("--hide-systray-icon"),
+            OsString::from("--disable-overlay"),
+        ])
+        .unwrap();
+
+        assert!(options.show_window);
+        assert!(!options.tray_visible);
+        assert!(options.overlay_disabled);
     }
 
     #[test]

@@ -2,7 +2,7 @@ mod backend;
 
 use std::{ffi::OsString, fmt::Write as _, fs::OpenOptions, path::PathBuf};
 
-use cxx_qt_lib::{QAnyStringView, QGuiApplication, QQmlApplicationEngine, QString};
+use cxx_qt_lib::{QAnyStringView, QQmlApplicationEngine, QString};
 use projecteur_core::{
     Bus,
     device_scan::{DeviceNodeKind, DiscoveredDevice, scan_devices},
@@ -23,13 +23,13 @@ fn main() {
     cxx_qt::init_crate!(projecteur_app);
     cxx_qt::init_qml_module!("org.projecteur.rust");
 
-    let mut application = QGuiApplication::new();
+    let mut application = backend::ffi::create_widget_application();
     application
         .pin_mut()
         .set_application_name(&QString::from("projecteur-rs"));
     application
         .pin_mut()
-        .set_application_display_name(&QString::from("Projecteur (Rust port)"));
+        .set_application_display_name(&QString::from("Projecteur"));
     application
         .pin_mut()
         .set_application_version(&QString::from(env!("CARGO_PKG_VERSION")));

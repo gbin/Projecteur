@@ -1,37 +1,99 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
-import org.kde.layershell as LayerShell
+import Qt.labs.platform as Platform
 import org.projecteur.rust
 
-ApplicationWindow {
+Item {
     id: root
+    SystemPalette { id: systemPalette }
+    property real presenterGlobalX: Application.screens[0].virtualX
+                                    + Application.screens[0].width / 2
+    property real presenterGlobalY: Application.screens[0].virtualY
+                                    + Application.screens[0].height / 2
 
-    width: 520
-    height: 350
-    visible: backend.showWindow
-    title: qsTr("Projecteur Rust port")
+    function showPreferences() {
+        backend.showWindow = true
+        preferences.show()
+        preferences.raise()
+        preferences.requestActivate()
+    }
 
-    // Keep the LayerShell module in the Cargo-built QML graph. Actual overlay
-    // windows will opt into its attached properties; this ordinary diagnostic
-    // window must remain a normal, easily dismissible desktop window.
-    property Component layerShellProbe: Component {
-        Window {
-            visible: false
-            LayerShell.Window.layer: LayerShell.Window.LayerOverlay
-            LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
+    function movePresenterPointer(dx, dy) {
+        let left = Application.screens[0].virtualX
+        let top = Application.screens[0].virtualY
+        let right = left + Application.screens[0].width
+        let bottom = top + Application.screens[0].height
+        for (let screen of Application.screens) {
+            left = Math.min(left, screen.virtualX)
+            top = Math.min(top, screen.virtualY)
+            right = Math.max(right, screen.virtualX + screen.width)
+            bottom = Math.max(bottom, screen.virtualY + screen.height)
         }
+        presenterGlobalX = Math.max(left, Math.min(right - 1, presenterGlobalX + dx))
+        presenterGlobalY = Math.max(top, Math.min(bottom - 1, presenterGlobalY + dy))
     }
 
     ProjecteurBackend {
         id: backend
-
         Component.onCompleted: confirmQmlLoaded()
     }
 
-    OverlayPreview {
+    SettingsWindow {
+        id: preferences
         backend: backend
+    }
+
+    Component.onCompleted: {
+        if (backend.showWindow)
+            showPreferences()
+    }
+
+    Instantiator {
+        model: Application.screens
+        delegate: OverlayPreview {
+            required property var modelData
+            backend: backend
+            screen: modelData
+            screenEnabled: backend.multiScreenOverlay || modelData === Application.screens[0]
+            presenterGlobalX: root.presenterGlobalX
+            presenterGlobalY: root.presenterGlobalY
+        }
+    }
+
+    Connections {
+        target: backend
+        function onMotionSerialChanged() {
+            root.movePresenterPointer(backend.pointerDeltaX, backend.pointerDeltaY)
+        }
+    }
+
+    Platform.SystemTrayIcon {
+        id: trayIcon
+        visible: backend.trayVisible
+        tooltip: qsTr("Projecteur")
+        icon.source: "qrc:/projecteur/projecteur-tray.svg"
+        menu: Platform.Menu {
+            Platform.MenuItem {
+                text: qsTr("Preferences...")
+                onTriggered: root.showPreferences()
+            }
+            Platform.MenuItem {
+                text: backend.overlayDisabled ? qsTr("Enable overlay") : qsTr("Disable overlay")
+                onTriggered: backend.overlayDisabled = !backend.overlayDisabled
+            }
+            Platform.MenuSeparator {}
+            Platform.MenuItem {
+                text: qsTr("Quit")
+                onTriggered: Qt.quit()
+            }
+        }
+        onActivated: function(reason) {
+            if (reason === Platform.SystemTrayIcon.Trigger || reason === Platform.SystemTrayIcon.DoubleClick)
+                root.showPreferences()
+        }
     }
 
     Timer {
@@ -39,87 +101,5 @@ ApplicationWindow {
         repeat: true
         running: true
         onTriggered: backend.pollPresenter()
-    }
-
-    ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 24
-        spacing: 14
-
-        Label {
-            Layout.fillWidth: true
-            text: qsTr("Projecteur is running from Rust + QML")
-            font.pixelSize: 22
-            font.bold: true
-            wrapMode: Text.Wrap
-        }
-
-        Label {
-            Layout.fillWidth: true
-            visible: backend.presenterConnected
-            text: backend.batteryLevel >= 0
-                  ? qsTr("Presenter battery: %1% (%2)")
-                        .arg(backend.batteryLevel)
-                        .arg(backend.batteryStatus)
-                  : qsTr("Presenter battery: unavailable")
-        }
-
-        Label {
-            Layout.fillWidth: true
-            text: backend.status
-            wrapMode: Text.Wrap
-        }
-
-        Label {
-            Layout.fillWidth: true
-            text: "Config: " + (backend.configPath.length > 0 ? backend.configPath : "built-in defaults")
-            elide: Text.ElideMiddle
-        }
-
-        Label {
-            Layout.fillWidth: true
-            text: "Overlay: size " + backend.spotSize
-                  + ", dot " + backend.dotColor
-                  + ", zoom " + backend.zoomMode + " ×" + backend.zoomFactor
-        }
-
-        Label {
-            Layout.fillWidth: true
-            text: backend.presenterConnected
-                  ? qsTr("Presenter input: connected at %1; buttons: %2")
-                        .arg(backend.presenterDevice)
-                        .arg(backend.buttonForwarding ? qsTr("forwarded") : qsTr("not grabbed"))
-                  : qsTr("Presenter input: not connected")
-        }
-
-        Label {
-            Layout.fillWidth: true
-            text: qsTr("This is a normal diagnostic window. Press Escape or use Close to exit.")
-            opacity: 0.75
-            wrapMode: Text.Wrap
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-
-            Button {
-                text: backend.overlayActive ? qsTr("Hide overlay") : qsTr("Show overlay")
-                onClicked: backend.overlayActive = !backend.overlayActive
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            Button {
-                text: qsTr("Close")
-                onClicked: root.close()
-            }
-        }
-    }
-
-    Shortcut {
-        sequences: [StandardKey.Cancel]
-        onActivated: root.close()
     }
 }

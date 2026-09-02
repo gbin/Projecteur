@@ -120,9 +120,15 @@ impl ProjecteurConfig {
     /// Materialize overlay settings from the legacy `General` group.
     #[must_use]
     pub fn spotlight_settings(&self) -> SpotlightSettings {
+        self.spotlight_settings_from_group("General")
+    }
+
+    /// Materialize overlay settings from one named group.
+    #[must_use]
+    pub fn spotlight_settings_from_group(&self, name: &str) -> SpotlightSettings {
         let mut settings = SpotlightSettings::default();
-        if let Some(general) = self.group("General") {
-            for (key, value) in general {
+        if let Some(group) = self.group(name) {
+            for (key, value) in group {
                 settings.apply_general_entry(key, value);
             }
         }
@@ -132,10 +138,25 @@ impl ProjecteurConfig {
     /// Replace every Rust-owned general setting while retaining unknown keys
     /// and all other groups.
     pub fn set_spotlight_settings(&mut self, settings: &SpotlightSettings) {
-        let general = self.groups.entry("General".to_owned()).or_default();
+        self.set_spotlight_settings_in_group("General", settings);
+    }
+
+    /// Replace every overlay setting in one named group.
+    pub fn set_spotlight_settings_in_group(&mut self, name: &str, settings: &SpotlightSettings) {
+        let general = self.groups.entry(name.to_owned()).or_default();
         for (key, value) in settings.general_entries() {
             general.insert(key.to_owned(), value);
         }
+    }
+
+    /// Remove one complete group.
+    pub fn remove_group(&mut self, name: &str) {
+        self.groups.remove(name);
+    }
+
+    /// Return all group names in deterministic order.
+    pub fn group_names(&self) -> impl Iterator<Item = &str> {
+        self.groups.keys().map(String::as_str)
     }
 
     /// Serialize this configuration as deterministic KConfig-compatible INI.
@@ -294,6 +315,29 @@ inputMapConfigData=@ByteArray(AQID)
             reparsed.value("Device_046d_c53e", "inputMapConfigData"),
             Some("@ByteArray(AQID)")
         );
+    }
+
+    #[test]
+    fn stores_loads_lists_and_removes_overlay_presets() {
+        let mut config = ProjecteurConfig::default();
+        let settings = SpotlightSettings {
+            spot_size: 73,
+            dot_mode: DotMode::Diffuse,
+            ..SpotlightSettings::default()
+        };
+
+        config.set_spotlight_settings_in_group("Preset_Keynote", &settings);
+
+        assert_eq!(
+            config.group_names().collect::<Vec<_>>(),
+            vec!["Preset_Keynote"]
+        );
+        let loaded = config.spotlight_settings_from_group("Preset_Keynote");
+        assert_eq!(loaded.spot_size, 73);
+        assert_eq!(loaded.dot_mode, DotMode::Diffuse);
+
+        config.remove_group("Preset_Keynote");
+        assert!(config.group("Preset_Keynote").is_none());
     }
 
     #[test]
