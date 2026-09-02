@@ -61,7 +61,12 @@ fn main() {
     );
     eprintln!("projecteur-rs: QML load call completed");
 
-    std::process::exit(application.pin_mut().exec());
+    let exit_code = application.pin_mut().exec();
+    // Destroy the QML backend while QApplication and the session bus are still
+    // alive so temporary desktop-effect changes can be restored cleanly.
+    drop(engine);
+    drop(application);
+    std::process::exit(exit_code);
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

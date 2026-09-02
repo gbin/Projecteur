@@ -64,6 +64,10 @@ pub mod ffi {
             icon_name: &QString,
         );
 
+        fn suppress_shake_cursor_effect() -> bool;
+
+        fn restore_shake_cursor_effect() -> bool;
+
         fn load_qml_module(
             engine: Pin<&mut QQmlApplicationEngine>,
             uri: QAnyStringView,
@@ -282,6 +286,7 @@ pub struct ProjecteurBackendRust {
     control_commands: Receiver<ControlCommand>,
     timer_deadline: Option<Instant>,
     navigation_pressed: bool,
+    shake_cursor_effect_suppressed: bool,
     presenter_events: Option<Receiver<PresenterEvent>>,
     screencast_manager: Option<ScreencastManager>,
     capture_streams: HashMap<ScreenRegion, StreamIdentifier>,
@@ -326,6 +331,14 @@ impl Default for ProjecteurBackendRust {
             config_path.as_deref(),
             &status,
         )
+    }
+}
+
+impl Drop for ProjecteurBackendRust {
+    fn drop(&mut self) {
+        if self.shake_cursor_effect_suppressed {
+            let _ = ffi::restore_shake_cursor_effect();
+        }
     }
 }
 
@@ -422,6 +435,7 @@ impl ProjecteurBackendRust {
             control_commands,
             timer_deadline: None,
             navigation_pressed: false,
+            shake_cursor_effect_suppressed: false,
             presenter_events,
             screencast_manager: None,
             capture_streams: HashMap::new(),
@@ -1361,6 +1375,7 @@ impl ffi::ProjecteurBackend {
         self.as_mut().poll_control_commands();
         self.as_mut().update_presentation_timer();
         self.as_mut().poll_screencast();
+        self.as_mut().sync_shake_cursor_effect();
         let snapshot = self.as_ref().control_snapshot();
         self.as_ref().rust().control_handle.publish(snapshot);
     }
@@ -1439,7 +1454,10 @@ impl ffi::ProjecteurBackend {
                 Ok(ControlCommand::ApplyCommands(commands)) => {
                     self.as_mut().apply_control_commands(&commands);
                 }
-                Ok(ControlCommand::Quit) => self.as_mut().set_quit_requested(true),
+                Ok(ControlCommand::Quit) => {
+                    self.as_mut().restore_shake_cursor_effect();
+                    self.as_mut().set_quit_requested(true);
+                }
                 Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
             }
         }
@@ -1452,6 +1470,27 @@ impl ffi::ProjecteurBackend {
         self.as_mut().set_presentation_timer_enabled(enabled);
         if !enabled {
             self.as_mut().reset_presentation_timer();
+        }
+    }
+
+    fn sync_shake_cursor_effect(mut self: Pin<&mut Self>) {
+        let should_suppress = *self.as_ref().overlay_active() && !self.as_ref().overlay_disabled();
+        let is_suppressed = self.as_ref().rust().shake_cursor_effect_suppressed;
+        if should_suppress && !is_suppressed {
+            if ffi::suppress_shake_cursor_effect() {
+                self.as_mut().rust_mut().shake_cursor_effect_suppressed = true;
+            }
+        } else if !should_suppress && is_suppressed {
+            self.as_mut().restore_shake_cursor_effect();
+        }
+    }
+
+    fn restore_shake_cursor_effect(mut self: Pin<&mut Self>) {
+        if !self.as_ref().rust().shake_cursor_effect_suppressed {
+            return;
+        }
+        if ffi::restore_shake_cursor_effect() {
+            self.as_mut().rust_mut().shake_cursor_effect_suppressed = false;
         }
     }
 
@@ -1528,7 +1567,10 @@ impl ffi::ProjecteurBackend {
             let key = key.trim();
             let value = value.trim();
             match key {
-                "quit" => self.as_mut().set_quit_requested(true),
+                "quit" => {
+                    self.as_mut().restore_shake_cursor_effect();
+                    self.as_mut().set_quit_requested(true);
+                }
                 "spot" if value.eq_ignore_ascii_case("toggle") => {
                     let active = !self.as_ref().overlay_active();
                     self.as_mut().set_overlay_active(active);

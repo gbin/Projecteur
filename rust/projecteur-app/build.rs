@@ -112,6 +112,7 @@ fn write_qml_loader(output_directory: &std::path::Path) {
 #include <QtQml/QQmlApplicationEngine>
 #include <QtWidgets/QApplication>
 #include <QtDBus/QDBusInterface>
+#include <QtDBus/QDBusReply>
 
 #include <KActionCollection>
 #include <KAboutApplicationDialog>
@@ -169,6 +170,37 @@ inline void send_notification(const QString& eventId, const QString& title,
     KNotification::event(eventId, title, text, iconName,
                          KNotification::CloseOnTimeout,
                          QStringLiteral("projecteur"));
+}
+
+inline bool suppress_shake_cursor_effect()
+{
+    QDBusInterface effects(
+        QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
+        QStringLiteral("org.kde.kwin.Effects"));
+    if (!effects.isValid()) {
+        return false;
+    }
+    const QDBusReply<bool> loaded = effects.call(
+        QStringLiteral("isEffectLoaded"), QStringLiteral("shakecursor"));
+    if (!loaded.isValid() || !loaded.value()) {
+        return false;
+    }
+    const QDBusReply<void> unloaded = effects.call(
+        QStringLiteral("unloadEffect"), QStringLiteral("shakecursor"));
+    return unloaded.isValid();
+}
+
+inline bool restore_shake_cursor_effect()
+{
+    QDBusInterface effects(
+        QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
+        QStringLiteral("org.kde.kwin.Effects"));
+    if (!effects.isValid()) {
+        return false;
+    }
+    const QDBusReply<bool> loaded = effects.call(
+        QStringLiteral("loadEffect"), QStringLiteral("shakecursor"));
+    return loaded.isValid() && loaded.value();
 }
 
 inline std::unique_ptr<QGuiApplication> create_widget_application()
