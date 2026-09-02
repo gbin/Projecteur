@@ -468,7 +468,23 @@ ApplicationWindow {
                                                             backend.startInputMappingRecording(mappingRow.index)
                                                     }
                                                     ToolTip.visible: hovered
-                                                    ToolTip.text: qsTr("Press Enter or click to record presenter button(s).")
+                                                    ToolTip.text: qsTr("Click to record presenter button(s); right-click for hold movement.")
+                                                    TapHandler {
+                                                        acceptedButtons: Qt.RightButton
+                                                        onTapped: specialInputMenu.open()
+                                                    }
+                                                    Menu {
+                                                        id: specialInputMenu
+                                                        Repeater {
+                                                            model: ["Next Hold Move", "Back Hold Move"]
+                                                            MenuItem {
+                                                                required property string modelData
+                                                                text: modelData
+                                                                onTriggered: backend.setSpecialInputMapping(
+                                                                    mappingRow.index, modelData)
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                                 ComboBox {
                                                     id: actionType

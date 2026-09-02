@@ -16,6 +16,10 @@ pub const SYN_REPORT: u16 = 0;
 pub const REL_X: u16 = 0;
 /// Relative vertical motion code.
 pub const REL_Y: u16 = 1;
+/// Horizontal wheel axis.
+pub const REL_HWHEEL: u16 = 6;
+/// Vertical wheel axis.
+pub const REL_WHEEL: u16 = 8;
 
 /// Size of `struct input_event` on the current Linux architecture.
 ///

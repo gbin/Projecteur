@@ -10,14 +10,16 @@ use std::{
 
 use linux_raw_sys::ioctl::{
     EVIOCGRAB, UI_DEV_CREATE, UI_DEV_DESTROY, UI_DEV_SETUP, UI_SET_EVBIT, UI_SET_KEYBIT,
+    UI_SET_RELBIT,
 };
 
-use crate::input_event::{EV_KEY, EV_SYN, InputEvent, LINUX_INPUT_EVENT_SIZE};
+use crate::input_event::{EV_KEY, EV_REL, EV_SYN, InputEvent, LINUX_INPUT_EVENT_SIZE};
 
 const BUS_USB: u16 = 0x03;
 const BTN_MISC: u16 = 0x100;
 const KEY_OK: u16 = 0x160;
 const KEY_MACRO1: u16 = 0x290;
+const REL_CNT: u16 = 0x10;
 const UINPUT_NAME_SIZE: usize = 80;
 
 #[repr(C)]
@@ -107,6 +109,69 @@ impl Drop for VirtualKeyboard {
     }
 }
 
+/// A virtual mouse registered with the Linux input subsystem.
+pub struct VirtualMouse {
+    device: File,
+}
+
+impl VirtualMouse {
+    /// Create a virtual mouse at `/dev/uinput`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error when uinput is unavailable or rejects setup.
+    pub fn create() -> io::Result<Self> {
+        Self::create_at(Path::new("/dev/uinput"))
+    }
+
+    /// Create a virtual mouse through an explicit uinput node.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error when the node cannot be opened or configured.
+    pub fn create_at(path: &Path) -> io::Result<Self> {
+        let device = OpenOptions::new().write(true).open(path)?;
+        let fd = device.as_raw_fd();
+        set_ioctl_value(fd, UI_SET_EVBIT, i32::from(EV_SYN))?;
+        set_ioctl_value(fd, UI_SET_EVBIT, i32::from(EV_KEY))?;
+        set_ioctl_value(fd, UI_SET_EVBIT, i32::from(EV_REL))?;
+        for code in 0..REL_CNT {
+            set_ioctl_value(fd, UI_SET_RELBIT, i32::from(code))?;
+        }
+        for code in BTN_MISC..KEY_OK {
+            set_ioctl_value(fd, UI_SET_KEYBIT, i32::from(code))?;
+        }
+        let setup = UinputSetup {
+            id: InputId {
+                bustype: BUS_USB,
+                vendor: 0x1209,
+                product: 0x0002,
+                version: 1,
+            },
+            name: uinput_name("Projecteur virtual mouse"),
+            ff_effects_max: 0,
+        };
+        ioctl_pointer(fd, UI_DEV_SETUP, &setup)?;
+        ioctl_no_argument(fd, UI_DEV_CREATE)?;
+        Ok(Self { device })
+    }
+
+    /// Emit one mouse, relative-axis, or synchronization event.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error when the kernel rejects the event.
+    pub fn emit(&mut self, event: InputEvent) -> io::Result<()> {
+        self.device.write_all(&encode_input_event(event))
+    }
+}
+
+impl Drop for VirtualMouse {
+    fn drop(&mut self) {
+        let _ = ioctl_no_argument(self.device.as_raw_fd(), UI_DEV_DESTROY);
+    }
+}
+
 /// A physical Linux input-event node held under an exclusive grab.
 pub struct GrabbedEventDevice {
     device: File,
@@ -154,6 +219,53 @@ impl GrabbedEventDevice {
             let result = unsafe { libc::poll(&raw mut descriptor, 1, timeout_ms) };
             if result > 0 {
                 return self.read_event().map(Some);
+            }
+            if result == 0 {
+                return Ok(None);
+            }
+            let error = io::Error::last_os_error();
+            if error.kind() != io::ErrorKind::Interrupted {
+                return Err(error);
+            }
+        }
+    }
+
+    /// Wait for one of several grabbed event nodes to become readable.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error when polling fails.
+    pub fn wait_readable(devices: &[Self], timeout: Duration) -> io::Result<Option<usize>> {
+        let timeout_ms = i32::try_from(timeout.as_millis()).unwrap_or(i32::MAX);
+        let mut descriptors: Vec<_> = devices
+            .iter()
+            .map(|device| libc::pollfd {
+                fd: device.device.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            })
+            .collect();
+        loop {
+            // SAFETY: the descriptor vector owns initialized `pollfd` values
+            // and is not changed while `poll` borrows its storage.
+            let result = unsafe {
+                libc::poll(
+                    descriptors.as_mut_ptr(),
+                    descriptors.len().try_into().unwrap_or(libc::nfds_t::MAX),
+                    timeout_ms,
+                )
+            };
+            if result > 0 {
+                let readable = descriptors
+                    .iter()
+                    .position(|descriptor| descriptor.revents & libc::POLLIN != 0);
+                if readable.is_some() {
+                    return Ok(readable);
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::BrokenPipe,
+                    "grabbed input device disconnected",
+                ));
             }
             if result == 0 {
                 return Ok(None);

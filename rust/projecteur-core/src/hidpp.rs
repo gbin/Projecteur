@@ -21,6 +21,7 @@ pub enum FeatureCode {
     UnifiedBattery = 0x1004,
     Haptic = 0x19b0,
     PresenterControl = 0x1a00,
+    ReprogramControlsV4 = 0x1b04,
 }
 
 /// Battery feature variant used to select its request and response layout.
@@ -451,6 +452,37 @@ pub fn send_vibration<T: Read + Write + AsRawFd>(
     let response = exchange(device, &play, &mut on_unrelated_report)?;
     ensure_response(&play, &response)?;
     Ok(VibrationProtocol::Haptic)
+}
+
+/// Enable Spotlight next/back hold and hold-motion notifications.
+///
+/// The returned value is the device-specific HID++ feature index used to
+/// recognize the asynchronous function 0 and function 1 notifications.
+///
+/// # Errors
+///
+/// Returns an error for transport or HID++ failures. Unsupported devices
+/// return `Ok(None)`.
+pub fn enable_hold_notifications<T: Read + Write + AsRawFd>(
+    device: &mut T,
+    device_index: u8,
+    mut on_unrelated_report: impl FnMut(&[u8]),
+) -> Result<Option<u8>, BatteryQueryError> {
+    let Some(index) = lookup_feature(
+        device,
+        device_index,
+        FeatureCode::ReprogramControlsV4,
+        &mut on_unrelated_report,
+    )?
+    else {
+        return Ok(None);
+    };
+    for control in [0xda, 0xdc] {
+        let request = Message::long_request(device_index, index, 3, &[0, control, 0x33]);
+        let response = exchange(device, &request, &mut on_unrelated_report)?;
+        ensure_response(&request, &response)?;
+    }
+    Ok(Some(index))
 }
 
 fn lookup_feature<T: Read + Write + AsRawFd>(

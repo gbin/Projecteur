@@ -21,16 +21,16 @@ use projecteur_core::{
     device_scan::{DeviceNodeKind, DiscoveredDevice, scan_devices},
     hid_report::{PresenterReport, decode_presenter_report},
     hidpp::{
-        BatteryInfo, query_battery, read_report_with_timeout, send_vibration,
-        spotlight_device_index,
+        BatteryInfo, Message, enable_hold_notifications, query_battery, read_report_with_timeout,
+        send_vibration, spotlight_device_index,
     },
-    input_event::{EV_KEY, EV_SYN, InputEvent, SYN_REPORT},
+    input_event::{EV_KEY, EV_REL, EV_SYN, InputEvent, REL_HWHEEL, REL_WHEEL, SYN_REPORT},
     input_mapping::{
         InputMapConfig, InputMapper, InputMapping, KeyEvent, KeyEventSequence, MappedAction,
         MapperOutput, NativeKeySequence,
     },
     settings::{DotMode, SpotlightSettings, ZoomMode},
-    uinput::{GrabbedEventDevice, VirtualKeyboard},
+    uinput::{GrabbedEventDevice, VirtualKeyboard, VirtualMouse},
 };
 
 use crate::control::{self, ControlCommand, ControlHandle, ControlSnapshot};
@@ -241,6 +241,13 @@ pub mod ffi {
 
         #[qinvokable]
         fn start_input_mapping_recording(self: Pin<&mut ProjecteurBackend>, row: i32) -> bool;
+
+        #[qinvokable]
+        fn set_special_input_mapping(
+            self: Pin<&mut ProjecteurBackend>,
+            row: i32,
+            name: &QString,
+        ) -> bool;
 
         #[qinvokable]
         fn cancel_input_mapping_recording(self: Pin<&mut ProjecteurBackend>);
@@ -619,6 +626,13 @@ enum PresenterEvent {
     MappedAction(MappedAction),
     InputRecorded(KeyEvent),
     InputRecordingFinished,
+    SpecialInput(SpecialInput),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SpecialInput {
+    Hold(u16),
+    Move { code: u16, x: i32, y: i32 },
 }
 
 #[derive(Debug)]
@@ -626,6 +640,7 @@ enum ButtonManagerCommand {
     Config(InputMapConfig),
     Interval(Duration),
     Recording(bool),
+    SpecialInput(SpecialInput),
 }
 
 struct PresenterManager {
@@ -726,10 +741,10 @@ fn battery_device_index_for_path(
     spotlight_device_index(device.id)
 }
 
-fn preferred_button_path(
+fn preferred_button_paths(
     selection: &PresenterSelection,
     devices: &[DiscoveredDevice],
-) -> Option<PathBuf> {
+) -> Vec<PathBuf> {
     let device = match selection {
         PresenterSelection::Auto => devices.iter().find(|device| {
             device
@@ -741,14 +756,16 @@ fn preferred_button_path(
             .iter()
             .find(|device| device.nodes.iter().any(|node| node.path == *path)),
         PresenterSelection::Disabled => None,
-    }?;
+    };
+    let Some(device) = device else {
+        return Vec::new();
+    };
     device
         .nodes
         .iter()
-        .find(|node| {
-            node.kind == DeviceNodeKind::Event && node.readable && !node.has_relative_pointer
-        })
+        .filter(|node| node.kind == DeviceNodeKind::Event && node.readable)
         .map(|node| node.path.clone())
+        .collect()
 }
 
 #[allow(clippy::too_many_lines)]
@@ -761,11 +778,11 @@ fn run_button_manager(
     let mut reported_uinput_error = false;
     loop {
         let devices = scan_devices().unwrap_or_default();
-        let path = preferred_button_path(selection, &devices);
-        let Some(path) = path else {
+        let paths = preferred_button_paths(selection, &devices);
+        if paths.is_empty() {
             thread::sleep(PRESENTER_RESCAN_INTERVAL);
             continue;
-        };
+        }
         let Ok(mut keyboard) = VirtualKeyboard::create() else {
             if !reported_uinput_error {
                 eprintln!("projecteur-rs: uinput unavailable; presenter buttons remain ungrabbed");
@@ -774,16 +791,26 @@ fn run_button_manager(
             thread::sleep(PRESENTER_RESCAN_INTERVAL);
             continue;
         };
-        let Ok(mut source) = GrabbedEventDevice::open(&path) else {
+        let Ok(mut mouse) = VirtualMouse::create() else {
             thread::sleep(PRESENTER_RESCAN_INTERVAL);
             continue;
         };
+        let mut sources: Vec<_> = paths
+            .iter()
+            .filter_map(|path| GrabbedEventDevice::open(path).ok())
+            .collect();
+        if sources.is_empty() {
+            thread::sleep(PRESENTER_RESCAN_INTERVAL);
+            continue;
+        }
         if sender.send(PresenterEvent::ButtonForwarding(true)).is_err() {
             return;
         }
-        let device = devices
-            .iter()
-            .find(|device| device.nodes.iter().any(|node| node.path == path));
+        let device = devices.iter().find(|device| {
+            paths
+                .iter()
+                .any(|path| device.nodes.iter().any(|node| node.path == *path))
+        });
         let device_group = device
             .map(|device| format!("Device_{:04x}_{:04x}", device.id.vendor, device.id.product));
         let config = config_path
@@ -804,26 +831,53 @@ fn run_button_manager(
             u64::try_from(sequence_interval).expect("clamped input interval is positive"),
         );
         let mut mapper = InputMapper::new(config);
-        let mut frame = Vec::new();
+        let mut frames = vec![Vec::new(); sources.len()];
         let mut recording = false;
         let mut recorded_frames = 0_u8;
         let mut recording_deadline = None;
+        let mut mapping_deadline = None;
         loop {
             while let Ok(command) = commands.try_recv() {
                 match command {
-                    ButtonManagerCommand::Config(config) => mapper.set_config(config),
+                    ButtonManagerCommand::Config(config) => {
+                        mapper.set_config(config);
+                        mapping_deadline = None;
+                    }
                     ButtonManagerCommand::Interval(interval) => {
                         sequence_interval = interval;
+                        mapping_deadline = mapper
+                            .has_pending_input()
+                            .then(|| Instant::now() + sequence_interval);
                     }
                     ButtonManagerCommand::Recording(active) => {
                         recording = active;
                         recorded_frames = 0;
                         recording_deadline = None;
+                        mapping_deadline = None;
                         mapper.reset();
+                    }
+                    ButtonManagerCommand::SpecialInput(input) => {
+                        if !dispatch_special_input(
+                            input,
+                            recording,
+                            &mut recorded_frames,
+                            &mut recording_deadline,
+                            sequence_interval,
+                            &mut mapper,
+                            &mut keyboard,
+                            &mut mouse,
+                            sender,
+                        ) {
+                            return;
+                        }
+                        mapping_deadline = mapper
+                            .has_pending_input()
+                            .then(|| Instant::now() + sequence_interval);
                     }
                 }
             }
-            let mapping_timeout = mapper.has_pending_input().then_some(sequence_interval);
+            let mapping_timeout = mapping_deadline
+                .map(|deadline: Instant| deadline.saturating_duration_since(Instant::now()));
             let timeout = [
                 mapping_timeout,
                 recording_deadline
@@ -834,12 +888,25 @@ fn run_button_manager(
             .min()
             .unwrap_or(Duration::from_millis(25))
             .min(Duration::from_millis(25));
-            match source.read_event_timeout(timeout) {
-                Ok(Some(event)) => {
+            match GrabbedEventDevice::wait_readable(&sources, timeout) {
+                Ok(Some(source_index)) => {
+                    let Ok(event) = sources[source_index].read_event() else {
+                        break;
+                    };
+                    let frame = &mut frames[source_index];
                     frame.push(event);
                     if event.is_sync_report() {
+                        if frame
+                            .first()
+                            .is_some_and(|event| event.is_relative_motion())
+                        {
+                            if !frame.drain(..).all(|event| mouse.emit(event).is_ok()) {
+                                break;
+                            }
+                            continue;
+                        }
                         if recording {
-                            if let Some(recorded) = normalized_recording_frame(&frame) {
+                            if let Some(recorded) = normalized_recording_frame(frame) {
                                 if sender
                                     .send(PresenterEvent::InputRecorded(recorded))
                                     .is_err()
@@ -860,12 +927,15 @@ fn run_button_manager(
                             frame.clear();
                             continue;
                         }
-                        let output = mapper.feed_frame(&frame);
+                        let output = mapper.feed_frame(frame);
                         frame.clear();
                         let Ok(output) = output else { break };
-                        if !dispatch_mapper_output(output, &mut keyboard, sender) {
+                        if !dispatch_mapper_output(output, &mut keyboard, &mut mouse, sender) {
                             break;
                         }
+                        mapping_deadline = mapper
+                            .has_pending_input()
+                            .then(|| Instant::now() + sequence_interval);
                     }
                 }
                 Ok(None)
@@ -879,12 +949,16 @@ fn run_button_manager(
                         return;
                     }
                 }
-                Ok(None) if mapper.has_pending_input() => {
+                Ok(None)
+                    if mapper.has_pending_input()
+                        && mapping_deadline.is_some_and(|deadline| Instant::now() >= deadline) =>
+                {
                     if let Some(output) = mapper.sequence_timeout()
-                        && !dispatch_mapper_output(output, &mut keyboard, sender)
+                        && !dispatch_mapper_output(output, &mut keyboard, &mut mouse, sender)
                     {
                         break;
                     }
+                    mapping_deadline = None;
                 }
                 Ok(None) => {}
                 Err(_) => break,
@@ -1181,13 +1255,12 @@ fn native_modifier_keys(modifiers: i32) -> (Vec<u16>, u16) {
 fn dispatch_mapper_output(
     output: MapperOutput,
     keyboard: &mut VirtualKeyboard,
+    mouse: &mut VirtualMouse,
     sender: &SyncSender<PresenterEvent>,
 ) -> bool {
     match output {
         MapperOutput::Pending | MapperOutput::Consumed => true,
-        MapperOutput::Forward(events) => {
-            events.into_iter().all(|event| keyboard.emit(event).is_ok())
-        }
+        MapperOutput::Forward(events) => emit_forwarded_frames(&events, keyboard, mouse),
         MapperOutput::Action(MappedAction::KeySequence(sequence)) => sequence
             .native_sequence
             .into_iter()
@@ -1195,6 +1268,126 @@ fn dispatch_mapper_output(
             .all(|event| keyboard.emit(event).is_ok()),
         MapperOutput::Action(action) => sender.send(PresenterEvent::MappedAction(action)).is_ok(),
     }
+}
+
+fn emit_forwarded_frames(
+    events: &[InputEvent],
+    keyboard: &mut VirtualKeyboard,
+    mouse: &mut VirtualMouse,
+) -> bool {
+    events
+        .split_inclusive(|event| event.is_sync_report())
+        .all(|frame| {
+            if frame
+                .iter()
+                .any(|event| event.event_type == EV_KEY && event.code >= 0x0e00)
+            {
+                return true;
+            }
+            let is_mouse = frame.iter().any(|event| {
+                event.event_type == EV_REL || (event.event_type == EV_KEY && event.code >= 0x100)
+            });
+            if is_mouse {
+                frame.iter().all(|event| mouse.emit(*event).is_ok())
+            } else {
+                frame.iter().all(|event| keyboard.emit(*event).is_ok())
+            }
+        })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn dispatch_special_input(
+    input: SpecialInput,
+    recording: bool,
+    recorded_frames: &mut u8,
+    recording_deadline: &mut Option<Instant>,
+    sequence_interval: Duration,
+    mapper: &mut InputMapper,
+    keyboard: &mut VirtualKeyboard,
+    mouse: &mut VirtualMouse,
+    sender: &SyncSender<PresenterEvent>,
+) -> bool {
+    let (code, motion) = match input {
+        SpecialInput::Hold(code) => (code, None),
+        SpecialInput::Move { code, x, y } => (code, Some((x, y))),
+    };
+    if recording {
+        if motion.is_some() {
+            return true;
+        }
+        if sender
+            .send(PresenterEvent::InputRecorded(vec![InputEvent {
+                event_type: EV_KEY,
+                code,
+                value: 1,
+            }]))
+            .is_err()
+        {
+            return false;
+        }
+        *recorded_frames += 1;
+        *recording_deadline = Some(Instant::now() + sequence_interval);
+        return true;
+    }
+    let repetitions = if motion.is_some() { 3 } else { 1 };
+    let mut frame = vec![
+        InputEvent {
+            event_type: EV_KEY,
+            code,
+            value: 1,
+        };
+        repetitions
+    ];
+    frame.push(sync_event());
+    let Ok(output) = mapper.feed_frame(&frame) else {
+        return true;
+    };
+    let Some((x, y)) = motion else {
+        return dispatch_mapper_output(output, keyboard, mouse, sender);
+    };
+    match output {
+        MapperOutput::Action(MappedAction::ScrollHorizontal) => emit_wheel(mouse, REL_HWHEEL, -x),
+        MapperOutput::Action(MappedAction::ScrollVertical) => emit_wheel(mouse, REL_WHEEL, y),
+        MapperOutput::Action(MappedAction::VolumeControl) => emit_volume(keyboard, -y),
+        other => dispatch_mapper_output(other, keyboard, mouse, sender),
+    }
+}
+
+fn emit_wheel(mouse: &mut VirtualMouse, code: u16, value: i32) -> bool {
+    value == 0
+        || [
+            InputEvent {
+                event_type: EV_REL,
+                code,
+                value,
+            },
+            sync_event(),
+        ]
+        .into_iter()
+        .all(|event| mouse.emit(event).is_ok())
+}
+
+fn emit_volume(keyboard: &mut VirtualKeyboard, value: i32) -> bool {
+    if value == 0 {
+        return true;
+    }
+    let code = if value > 0 { 115 } else { 114 };
+    [
+        InputEvent {
+            event_type: EV_KEY,
+            code,
+            value: 1,
+        },
+        sync_event(),
+        InputEvent {
+            event_type: EV_KEY,
+            code,
+            value: 0,
+        },
+        sync_event(),
+    ]
+    .into_iter()
+    .all(|event| keyboard.emit(event).is_ok())
 }
 
 const BATTERY_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
@@ -1207,13 +1400,33 @@ fn read_presenter(
 ) {
     let mut bytes = [0_u8; 256];
     let mut next_battery_refresh = battery_device_index.map(|_| Instant::now());
+    let mut hold_state = HoldNotificationState::default();
+    let hold_feature_index = battery_device_index.and_then(|device_index| {
+        match enable_hold_notifications(device, device_index, |report| {
+            forward_presenter_report(report, sender);
+        }) {
+            Ok(index) => index,
+            Err(error) => {
+                eprintln!(
+                    "projecteur-rs: hold notifications unavailable on {}: {error}",
+                    path.display()
+                );
+                None
+            }
+        }
+    });
     loop {
         let timeout = next_battery_refresh.map_or(Duration::from_secs(60), |deadline| {
             deadline.saturating_duration_since(Instant::now())
         });
         match read_report_with_timeout(device, &mut bytes, timeout) {
             Ok(Some(0)) | Err(_) => return,
-            Ok(Some(length)) => forward_presenter_report(&bytes[..length], sender),
+            Ok(Some(length)) => forward_presenter_or_hold(
+                &bytes[..length],
+                sender,
+                hold_feature_index,
+                &mut hold_state,
+            ),
             Ok(None) => {}
         }
 
@@ -1225,7 +1438,7 @@ fn read_presenter(
             continue;
         }
         match query_battery(device, device_index, |report| {
-            forward_presenter_report(report, sender);
+            forward_presenter_or_hold(report, sender, hold_feature_index, &mut hold_state);
         }) {
             Ok(info) => {
                 if sender.send(PresenterEvent::Battery(info)).is_err() {
@@ -1238,6 +1451,95 @@ fn read_presenter(
             ),
         }
         next_battery_refresh = Some(Instant::now() + BATTERY_REFRESH_INTERVAL);
+    }
+}
+
+#[derive(Debug, Default)]
+struct HoldNotificationState {
+    next_pressed: bool,
+    back_pressed: bool,
+    move_code: Option<u16>,
+    last_move: Option<Instant>,
+}
+
+fn forward_presenter_or_hold(
+    report: &[u8],
+    sender: &SyncSender<PresenterEvent>,
+    feature_index: Option<u8>,
+    state: &mut HoldNotificationState,
+) {
+    if let Some(feature_index) = feature_index
+        && let Ok(message) = Message::parse(report)
+        && message.feature_index() == feature_index
+    {
+        for input in decode_hold_notification(&message, state) {
+            let _ = sender.try_send(PresenterEvent::SpecialInput(input));
+        }
+        return;
+    }
+    forward_presenter_report(report, sender);
+}
+
+fn decode_hold_notification(
+    message: &Message,
+    state: &mut HoldNotificationState,
+) -> Vec<SpecialInput> {
+    let payload = message.payload();
+    if payload.len() < 4 {
+        return Vec::new();
+    }
+    if message.function() == 0 {
+        let next_pressed = payload[1] == 0xda || payload[3] == 0xda;
+        let back_pressed = payload[1] == 0xdc || payload[3] == 0xdc;
+        let mut inputs = Vec::new();
+        if !state.next_pressed && next_pressed {
+            inputs.push(SpecialInput::Hold(0x0e10));
+        }
+        if !state.back_pressed && back_pressed {
+            inputs.push(SpecialInput::Hold(0x0e11));
+        }
+        if !state.next_pressed && next_pressed {
+            state.move_code = Some(0x0ff0);
+        } else if back_pressed && (!state.back_pressed || (state.next_pressed && !next_pressed)) {
+            state.move_code = Some(0x0ff1);
+        } else if state.back_pressed && !back_pressed && next_pressed {
+            state.move_code = Some(0x0ff0);
+        }
+        state.next_pressed = next_pressed;
+        state.back_pressed = back_pressed;
+        if !next_pressed && !back_pressed {
+            state.move_code = None;
+        }
+        return inputs;
+    }
+    if message.function() != 1 || state.move_code.is_none() {
+        return Vec::new();
+    }
+    let now = Instant::now();
+    if state
+        .last_move
+        .is_some_and(|last_move| now.duration_since(last_move) < Duration::from_millis(30))
+    {
+        return Vec::new();
+    }
+    state.last_move = Some(now);
+    let reduce = |value: i32| {
+        if value.abs() < 5 {
+            0
+        } else {
+            value.clamp(-10, 10).div_euclid(5)
+        }
+    };
+    let x = reduce(i32::from(i8::from_ne_bytes([payload[1]])));
+    let y = reduce(i32::from(i8::from_ne_bytes([payload[3]])));
+    if x == 0 && y == 0 {
+        Vec::new()
+    } else {
+        vec![SpecialInput::Move {
+            code: state.move_code.expect("checked above"),
+            x,
+            y,
+        }]
     }
 }
 
@@ -1782,6 +2084,41 @@ impl ffi::ProjecteurBackend {
         true
     }
 
+    fn set_special_input_mapping(mut self: Pin<&mut Self>, row: i32, name: &QString) -> bool {
+        let Ok(row) = usize::try_from(row) else {
+            return false;
+        };
+        let code = match String::from(name).as_str() {
+            "Next Hold Move" => 0x0ff0,
+            "Back Hold Move" => 0x0ff1,
+            _ => return false,
+        };
+        let event = InputEvent {
+            event_type: EV_KEY,
+            code,
+            value: 1,
+        };
+        {
+            let this = self.as_mut();
+            let mut rust = this.rust_mut();
+            let Some(item) = rust.input_mapping_items.get_mut(row) else {
+                return false;
+            };
+            item.input = vec![vec![event; 3]];
+            if !matches!(
+                item.action,
+                MappedAction::ScrollHorizontal
+                    | MappedAction::ScrollVertical
+                    | MappedAction::VolumeControl
+            ) {
+                item.action = MappedAction::ScrollVertical;
+            }
+        }
+        let saved = self.as_mut().persist_input_mappings();
+        self.as_mut().refresh_input_mapping_rows();
+        saved
+    }
+
     fn cancel_input_mapping_recording(mut self: Pin<&mut Self>) {
         let _ = self
             .as_ref()
@@ -2176,6 +2513,12 @@ impl ffi::ProjecteurBackend {
                 }
                 Some(Ok(PresenterEvent::InputRecordingFinished)) => {
                     self.as_mut().finish_input_mapping_recording();
+                }
+                Some(Ok(PresenterEvent::SpecialInput(input))) => {
+                    let _ = self
+                        .as_ref()
+                        .rust()
+                        .send_button_command(ButtonManagerCommand::SpecialInput(input));
                 }
                 Some(Err(TryRecvError::Empty)) | None => break,
                 Some(Err(TryRecvError::Disconnected)) => {
@@ -2648,7 +2991,7 @@ mod tests {
     }
 
     #[test]
-    fn button_forwarding_uses_only_the_selected_devices_non_pointer_node() {
+    fn button_forwarding_uses_all_selected_device_event_nodes() {
         let devices = [DiscoveredDevice {
             id: DeviceId {
                 vendor: 0x046d,
@@ -2684,15 +3027,21 @@ mod tests {
         }];
 
         assert_eq!(
-            preferred_button_path(&PresenterSelection::Auto, &devices),
-            Some(PathBuf::from("/dev/input/event15"))
+            preferred_button_paths(&PresenterSelection::Auto, &devices),
+            vec![
+                PathBuf::from("/dev/input/event16"),
+                PathBuf::from("/dev/input/event15")
+            ]
         );
         assert_eq!(
-            preferred_button_path(
+            preferred_button_paths(
                 &PresenterSelection::Explicit(PathBuf::from("/dev/hidraw5")),
                 &devices
             ),
-            Some(PathBuf::from("/dev/input/event15"))
+            vec![
+                PathBuf::from("/dev/input/event16"),
+                PathBuf::from("/dev/input/event15")
+            ]
         );
         assert_eq!(
             battery_device_index_for_path(std::path::Path::new("/dev/hidraw5"), &devices),
@@ -2791,5 +3140,33 @@ mod tests {
         );
         assert_eq!(alt_tab.native_sequence[1][0].value, 0);
         assert_eq!(alt_tab.native_sequence[1][1].value, 0);
+    }
+
+    #[test]
+    fn decodes_spotlight_hold_and_throttled_move_notifications() {
+        let pressed = Message::parse(&[
+            0x11, 1, 0x0d, 0x00, 0, 0xda, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ])
+        .unwrap();
+        let movement = Message::parse(&[
+            0x11, 1, 0x0d, 0x10, 0xff, 9, 0xff, 0xf7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ])
+        .unwrap();
+        let mut state = HoldNotificationState::default();
+
+        assert_eq!(
+            decode_hold_notification(&pressed, &mut state),
+            vec![SpecialInput::Hold(0x0e10)]
+        );
+        assert_eq!(state.move_code, Some(0x0ff0));
+        assert_eq!(
+            decode_hold_notification(&movement, &mut state),
+            vec![SpecialInput::Move {
+                code: 0x0ff0,
+                x: 1,
+                y: -2,
+            }]
+        );
+        assert!(decode_hold_notification(&movement, &mut state).is_empty());
     }
 }
