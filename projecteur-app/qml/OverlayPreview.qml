@@ -23,7 +23,9 @@ Window {
     LayerShell.Window.layer: LayerShell.Window.LayerOverlay
     LayerShell.Window.anchors: LayerShell.Window.AnchorTop | LayerShell.Window.AnchorBottom
                                | LayerShell.Window.AnchorLeft | LayerShell.Window.AnchorRight
-    LayerShell.Window.exclusionZone: 0
+    // Ignore panel-reserved space so the overlay—and its cursor shape—covers
+    // the entire output rather than only KWin's remaining work area.
+    LayerShell.Window.exclusionZone: -1
     LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
     LayerShell.Window.activateOnShow: false
 

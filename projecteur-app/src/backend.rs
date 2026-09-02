@@ -73,10 +73,6 @@ pub mod ffi {
             icon_name: &QString,
         );
 
-        fn suppress_shake_cursor_effect() -> bool;
-
-        fn restore_shake_cursor_effect() -> bool;
-
         fn load_qml_module(
             engine: Pin<&mut QQmlApplicationEngine>,
             uri: QAnyStringView,
@@ -359,7 +355,7 @@ pub struct ProjecteurBackendRust {
     control_commands: Receiver<ControlCommand>,
     timer_deadline: Option<Instant>,
     navigation_pressed: bool,
-    shake_cursor_effect_suppressed: bool,
+    presenter_pointer_motion_suppressed: bool,
     presenter_events: Option<Receiver<PresenterEvent>>,
     button_commands: Option<SyncSender<ButtonManagerCommand>>,
     input_mapping_items: Vec<InputMapping>,
@@ -416,14 +412,6 @@ impl Default for ProjecteurBackendRust {
             config_path.as_deref(),
             &status,
         )
-    }
-}
-
-impl Drop for ProjecteurBackendRust {
-    fn drop(&mut self) {
-        if self.shake_cursor_effect_suppressed {
-            let _ = ffi::restore_shake_cursor_effect();
-        }
     }
 }
 
@@ -525,7 +513,7 @@ impl ProjecteurBackendRust {
             control_commands,
             timer_deadline: None,
             navigation_pressed: false,
-            shake_cursor_effect_suppressed: false,
+            presenter_pointer_motion_suppressed: false,
             presenter_events,
             button_commands,
             input_mapping_items: Vec::new(),
@@ -701,6 +689,7 @@ enum ButtonManagerCommand {
     Config(InputMapConfig),
     Interval(Duration),
     Recording(bool),
+    ForwardPointerMotion(bool),
     SpecialInput(SpecialInput),
 }
 
@@ -842,6 +831,7 @@ fn run_button_manager(
     additional_devices: &[SupportedDevice],
 ) {
     let mut reported_uinput_error = false;
+    let mut forward_pointer_motion = true;
     loop {
         let devices = scan_devices_with(additional_devices).unwrap_or_default();
         let paths = preferred_button_paths(selection, &devices);
@@ -924,6 +914,9 @@ fn run_button_manager(
                         mapping_deadline = None;
                         mapper.reset();
                     }
+                    ButtonManagerCommand::ForwardPointerMotion(enabled) => {
+                        forward_pointer_motion = enabled;
+                    }
                     ButtonManagerCommand::SpecialInput(input) => {
                         if !dispatch_special_input(
                             input,
@@ -976,8 +969,14 @@ fn run_button_manager(
                                     return;
                                 }
                             }
-                            if !frame.drain(..).all(|event| mouse.emit(event).is_ok()) {
-                                break;
+                            if forward_pointer_motion {
+                                if !frame.drain(..).all(|event| mouse.emit(event).is_ok()) {
+                                    break;
+                                }
+                            } else {
+                                // The overlay tracks presenter motion independently. Avoid
+                                // moving KWin's hidden pointer into screen-edge actions.
+                                frame.clear();
                             }
                             continue;
                         }
@@ -2675,7 +2674,7 @@ impl ffi::ProjecteurBackend {
         self.as_mut().poll_control_commands();
         self.as_mut().update_presentation_timer();
         self.as_mut().poll_screencast();
-        self.as_mut().sync_shake_cursor_effect();
+        self.as_mut().sync_presenter_pointer_motion();
         let snapshot = self.as_ref().control_snapshot();
         self.as_ref().rust().control_handle.publish(snapshot);
     }
@@ -2758,7 +2757,6 @@ impl ffi::ProjecteurBackend {
                     self.as_mut().apply_control_commands(&commands);
                 }
                 Ok(ControlCommand::Quit) => {
-                    self.as_mut().restore_shake_cursor_effect();
                     self.as_mut().set_quit_requested(true);
                 }
                 Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
@@ -2776,24 +2774,17 @@ impl ffi::ProjecteurBackend {
         }
     }
 
-    fn sync_shake_cursor_effect(mut self: Pin<&mut Self>) {
+    fn sync_presenter_pointer_motion(mut self: Pin<&mut Self>) {
         let should_suppress = *self.as_ref().overlay_active() && !self.as_ref().overlay_disabled();
-        let is_suppressed = self.as_ref().rust().shake_cursor_effect_suppressed;
-        if should_suppress && !is_suppressed {
-            if ffi::suppress_shake_cursor_effect() {
-                self.as_mut().rust_mut().shake_cursor_effect_suppressed = true;
-            }
-        } else if !should_suppress && is_suppressed {
-            self.as_mut().restore_shake_cursor_effect();
-        }
-    }
-
-    fn restore_shake_cursor_effect(mut self: Pin<&mut Self>) {
-        if !self.as_ref().rust().shake_cursor_effect_suppressed {
+        if should_suppress == self.as_ref().rust().presenter_pointer_motion_suppressed {
             return;
         }
-        if ffi::restore_shake_cursor_effect() {
-            self.as_mut().rust_mut().shake_cursor_effect_suppressed = false;
+        if self
+            .as_ref()
+            .rust()
+            .send_button_command(ButtonManagerCommand::ForwardPointerMotion(!should_suppress))
+        {
+            self.as_mut().rust_mut().presenter_pointer_motion_suppressed = should_suppress;
         }
     }
 
@@ -2871,7 +2862,6 @@ impl ffi::ProjecteurBackend {
             let value = value.trim();
             match key {
                 "quit" => {
-                    self.as_mut().restore_shake_cursor_effect();
                     self.as_mut().set_quit_requested(true);
                 }
                 "spot" if value.eq_ignore_ascii_case("toggle") => {

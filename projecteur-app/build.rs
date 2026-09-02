@@ -170,37 +170,6 @@ inline void send_notification(const QString& eventId, const QString& title,
                          QStringLiteral("projecteur"));
 }
 
-inline bool suppress_shake_cursor_effect()
-{
-    QDBusInterface effects(
-        QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
-        QStringLiteral("org.kde.kwin.Effects"));
-    if (!effects.isValid()) {
-        return false;
-    }
-    const QDBusReply<bool> loaded = effects.call(
-        QStringLiteral("isEffectLoaded"), QStringLiteral("shakecursor"));
-    if (!loaded.isValid() || !loaded.value()) {
-        return false;
-    }
-    const QDBusReply<void> unloaded = effects.call(
-        QStringLiteral("unloadEffect"), QStringLiteral("shakecursor"));
-    return unloaded.isValid();
-}
-
-inline bool restore_shake_cursor_effect()
-{
-    QDBusInterface effects(
-        QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
-        QStringLiteral("org.kde.kwin.Effects"));
-    if (!effects.isValid()) {
-        return false;
-    }
-    const QDBusReply<bool> loaded = effects.call(
-        QStringLiteral("loadEffect"), QStringLiteral("shakecursor"));
-    return loaded.isValid() && loaded.value();
-}
-
 inline std::unique_ptr<QGuiApplication> create_widget_application()
 {
     static int argc = 1;
