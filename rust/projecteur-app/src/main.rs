@@ -46,6 +46,7 @@ fn main() {
     application
         .pin_mut()
         .set_organization_name(&QString::from("Projecteur"));
+    backend::ffi::setup_application_metadata();
     backend::ffi::setup_global_shortcuts();
 
     let mut engine = QQmlApplicationEngine::new();

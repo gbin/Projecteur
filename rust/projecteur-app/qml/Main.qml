@@ -45,20 +45,6 @@ Item {
         backend: backend
     }
 
-    Dialog {
-        id: aboutDialog
-        title: qsTr("About Projecteur")
-        modal: false
-        standardButtons: Dialog.Ok
-        anchors.centerIn: parent
-        contentItem: Label {
-            padding: 18
-            text: qsTr("Projecteur\nA virtual laser pointer for presentations")
-            horizontalAlignment: Text.AlignHCenter
-        }
-        onClosed: backend.showAbout = false
-    }
-
     Component.onCompleted: {
         if (backend.showWindow)
             showPreferences()
@@ -70,7 +56,11 @@ Item {
             required property var modelData
             backend: backend
             screen: modelData
-            screenEnabled: backend.multiScreenOverlay || modelData === Application.screens[0]
+            screenEnabled: backend.multiScreenOverlay
+                           || (root.presenterGlobalX >= modelData.virtualX
+                               && root.presenterGlobalX < modelData.virtualX + modelData.width
+                               && root.presenterGlobalY >= modelData.virtualY
+                               && root.presenterGlobalY < modelData.virtualY + modelData.height)
             presenterGlobalX: root.presenterGlobalX
             presenterGlobalY: root.presenterGlobalY
         }
@@ -80,10 +70,6 @@ Item {
         target: backend
         function onMotionSerialChanged() {
             root.movePresenterPointer(backend.pointerDeltaX, backend.pointerDeltaY)
-        }
-        function onShowAboutChanged() {
-            if (backend.showAbout)
-                aboutDialog.open()
         }
         function onQuitRequestedChanged() {
             if (backend.quitRequested)

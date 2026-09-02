@@ -12,7 +12,8 @@ Window {
     required property real presenterGlobalX
     required property real presenterGlobalY
 
-    visible: screenEnabled && backend.overlayActive && !backend.overlayDisabled
+    visible: backend.overlayActive && !backend.overlayDisabled
+    opacity: contentEnabled ? 1 : 0
     width: Screen.width
     height: Screen.height
     color: "transparent"
@@ -27,6 +28,9 @@ Window {
     LayerShell.Window.activateOnShow: false
 
     readonly property real deviceScale: screen ? screen.devicePixelRatio : 1
+    readonly property bool contentEnabled: backend.multiScreenOverlay
+                                            || (backend.presenterConnected
+                                                ? screenEnabled : pointer.containsMouse)
     readonly property real spotDiameter: Math.max(50, Math.min(height, height * backend.spotSize / 100))
     readonly property int captureX: screen ? Math.round(screen.virtualX) : 0
     readonly property int captureY: screen ? Math.round(screen.virtualY) : 0
@@ -40,11 +44,12 @@ Window {
     function snap(value) { return Math.round(value * deviceScale) / deviceScale }
 
     function ensureDesktopStream() {
-        if (visible && backend.zoomEnabled)
+        if (visible && contentEnabled && backend.zoomEnabled)
             backend.requestScreenCapture(captureX, captureY, captureWidth, captureHeight)
     }
 
     onVisibleChanged: ensureDesktopStream()
+    onContentEnabledChanged: ensureDesktopStream()
     onScreenChanged: ensureDesktopStream()
     Component.onCompleted: ensureDesktopStream()
 

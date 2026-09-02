@@ -84,6 +84,8 @@ fn main() {
             compiler.include("/usr/include/KF6/KConfigCore");
             compiler.include("/usr/include/KF6/KConfig");
             compiler.include("/usr/include/KF6/KWidgetsAddons");
+            compiler.include("/usr/include/KF6/KCoreAddons");
+            compiler.include("/usr/include/KF6/KNotifications");
         })
     };
     builder.build();
@@ -95,8 +97,11 @@ fn main() {
     println!("cargo:rustc-link-lib=KF6GlobalAccel");
     println!("cargo:rustc-link-lib=KF6XmlGui");
     println!("cargo:rustc-link-lib=KF6WidgetsAddons");
+    println!("cargo:rustc-link-lib=KF6CoreAddons");
+    println!("cargo:rustc-link-lib=KF6Notifications");
 }
 
+#[allow(clippy::too_many_lines)] // The generated C++ helper is kept in one auditable template.
 fn write_qml_loader(output_directory: &std::path::Path) {
     fs::write(
         output_directory.join("projecteur_qml_loader.h"),
@@ -109,7 +114,10 @@ fn write_qml_loader(output_directory: &std::path::Path) {
 #include <QtDBus/QDBusInterface>
 
 #include <KActionCollection>
+#include <KAboutApplicationDialog>
+#include <KAboutData>
 #include <KGlobalAccel>
+#include <KNotification>
 #include <KShortcutsDialog>
 
 #include <memory>
@@ -119,6 +127,48 @@ inline KActionCollection*& global_action_collection()
 {
     static KActionCollection* collection = nullptr;
     return collection;
+}
+
+inline void setup_application_metadata()
+{
+    KAboutData aboutData(
+        QStringLiteral("Projecteur"), QStringLiteral("Projecteur"),
+        qApp->applicationVersion(),
+        QStringLiteral("A KDE Plasma spotlight for Logitech presenter devices."),
+        KAboutLicense::MIT,
+        QStringLiteral("Copyright 2018–2021 Jahn Fuchs\n"
+                       "Current development copyright 2026 Guillaume Binet"),
+        {}, QStringLiteral("https://github.com/gbin/Projecteur"),
+        QStringLiteral("https://github.com/gbin/Projecteur/issues"));
+    aboutData.setOrganizationDomain("projecteur.org");
+    aboutData.setDesktopFileName(QStringLiteral("org.projecteur.Projecteur"));
+    aboutData.setOtherText(QStringLiteral(
+        "Official KDE Plasma/Wayland edition of Projecteur.\n\n"
+        "This build uses the Rust application backend."));
+    aboutData.addAuthor(
+        QStringLiteral("Guillaume Binet"), QStringLiteral("Projecteur maintainer"), {},
+        QStringLiteral("https://github.com/gbin"));
+    aboutData.addAuthor(
+        QStringLiteral("Jahn Fuchs"), QStringLiteral("Original Projecteur author"), {},
+        QStringLiteral("https://github.com/jahnf"));
+    KAboutData::setApplicationData(aboutData);
+}
+
+inline void show_about_dialog()
+{
+    auto* dialog = new KAboutApplicationDialog(KAboutData::applicationData());
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->show();
+    dialog->raise();
+    dialog->activateWindow();
+}
+
+inline void send_notification(const QString& eventId, const QString& title,
+                              const QString& text, const QString& iconName)
+{
+    KNotification::event(eventId, title, text, iconName,
+                         KNotification::CloseOnTimeout,
+                         QStringLiteral("projecteur"));
 }
 
 inline std::unique_ptr<QGuiApplication> create_widget_application()

@@ -53,6 +53,17 @@ pub mod ffi {
 
         fn create_widget_application() -> UniquePtr<QGuiApplication>;
 
+        fn setup_application_metadata();
+
+        fn show_about_dialog();
+
+        fn send_notification(
+            event_id: &QString,
+            title: &QString,
+            text: &QString,
+            icon_name: &QString,
+        );
+
         fn load_qml_module(
             engine: Pin<&mut QQmlApplicationEngine>,
             uri: QAnyStringView,
@@ -70,7 +81,6 @@ pub mod ffi {
         #[qobject]
         #[qml_element]
         #[qproperty(bool, show_window)]
-        #[qproperty(bool, show_about)]
         #[qproperty(bool, quit_requested)]
         #[qproperty(bool, tray_visible)]
         #[qproperty(bool, overlay_disabled)]
@@ -211,7 +221,6 @@ pub mod ffi {
 #[allow(clippy::struct_excessive_bools)]
 pub struct ProjecteurBackendRust {
     show_window: bool,
-    show_about: bool,
     quit_requested: bool,
     tray_visible: bool,
     overlay_disabled: bool,
@@ -352,7 +361,6 @@ impl ProjecteurBackendRust {
 
         Self {
             show_window: options.show_window,
-            show_about: false,
             quit_requested: false,
             tray_visible: options.tray_visible,
             overlay_disabled: options.overlay_disabled,
@@ -1252,9 +1260,25 @@ impl ffi::ProjecteurBackend {
                 .set_presenter_device(QString::from(path.to_str().unwrap_or("presenter")));
             self.as_mut().rust_mut().connected_device_name = path.display().to_string();
         }
+        let name = self.as_ref().rust().connected_device_name.clone();
+        ffi::send_notification(
+            &QString::from("presenterConnected"),
+            &QString::from("Presenter connected"),
+            &QString::from(format!("{name} is ready.")),
+            &QString::from("input-mouse"),
+        );
     }
 
     fn handle_presenter_disconnected(mut self: Pin<&mut Self>) {
+        let name = self.as_ref().rust().connected_device_name.clone();
+        if !name.is_empty() {
+            ffi::send_notification(
+                &QString::from("presenterDisconnected"),
+                &QString::from("Presenter disconnected"),
+                &QString::from(format!("{name} is no longer available.")),
+                &QString::from("input-mouse"),
+            );
+        }
         self.as_mut().set_presenter_connected(false);
         self.as_mut().set_presenter_device(QString::default());
         self.as_mut().set_presenter_details(QString::default());
@@ -1399,7 +1423,7 @@ impl ffi::ProjecteurBackend {
                     let _ = self.as_mut().save_settings();
                 }
                 Ok(ControlCommand::ShowPreferences) => self.as_mut().set_show_window(true),
-                Ok(ControlCommand::ShowAbout) => self.as_mut().set_show_about(true),
+                Ok(ControlCommand::ShowAbout) => ffi::show_about_dialog(),
                 Ok(ControlCommand::ApplyCommands(commands)) => {
                     self.as_mut().apply_control_commands(&commands);
                 }
@@ -1474,6 +1498,12 @@ impl ffi::ProjecteurBackend {
         self.as_mut().set_presentation_timer_remaining_seconds(0);
         self.as_mut()
             .set_presentation_timer_state(QString::from("completed"));
+        ffi::send_notification(
+            &QString::from("presentationTimerFinished"),
+            &QString::from("Presentation timer finished"),
+            &QString::from("The configured presentation time has elapsed."),
+            &QString::from("chronometer"),
+        );
         let config_path = PathBuf::from(String::from(&self.as_ref().rust().config_path));
         let _ = thread::Builder::new()
             .name("projecteur-timer-feedback".to_owned())
@@ -1513,11 +1543,64 @@ impl ffi::ProjecteurBackend {
                             SpotlightSettings::SPOT_SIZE_RANGE.maximum,
                         );
                         self.as_mut().set_spot_size(size);
+                        let _ = self.as_mut().save_settings();
                     }
+                }
+                _ if !value.is_empty() && self.as_mut().apply_string_property(key, value) => {
+                    let _ = self.as_mut().save_settings();
                 }
                 _ => {}
             }
         }
+    }
+
+    fn apply_string_property(mut self: Pin<&mut Self>, key: &str, value: &str) -> bool {
+        if key == "spot.overlay" {
+            self.as_mut().set_overlay_disabled(!command_bool(value));
+            return true;
+        }
+
+        let general_key = match key {
+            "spot.multi-screen" => "multiScreenOverlay",
+            "spot.size" => "spotSize",
+            "spot.rotation" => "spotRotation",
+            "spot.shape.square.radius" => "Shape.Square/radius",
+            "spot.shape.star.points" => "Shape.Star/points",
+            "spot.shape.star.innerradius" => "Shape.Star/innerRadius",
+            "spot.shape.ngon.sides" => "Shape.Ngon/sides",
+            "shade" => "showSpotShade",
+            "shade.opacity" => "shadeOpacity",
+            "shade.color" => "shadeColor",
+            "dot" => "showCenterDot",
+            "dot.size" => "dotSize",
+            "dot.color" => "dotColor",
+            "dot.opacity" => "dotOpacity",
+            "dot.mode" => "dotMode",
+            "dot.trail" => "dotTrailEnabled",
+            "border" => "showBorder",
+            "border.size" => "borderSize",
+            "border.color" => "borderColor",
+            "border.opacity" => "borderOpacity",
+            "zoom" => "enableZoom",
+            "zoom.factor" => "zoomFactor",
+            "zoom.mode" => "zoomMode",
+            "spot.shape" => {
+                let shape = match value.to_ascii_lowercase().as_str() {
+                    "circle" => "spotshapes/Circle.qml",
+                    "square" => "spotshapes/Square.qml",
+                    "star" => "spotshapes/Star.qml",
+                    "ngon" | "n-gon" => "spotshapes/Ngon.qml",
+                    _ => return false,
+                };
+                self.as_mut().set_spot_shape(QString::from(shape));
+                return true;
+            }
+            _ => return false,
+        };
+        let mut settings = self.as_ref().current_spotlight_settings();
+        settings.apply_general_entry(general_key, value);
+        self.as_mut().apply_spotlight_settings(&settings);
+        true
     }
 
     fn poll_screencast(mut self: Pin<&mut Self>) {
@@ -1589,6 +1672,10 @@ impl ffi::ProjecteurBackend {
             }
         }
     }
+}
+
+fn command_bool(value: &str) -> bool {
+    value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("on") || value == "1"
 }
 
 #[cfg(test)]
