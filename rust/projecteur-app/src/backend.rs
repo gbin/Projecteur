@@ -24,6 +24,7 @@ use projecteur_core::{
         BatteryInfo, query_battery, read_report_with_timeout, send_vibration,
         spotlight_device_index,
     },
+    input_mapping::{InputMapper, MappedAction, MapperOutput},
     settings::{DotMode, SpotlightSettings, ZoomMode},
     uinput::{GrabbedEventDevice, VirtualKeyboard},
 };
@@ -312,7 +313,11 @@ impl Default for ProjecteurBackendRust {
                 let _ = write!(status, "; presenter monitoring disabled");
                 None
             }
-            selection => match start_presenter_manager(selection, options.uinput_enabled) {
+            selection => match start_presenter_manager(
+                selection,
+                options.uinput_enabled,
+                config_path.clone(),
+            ) {
                 Ok(receiver) => {
                     let _ = write!(status, "; waiting for presenter input");
                     Some(receiver)
@@ -549,6 +554,7 @@ enum PresenterEvent {
     Report(PresenterReport),
     ButtonForwarding(bool),
     Battery(BatteryInfo),
+    MappedAction(MappedAction),
 }
 
 const PRESENTER_RESCAN_INTERVAL: Duration = Duration::from_millis(800);
@@ -556,6 +562,7 @@ const PRESENTER_RESCAN_INTERVAL: Duration = Duration::from_millis(800);
 fn start_presenter_manager(
     selection: PresenterSelection,
     uinput_enabled: bool,
+    config_path: Option<PathBuf>,
 ) -> Result<Receiver<PresenterEvent>, String> {
     let (sender, receiver) = mpsc::sync_channel(256);
     let presenter_selection = selection.clone();
@@ -605,7 +612,7 @@ fn start_presenter_manager(
     if uinput_enabled {
         thread::Builder::new()
             .name("projecteur-presenter-buttons".to_owned())
-            .spawn(move || run_button_manager(&selection, &sender))
+            .spawn(move || run_button_manager(&selection, &sender, config_path.as_deref()))
             .map_err(|error| format!("cannot start presenter button forwarding: {error}"))?;
     }
     Ok(receiver)
@@ -654,12 +661,15 @@ fn preferred_button_path(
         .map(|node| node.path.clone())
 }
 
-fn run_button_manager(selection: &PresenterSelection, sender: &SyncSender<PresenterEvent>) {
+fn run_button_manager(
+    selection: &PresenterSelection,
+    sender: &SyncSender<PresenterEvent>,
+    config_path: Option<&std::path::Path>,
+) {
     let mut reported_uinput_error = false;
     loop {
-        let path = scan_devices()
-            .ok()
-            .and_then(|devices| preferred_button_path(selection, &devices));
+        let devices = scan_devices().unwrap_or_default();
+        let path = preferred_button_path(selection, &devices);
         let Some(path) = path else {
             thread::sleep(PRESENTER_RESCAN_INTERVAL);
             continue;
@@ -679,9 +689,57 @@ fn run_button_manager(selection: &PresenterSelection, sender: &SyncSender<Presen
         if sender.send(PresenterEvent::ButtonForwarding(true)).is_err() {
             return;
         }
-        while let Ok(event) = source.read_event() {
-            if keyboard.emit(event).is_err() {
-                break;
+        let device = devices
+            .iter()
+            .find(|device| device.nodes.iter().any(|node| node.path == path));
+        let device_group = device
+            .map(|device| format!("Device_{:04x}_{:04x}", device.id.vendor, device.id.product));
+        let config = config_path
+            .and_then(|path| ProjecteurConfig::read(path).ok())
+            .and_then(|config| {
+                config
+                    .device_input_map(device_group.as_deref()?)
+                    .map_err(|error| {
+                        eprintln!("projecteur-rs: ignoring invalid presenter input map: {error}");
+                    })
+                    .ok()
+            })
+            .unwrap_or_default();
+        let sequence_interval = config_path
+            .zip(device_group.as_deref())
+            .map_or(250, |(path, group)| load_device_settings(path, group).0);
+        let sequence_interval = Duration::from_millis(
+            u64::try_from(sequence_interval).expect("clamped input interval is positive"),
+        );
+        let mut mapper = InputMapper::new(config);
+        let mut frame = Vec::new();
+        loop {
+            let timeout = if mapper.has_pending_input() {
+                sequence_interval
+            } else {
+                Duration::from_secs(60)
+            };
+            match source.read_event_timeout(timeout) {
+                Ok(Some(event)) => {
+                    frame.push(event);
+                    if event.is_sync_report() {
+                        let output = mapper.feed_frame(&frame);
+                        frame.clear();
+                        let Ok(output) = output else { break };
+                        if !dispatch_mapper_output(output, &mut keyboard, sender) {
+                            break;
+                        }
+                    }
+                }
+                Ok(None) if mapper.has_pending_input() => {
+                    if let Some(output) = mapper.sequence_timeout()
+                        && !dispatch_mapper_output(output, &mut keyboard, sender)
+                    {
+                        break;
+                    }
+                }
+                Ok(None) => {}
+                Err(_) => break,
             }
         }
         if sender
@@ -691,6 +749,25 @@ fn run_button_manager(selection: &PresenterSelection, sender: &SyncSender<Presen
             return;
         }
         thread::sleep(PRESENTER_RESCAN_INTERVAL);
+    }
+}
+
+fn dispatch_mapper_output(
+    output: MapperOutput,
+    keyboard: &mut VirtualKeyboard,
+    sender: &SyncSender<PresenterEvent>,
+) -> bool {
+    match output {
+        MapperOutput::Pending | MapperOutput::Consumed => true,
+        MapperOutput::Forward(events) => {
+            events.into_iter().all(|event| keyboard.emit(event).is_ok())
+        }
+        MapperOutput::Action(MappedAction::KeySequence(sequence)) => sequence
+            .native_sequence
+            .into_iter()
+            .flatten()
+            .all(|event| keyboard.emit(event).is_ok()),
+        MapperOutput::Action(action) => sender.send(PresenterEvent::MappedAction(action)).is_ok(),
     }
 }
 
@@ -1361,6 +1438,17 @@ impl ffi::ProjecteurBackend {
                     self.as_mut()
                         .set_battery_status(QString::from(info.status.as_str()));
                 }
+                Some(Ok(PresenterEvent::MappedAction(action))) => match action {
+                    MappedAction::CyclePresets => self.as_mut().load_relative_preset(1),
+                    MappedAction::ToggleSpotlight => {
+                        let active = !self.as_ref().overlay_active();
+                        self.as_mut().set_overlay_active(active);
+                    }
+                    MappedAction::KeySequence(_)
+                    | MappedAction::ScrollHorizontal
+                    | MappedAction::ScrollVertical
+                    | MappedAction::VolumeControl => {}
+                },
                 Some(Err(TryRecvError::Empty)) | None => break,
                 Some(Err(TryRecvError::Disconnected)) => {
                     self.as_mut().set_presenter_connected(false);

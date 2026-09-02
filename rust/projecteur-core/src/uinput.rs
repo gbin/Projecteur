@@ -5,6 +5,7 @@ use std::{
     io::{self, Write},
     os::fd::{AsRawFd, RawFd},
     path::Path,
+    time::Duration,
 };
 
 use linux_raw_sys::ioctl::{
@@ -133,6 +134,35 @@ impl GrabbedEventDevice {
     /// Propagates device read errors and truncated records.
     pub fn read_event(&mut self) -> io::Result<InputEvent> {
         crate::input_event::read_input_event(&mut self.device)
+    }
+
+    /// Wait up to `timeout` for and decode one native Linux input event.
+    ///
+    /// # Errors
+    ///
+    /// Propagates polling and input-event read errors.
+    pub fn read_event_timeout(&mut self, timeout: Duration) -> io::Result<Option<InputEvent>> {
+        let timeout_ms = i32::try_from(timeout.as_millis()).unwrap_or(i32::MAX);
+        let mut descriptor = libc::pollfd {
+            fd: self.device.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        loop {
+            // SAFETY: `descriptor` points to one initialized `pollfd` for the
+            // duration of the call, and its file descriptor remains owned.
+            let result = unsafe { libc::poll(&raw mut descriptor, 1, timeout_ms) };
+            if result > 0 {
+                return self.read_event().map(Some);
+            }
+            if result == 0 {
+                return Ok(None);
+            }
+            let error = io::Error::last_os_error();
+            if error.kind() != io::ErrorKind::Interrupted {
+                return Err(error);
+            }
+        }
     }
 }
 

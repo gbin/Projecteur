@@ -11,6 +11,7 @@ pub mod device_scan;
 pub mod hid_report;
 pub mod hidpp;
 pub mod input_event;
+pub mod input_mapping;
 pub mod settings;
 pub mod uinput;
 

@@ -7,6 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::input_mapping::{InputMapConfig, InputMapError};
 use crate::settings::SpotlightSettings;
 
 /// One named `KConfig` group and its raw key/value entries.
@@ -123,6 +124,26 @@ impl ProjecteurConfig {
             .entry(group.to_owned())
             .or_default()
             .insert(key.to_owned(), value.into());
+    }
+
+    /// Read one device's C++-compatible presenter input mappings.
+    ///
+    /// A missing or empty value is the default empty mapping table.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stored `KConfig` byte array is malformed or
+    /// contains an unsupported input-map stream.
+    pub fn device_input_map(&self, group: &str) -> Result<InputMapConfig, InputMapError> {
+        match self.value(group, "inputMapConfigData") {
+            None | Some("" | "@ByteArray()") => Ok(InputMapConfig::default()),
+            Some(value) => InputMapConfig::from_kconfig_value(value),
+        }
+    }
+
+    /// Replace one device's input mappings using the exact C++ wire format.
+    pub fn set_device_input_map(&mut self, group: &str, input_map: &InputMapConfig) {
+        self.set_value(group, "inputMapConfigData", input_map.to_kconfig_value());
     }
 
     /// Materialize overlay settings from the legacy `General` group.
@@ -250,6 +271,8 @@ impl Error for ConfigError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input_event::{EV_KEY, InputEvent};
+    use crate::input_mapping::{InputMapping, MappedAction};
     use crate::settings::{DotMode, ZoomMode};
 
     const DOCUMENT: &str = r"
@@ -335,6 +358,32 @@ inputMapConfigData=@ByteArray(AQID)
             Some("75")
         );
         assert_eq!(config.value("General", "spotSize"), Some("48"));
+    }
+
+    #[test]
+    fn stores_input_mappings_in_the_cpp_device_value() {
+        let mut config = ProjecteurConfig::default();
+        let input_map = InputMapConfig {
+            mappings: vec![InputMapping {
+                input: vec![vec![InputEvent {
+                    event_type: EV_KEY,
+                    code: 106,
+                    value: 1,
+                }]],
+                action: MappedAction::ToggleSpotlight,
+            }],
+        };
+
+        config.set_device_input_map("Device_046d_c53e", &input_map);
+
+        assert_eq!(
+            config.device_input_map("Device_046d_c53e").unwrap(),
+            input_map
+        );
+        assert_eq!(
+            config.device_input_map("Device_0000_0000").unwrap(),
+            InputMapConfig::default()
+        );
     }
 
     #[test]
