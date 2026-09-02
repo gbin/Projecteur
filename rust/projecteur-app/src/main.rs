@@ -1,4 +1,5 @@
 mod backend;
+mod screencast;
 
 use std::{ffi::OsString, fmt::Write as _, fs::OpenOptions, path::PathBuf};
 

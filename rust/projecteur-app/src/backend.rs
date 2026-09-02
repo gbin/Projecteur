@@ -3,6 +3,7 @@
 
 use core::pin::Pin;
 use std::{
+    collections::HashMap,
     ffi::OsString,
     fmt::Write as _,
     fs::{File, OpenOptions},
@@ -23,6 +24,8 @@ use projecteur_core::{
     settings::{DotMode, SpotlightSettings, ZoomMode},
     uinput::{GrabbedEventDevice, VirtualKeyboard},
 };
+
+use crate::screencast::{CaptureEvent, ScreenRegion, ScreencastManager, StreamIdentifier};
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -71,6 +74,7 @@ pub mod ffi {
         #[qproperty(i32, pointer_delta_x)]
         #[qproperty(i32, pointer_delta_y)]
         #[qproperty(i32, motion_serial)]
+        #[qproperty(i32, capture_generation)]
         #[qproperty(QString, status)]
         #[qproperty(QString, config_path)]
         #[qproperty(bool, show_spot_shade)]
@@ -108,6 +112,42 @@ pub mod ffi {
 
         #[qinvokable]
         fn poll_presenter(self: Pin<&mut ProjecteurBackend>);
+
+        #[qinvokable]
+        fn request_screen_capture(
+            self: Pin<&mut ProjecteurBackend>,
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+        );
+
+        #[qinvokable]
+        fn capture_node_id(
+            self: &ProjecteurBackend,
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+        ) -> u32;
+
+        #[qinvokable]
+        fn capture_object_serial(
+            self: &ProjecteurBackend,
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+        ) -> u64;
+
+        #[qinvokable]
+        fn capture_snapshot_source(
+            self: &ProjecteurBackend,
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+        ) -> QString;
 
         #[qinvokable]
         fn save_settings(self: Pin<&mut ProjecteurBackend>) -> bool;
@@ -153,6 +193,7 @@ pub struct ProjecteurBackendRust {
     pointer_delta_x: i32,
     pointer_delta_y: i32,
     motion_serial: i32,
+    capture_generation: i32,
     status: QString,
     config_path: QString,
     show_spot_shade: bool,
@@ -185,6 +226,9 @@ pub struct ProjecteurBackendRust {
     preset_names: QString,
     applied_settings: SpotlightSettings,
     presenter_events: Option<Receiver<PresenterEvent>>,
+    screencast_manager: Option<ScreencastManager>,
+    capture_streams: HashMap<ScreenRegion, StreamIdentifier>,
+    capture_snapshots: HashMap<ScreenRegion, QString>,
 }
 
 impl Default for ProjecteurBackendRust {
@@ -260,6 +304,7 @@ impl ProjecteurBackendRust {
             pointer_delta_x: 0,
             pointer_delta_y: 0,
             motion_serial: 0,
+            capture_generation: 0,
             status: QString::from(status),
             config_path: QString::from(config_path.and_then(std::path::Path::to_str).unwrap_or("")),
             show_spot_shade: settings.show_spot_shade,
@@ -292,6 +337,9 @@ impl ProjecteurBackendRust {
             preset_names: QString::from(preset_names(config_path)),
             applied_settings: settings.clone(),
             presenter_events,
+            screencast_manager: None,
+            capture_streams: HashMap::new(),
+            capture_snapshots: HashMap::new(),
         }
     }
 }
@@ -659,6 +707,15 @@ fn preset_names(path: Option<&std::path::Path>) -> String {
         .join("\n")
 }
 
+fn screen_region(x: i32, y: i32, width: i32, height: i32) -> Option<ScreenRegion> {
+    Some(ScreenRegion {
+        x,
+        y,
+        width: u32::try_from(width).ok().filter(|width| *width > 0)?,
+        height: u32::try_from(height).ok().filter(|height| *height > 0)?,
+    })
+}
+
 impl cxx_qt::Initialize for ffi::ProjecteurBackend {
     fn initialize(self: Pin<&mut Self>) {}
 }
@@ -866,6 +923,46 @@ impl ffi::ProjecteurBackend {
         true
     }
 
+    fn request_screen_capture(mut self: Pin<&mut Self>, x: i32, y: i32, width: i32, height: i32) {
+        let Some(region) = screen_region(x, y, width, height) else {
+            return;
+        };
+        if self.as_ref().rust().capture_streams.contains_key(&region) {
+            return;
+        }
+        if self.as_ref().rust().screencast_manager.is_none() {
+            match ScreencastManager::start() {
+                Ok(manager) => self.as_mut().rust_mut().screencast_manager = Some(manager),
+                Err(error) => {
+                    self.as_mut().set_status(QString::from(error));
+                    return;
+                }
+            }
+        }
+        if let Some(manager) = &self.as_ref().rust().screencast_manager {
+            manager.ensure(region);
+        }
+    }
+
+    fn capture_node_id(&self, x: i32, y: i32, width: i32, height: i32) -> u32 {
+        screen_region(x, y, width, height)
+            .and_then(|region| self.rust().capture_streams.get(&region))
+            .map_or(0, |identifier| identifier.node_id)
+    }
+
+    fn capture_object_serial(&self, x: i32, y: i32, width: i32, height: i32) -> u64 {
+        screen_region(x, y, width, height)
+            .and_then(|region| self.rust().capture_streams.get(&region))
+            .map_or(0, |identifier| identifier.object_serial)
+    }
+
+    fn capture_snapshot_source(&self, x: i32, y: i32, width: i32, height: i32) -> QString {
+        screen_region(x, y, width, height)
+            .and_then(|region| self.rust().capture_snapshots.get(&region))
+            .cloned()
+            .unwrap_or_default()
+    }
+
     fn poll_presenter(mut self: Pin<&mut Self>) {
         loop {
             let event = self
@@ -917,6 +1014,77 @@ impl ffi::ProjecteurBackend {
                 }
             }
         }
+        self.as_mut().poll_screencast();
+    }
+
+    fn poll_screencast(mut self: Pin<&mut Self>) {
+        loop {
+            let event = self
+                .as_ref()
+                .rust()
+                .screencast_manager
+                .as_ref()
+                .map(ScreencastManager::try_recv);
+            match event {
+                Some(Ok(CaptureEvent::Ready(region, identifier))) => {
+                    let changed = {
+                        let mut rust = self.as_mut().rust_mut();
+                        let current = rust.capture_streams.entry(region).or_default();
+                        let previous = *current;
+                        if identifier.node_id != 0 {
+                            current.node_id = identifier.node_id;
+                        }
+                        if identifier.object_serial != 0 {
+                            current.object_serial = identifier.object_serial;
+                        }
+                        previous != *current
+                    };
+                    if changed {
+                        let generation = self.as_ref().capture_generation().wrapping_add(1);
+                        self.as_mut().set_capture_generation(generation);
+                    }
+                }
+                Some(Ok(CaptureEvent::SnapshotReady(region, path))) => {
+                    self.as_mut()
+                        .rust_mut()
+                        .capture_snapshots
+                        .insert(region, QString::from(path.to_str().unwrap_or_default()));
+                    let generation = self.as_ref().capture_generation().wrapping_add(1);
+                    self.as_mut().set_capture_generation(generation);
+                }
+                Some(Ok(CaptureEvent::Closed(region))) => {
+                    if self
+                        .as_mut()
+                        .rust_mut()
+                        .capture_streams
+                        .remove(&region)
+                        .is_some()
+                    {
+                        let generation = self.as_ref().capture_generation().wrapping_add(1);
+                        self.as_mut().set_capture_generation(generation);
+                    }
+                }
+                Some(Ok(CaptureEvent::Failed(region, error))) => {
+                    eprintln!("projecteur-rs: {error}");
+                    self.as_mut().rust_mut().capture_streams.remove(&region);
+                    self.as_mut().set_status(QString::from(format!(
+                        "KWin screencast failed for {}x{} at {},{}: {error}",
+                        region.width, region.height, region.x, region.y
+                    )));
+                }
+                Some(Ok(CaptureEvent::ManagerFailed(error))) => {
+                    eprintln!("projecteur-rs: {error}");
+                    self.as_mut().rust_mut().screencast_manager = None;
+                    self.as_mut().set_status(QString::from(error));
+                    break;
+                }
+                Some(Err(TryRecvError::Disconnected)) => {
+                    self.as_mut().rust_mut().screencast_manager = None;
+                    break;
+                }
+                Some(Err(TryRecvError::Empty)) | None => break,
+            }
+        }
     }
 }
 
@@ -965,6 +1133,21 @@ mod tests {
         assert!(options.show_window);
         assert!(!options.tray_visible);
         assert!(options.overlay_disabled);
+    }
+
+    #[test]
+    fn validates_screen_capture_regions() {
+        assert_eq!(
+            screen_region(-1920, 0, 1920, 1080),
+            Some(ScreenRegion {
+                x: -1920,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            })
+        );
+        assert_eq!(screen_region(0, 0, 0, 1080), None);
+        assert_eq!(screen_region(0, 0, 1920, -1), None);
     }
 
     #[test]

@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Window
-import QtMultimedia
+import org.kde.pipewire as KPipeWire
 import org.kde.layershell as LayerShell
 
 Window {
@@ -28,6 +28,10 @@ Window {
 
     readonly property real deviceScale: screen ? screen.devicePixelRatio : 1
     readonly property real spotDiameter: Math.max(50, Math.min(height, height * backend.spotSize / 100))
+    readonly property int captureX: screen ? Math.round(screen.virtualX) : 0
+    readonly property int captureY: screen ? Math.round(screen.virtualY) : 0
+    readonly property int captureWidth: screen ? Math.round(screen.width) : 0
+    readonly property int captureHeight: screen ? Math.round(screen.height) : 0
     readonly property real activeX: backend.presenterConnected ? presenterGlobalX - screen.virtualX
                                     : (pointer.containsMouse ? pointer.mouseX : width / 2)
     readonly property real activeY: backend.presenterConnected ? presenterGlobalY - screen.virtualY
@@ -35,28 +39,47 @@ Window {
 
     function snap(value) { return Math.round(value * deviceScale) / deviceScale }
 
-    Loader {
-        id: captureLoader
-        active: root.visible && root.backend.zoomEnabled
-        sourceComponent: Component {
-            Item {
-                property alias output: desktopVideo
-                ScreenCapture {
-                    id: desktopCapture
-                    screen: root.screen
-                    active: true
-                }
-                CaptureSession {
-                    screenCapture: desktopCapture
-                    videoOutput: desktopVideo
-                }
-                VideoOutput {
-                    id: desktopVideo
-                    width: root.width
-                    height: root.height
-                    visible: false
-                }
-            }
+    function ensureDesktopStream() {
+        if (visible && backend.zoomEnabled)
+            backend.requestScreenCapture(captureX, captureY, captureWidth, captureHeight)
+    }
+
+    onVisibleChanged: ensureDesktopStream()
+    onScreenChanged: ensureDesktopStream()
+    Component.onCompleted: ensureDesktopStream()
+
+    KPipeWire.PipeWireSourceItem {
+        id: desktopStream
+        visible: root.visible
+        enabled: false
+        width: root.width
+        height: root.height
+        allowDmaBuf: true
+        objectSerial: {
+            const generation = backend.captureGeneration
+            return backend.captureObjectSerial(
+                root.captureX, root.captureY, root.captureWidth, root.captureHeight)
+        }
+        nodeId: {
+            const generation = backend.captureGeneration
+            return objectSerial === 0
+                    ? backend.captureNodeId(
+                        root.captureX, root.captureY, root.captureWidth, root.captureHeight)
+                    : 0
+        }
+    }
+
+    Image {
+        id: desktopSnapshot
+        visible: false
+        width: root.width
+        height: root.height
+        cache: false
+        source: {
+            const generation = backend.captureGeneration
+            const path = backend.captureSnapshotSource(
+                root.captureX, root.captureY, root.captureWidth, root.captureHeight)
+            return path.length > 0 ? "file://" + path : ""
         }
     }
 
@@ -64,6 +87,9 @@ Window {
         target: backend
         function onMotionSerialChanged() {
             liveIdleTimer.restart()
+        }
+        function onZoomEnabledChanged() {
+            root.ensureDesktopStream()
         }
     }
 
@@ -118,7 +144,7 @@ Window {
             id: zoomTexture
             anchors.fill: aperture
             visible: false
-            sourceItem: captureLoader.item ? captureLoader.item.output : null
+            sourceItem: desktopStream.ready ? desktopStream : desktopSnapshot
             sourceRect: Qt.rect(
                 root.activeX - aperture.width / (2 * backend.zoomFactor),
                 root.activeY - aperture.height / (2 * backend.zoomFactor),

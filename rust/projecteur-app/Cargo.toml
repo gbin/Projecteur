@@ -16,6 +16,10 @@ cxx = "1.0.176"
 cxx-qt = "0.10.0"
 cxx-qt-lib = { version = "0.10.0", features = ["qt_gui", "qt_qml"] }
 projecteur-core = { path = "../projecteur-core" }
+wayland-client = "0.31.15"
+wayland-backend = "0.3.17"
+wayland-scanner = "0.31.11"
+zbus = "5.19.0"
 
 [build-dependencies]
 cxx-qt-build = "0.10.0"

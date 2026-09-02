@@ -102,6 +102,7 @@ inline std::unique_ptr<QGuiApplication> create_widget_application()
     static char* argv[] = {applicationName, nullptr};
     auto application = std::unique_ptr<QGuiApplication>(new QApplication(argc, argv));
     application->setQuitOnLastWindowClosed(false);
+    application->setDesktopFileName(QStringLiteral("org.projecteur.Projecteur"));
     application->setWindowIcon(QIcon(QStringLiteral(":/projecteur/projecteur-tray.svg")));
     return application;
 }
