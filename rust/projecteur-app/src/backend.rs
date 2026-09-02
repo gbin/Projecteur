@@ -24,7 +24,11 @@ use projecteur_core::{
         BatteryInfo, query_battery, read_report_with_timeout, send_vibration,
         spotlight_device_index,
     },
-    input_mapping::{InputMapper, MappedAction, MapperOutput},
+    input_event::{EV_KEY, EV_SYN, InputEvent, SYN_REPORT},
+    input_mapping::{
+        InputMapConfig, InputMapper, InputMapping, KeyEvent, KeyEventSequence, MappedAction,
+        MapperOutput, NativeKeySequence,
+    },
     settings::{DotMode, SpotlightSettings, ZoomMode},
     uinput::{GrabbedEventDevice, VirtualKeyboard},
 };
@@ -95,6 +99,9 @@ pub mod ffi {
         #[qproperty(QString, presenter_device)]
         #[qproperty(QString, presenter_details)]
         #[qproperty(i32, device_input_sequence_interval)]
+        #[qproperty(QString, input_mapping_rows)]
+        #[qproperty(i32, input_mapping_recording_row)]
+        #[qproperty(QString, input_mapping_recording_preview)]
         #[qproperty(i32, device_timer_haptic_strength)]
         #[qproperty(bool, button_forwarding)]
         #[qproperty(i32, battery_level)]
@@ -213,6 +220,41 @@ pub mod ffi {
         ) -> bool;
 
         #[qinvokable]
+        fn add_input_mapping(self: Pin<&mut ProjecteurBackend>) -> i32;
+
+        #[qinvokable]
+        fn remove_input_mapping(self: Pin<&mut ProjecteurBackend>, row: i32) -> bool;
+
+        #[qinvokable]
+        fn set_input_mapping_action(
+            self: Pin<&mut ProjecteurBackend>,
+            row: i32,
+            action_type: i32,
+        ) -> bool;
+
+        #[qinvokable]
+        fn set_input_mapping_predefined_key(
+            self: Pin<&mut ProjecteurBackend>,
+            row: i32,
+            name: &QString,
+        ) -> bool;
+
+        #[qinvokable]
+        fn start_input_mapping_recording(self: Pin<&mut ProjecteurBackend>, row: i32) -> bool;
+
+        #[qinvokable]
+        fn cancel_input_mapping_recording(self: Pin<&mut ProjecteurBackend>);
+
+        #[qinvokable]
+        fn record_native_mapping_key(
+            self: Pin<&mut ProjecteurBackend>,
+            row: i32,
+            qt_key: i32,
+            native_scan_code: i32,
+            modifiers: i32,
+        ) -> bool;
+
+        #[qinvokable]
         fn update_device_timer_haptic_strength(
             self: Pin<&mut ProjecteurBackend>,
             strength: i32,
@@ -238,6 +280,9 @@ pub struct ProjecteurBackendRust {
     presenter_device: QString,
     presenter_details: QString,
     device_input_sequence_interval: i32,
+    input_mapping_rows: QString,
+    input_mapping_recording_row: i32,
+    input_mapping_recording_preview: QString,
     device_timer_haptic_strength: i32,
     connected_device_name: String,
     current_device_group: String,
@@ -289,6 +334,9 @@ pub struct ProjecteurBackendRust {
     navigation_pressed: bool,
     shake_cursor_effect_suppressed: bool,
     presenter_events: Option<Receiver<PresenterEvent>>,
+    button_commands: Option<SyncSender<ButtonManagerCommand>>,
+    input_mapping_items: Vec<InputMapping>,
+    recorded_input_sequence: KeyEventSequence,
     screencast_manager: Option<ScreencastManager>,
     capture_streams: HashMap<ScreenRegion, StreamIdentifier>,
     capture_snapshots: HashMap<ScreenRegion, QString>,
@@ -308,30 +356,31 @@ impl Default for ProjecteurBackendRust {
             }
         };
         let (settings, config_path, mut status) = load_settings(&options);
-        let presenter_events = match options.presenter.clone() {
+        let (presenter_events, button_commands) = match options.presenter.clone() {
             PresenterSelection::Disabled => {
                 let _ = write!(status, "; presenter monitoring disabled");
-                None
+                (None, None)
             }
             selection => match start_presenter_manager(
                 selection,
                 options.uinput_enabled,
                 config_path.clone(),
             ) {
-                Ok(receiver) => {
+                Ok(manager) => {
                     let _ = write!(status, "; waiting for presenter input");
-                    Some(receiver)
+                    (Some(manager.events), manager.button_commands)
                 }
                 Err(error) => {
                     let _ = write!(status, "; {error}");
                     eprintln!("projecteur-rs: {error}");
-                    None
+                    (None, None)
                 }
             },
         };
         Self::from_settings(
             &options,
             presenter_events,
+            button_commands,
             &settings,
             config_path.as_deref(),
             &status,
@@ -351,6 +400,7 @@ impl ProjecteurBackendRust {
     fn from_settings(
         options: &CliOptions,
         presenter_events: Option<Receiver<PresenterEvent>>,
+        button_commands: Option<SyncSender<ButtonManagerCommand>>,
         settings: &SpotlightSettings,
         config_path: Option<&std::path::Path>,
         status: &str,
@@ -391,6 +441,9 @@ impl ProjecteurBackendRust {
             presenter_device: QString::default(),
             presenter_details: QString::default(),
             device_input_sequence_interval: 250,
+            input_mapping_rows: QString::from("[]"),
+            input_mapping_recording_row: -1,
+            input_mapping_recording_preview: QString::default(),
             device_timer_haptic_strength: 50,
             connected_device_name: String::new(),
             current_device_group: String::new(),
@@ -442,10 +495,19 @@ impl ProjecteurBackendRust {
             navigation_pressed: false,
             shake_cursor_effect_suppressed: false,
             presenter_events,
+            button_commands,
+            input_mapping_items: Vec::new(),
+            recorded_input_sequence: Vec::new(),
             screencast_manager: None,
             capture_streams: HashMap::new(),
             capture_snapshots: HashMap::new(),
         }
+    }
+
+    fn send_button_command(&self, command: ButtonManagerCommand) -> bool {
+        self.button_commands
+            .as_ref()
+            .is_some_and(|sender| sender.try_send(command).is_ok())
     }
 }
 
@@ -555,6 +617,20 @@ enum PresenterEvent {
     ButtonForwarding(bool),
     Battery(BatteryInfo),
     MappedAction(MappedAction),
+    InputRecorded(KeyEvent),
+    InputRecordingFinished,
+}
+
+#[derive(Debug)]
+enum ButtonManagerCommand {
+    Config(InputMapConfig),
+    Interval(Duration),
+    Recording(bool),
+}
+
+struct PresenterManager {
+    events: Receiver<PresenterEvent>,
+    button_commands: Option<SyncSender<ButtonManagerCommand>>,
 }
 
 const PRESENTER_RESCAN_INTERVAL: Duration = Duration::from_millis(800);
@@ -563,7 +639,7 @@ fn start_presenter_manager(
     selection: PresenterSelection,
     uinput_enabled: bool,
     config_path: Option<PathBuf>,
-) -> Result<Receiver<PresenterEvent>, String> {
+) -> Result<PresenterManager, String> {
     let (sender, receiver) = mpsc::sync_channel(256);
     let presenter_selection = selection.clone();
     let presenter_sender = sender.clone();
@@ -609,13 +685,27 @@ fn start_presenter_manager(
             }
         })
         .map_err(|error| format!("cannot start presenter monitor: {error}"))?;
-    if uinput_enabled {
+    let button_commands = if uinput_enabled {
+        let (command_sender, command_receiver) = mpsc::sync_channel(32);
         thread::Builder::new()
             .name("projecteur-presenter-buttons".to_owned())
-            .spawn(move || run_button_manager(&selection, &sender, config_path.as_deref()))
+            .spawn(move || {
+                run_button_manager(
+                    &selection,
+                    &sender,
+                    &command_receiver,
+                    config_path.as_deref(),
+                );
+            })
             .map_err(|error| format!("cannot start presenter button forwarding: {error}"))?;
-    }
-    Ok(receiver)
+        Some(command_sender)
+    } else {
+        None
+    };
+    Ok(PresenterManager {
+        events: receiver,
+        button_commands,
+    })
 }
 
 fn preferred_hidraw_path(devices: &[DiscoveredDevice]) -> Option<PathBuf> {
@@ -661,9 +751,11 @@ fn preferred_button_path(
         .map(|node| node.path.clone())
 }
 
+#[allow(clippy::too_many_lines)]
 fn run_button_manager(
     selection: &PresenterSelection,
     sender: &SyncSender<PresenterEvent>,
+    commands: &Receiver<ButtonManagerCommand>,
     config_path: Option<&std::path::Path>,
 ) {
     let mut reported_uinput_error = false;
@@ -708,27 +800,83 @@ fn run_button_manager(
         let sequence_interval = config_path
             .zip(device_group.as_deref())
             .map_or(250, |(path, group)| load_device_settings(path, group).0);
-        let sequence_interval = Duration::from_millis(
+        let mut sequence_interval = Duration::from_millis(
             u64::try_from(sequence_interval).expect("clamped input interval is positive"),
         );
         let mut mapper = InputMapper::new(config);
         let mut frame = Vec::new();
+        let mut recording = false;
+        let mut recorded_frames = 0_u8;
+        let mut recording_deadline = None;
         loop {
-            let timeout = if mapper.has_pending_input() {
-                sequence_interval
-            } else {
-                Duration::from_secs(60)
-            };
+            while let Ok(command) = commands.try_recv() {
+                match command {
+                    ButtonManagerCommand::Config(config) => mapper.set_config(config),
+                    ButtonManagerCommand::Interval(interval) => {
+                        sequence_interval = interval;
+                    }
+                    ButtonManagerCommand::Recording(active) => {
+                        recording = active;
+                        recorded_frames = 0;
+                        recording_deadline = None;
+                        mapper.reset();
+                    }
+                }
+            }
+            let mapping_timeout = mapper.has_pending_input().then_some(sequence_interval);
+            let timeout = [
+                mapping_timeout,
+                recording_deadline
+                    .map(|deadline: Instant| deadline.saturating_duration_since(Instant::now())),
+            ]
+            .into_iter()
+            .flatten()
+            .min()
+            .unwrap_or(Duration::from_millis(25))
+            .min(Duration::from_millis(25));
             match source.read_event_timeout(timeout) {
                 Ok(Some(event)) => {
                     frame.push(event);
                     if event.is_sync_report() {
+                        if recording {
+                            if let Some(recorded) = normalized_recording_frame(&frame) {
+                                if sender
+                                    .send(PresenterEvent::InputRecorded(recorded))
+                                    .is_err()
+                                {
+                                    return;
+                                }
+                                recorded_frames += 1;
+                                recording_deadline = Some(Instant::now() + sequence_interval);
+                                if recorded_frames >= 8 {
+                                    recording = false;
+                                    recording_deadline = None;
+                                    if sender.send(PresenterEvent::InputRecordingFinished).is_err()
+                                    {
+                                        return;
+                                    }
+                                }
+                            }
+                            frame.clear();
+                            continue;
+                        }
                         let output = mapper.feed_frame(&frame);
                         frame.clear();
                         let Ok(output) = output else { break };
                         if !dispatch_mapper_output(output, &mut keyboard, sender) {
                             break;
                         }
+                    }
+                }
+                Ok(None)
+                    if recording
+                        && recording_deadline
+                            .is_some_and(|deadline| Instant::now() >= deadline) =>
+                {
+                    recording = false;
+                    recording_deadline = None;
+                    if sender.send(PresenterEvent::InputRecordingFinished).is_err() {
+                        return;
                     }
                 }
                 Ok(None) if mapper.has_pending_input() => {
@@ -750,6 +898,284 @@ fn run_button_manager(
         }
         thread::sleep(PRESENTER_RESCAN_INTERVAL);
     }
+}
+
+fn normalized_recording_frame(frame: &[InputEvent]) -> Option<KeyEvent> {
+    let mut frame = frame.strip_suffix(&[InputEvent {
+        event_type: EV_SYN,
+        code: SYN_REPORT,
+        value: 0,
+    }])?;
+    if frame.len() == 2
+        && frame[0].event_type == 4
+        && frame[0].code == 4
+        && frame[1].event_type == EV_KEY
+        && (0x110..=0x112).contains(&frame[1].code)
+    {
+        frame = &frame[1..];
+    }
+    (!frame.is_empty()).then(|| frame.to_vec())
+}
+
+fn canonical_input_mappings(items: &[InputMapping]) -> Vec<InputMapping> {
+    let mut mappings = Vec::new();
+    for item in items {
+        if item.input.is_empty()
+            || mappings
+                .iter()
+                .any(|mapping: &InputMapping| mapping.input == item.input)
+        {
+            continue;
+        }
+        mappings.push(item.clone());
+    }
+    mappings.sort_by(|left, right| left.input.cmp(&right.input));
+    mappings
+}
+
+fn input_mapping_rows_json(device_group: &str, items: &[InputMapping]) -> String {
+    let rows: Vec<_> = items
+        .iter()
+        .enumerate()
+        .map(|(index, item)| {
+            let duplicate = items
+                .iter()
+                .filter(|other| other.input == item.input)
+                .count()
+                > 1;
+            let move_input = special_move_name(&item.input).is_some();
+            serde_json::json!({
+                "row": index,
+                "input": input_sequence_label(device_group, &item.input),
+                "duplicate": duplicate,
+                "moveInput": move_input,
+                "actionType": item.action.type_id(),
+                "action": mapped_action_label(&item.action),
+            })
+        })
+        .collect();
+    serde_json::to_string(&rows).unwrap_or_else(|_| "[]".to_owned())
+}
+
+fn input_sequence_label(device_group: &str, sequence: &[KeyEvent]) -> String {
+    if sequence.is_empty() {
+        return "None".to_owned();
+    }
+    if let Some(name) = special_move_name(sequence) {
+        return name.to_owned();
+    }
+    let mut labels = Vec::new();
+    let mut index = 0;
+    while index < sequence.len() {
+        let frame = &sequence[index];
+        let Some(event) = frame.last() else {
+            index += 1;
+            continue;
+        };
+        let is_tap = sequence.get(index + 1).is_some_and(|next| {
+            frame.len() == next.len()
+                && frame.iter().zip(next).all(|(pressed, released)| {
+                    if pressed.event_type == EV_KEY {
+                        pressed.event_type == released.event_type
+                            && pressed.code == released.code
+                            && pressed.value == 1
+                            && released.value == 0
+                    } else {
+                        pressed == released
+                    }
+                })
+        });
+        let arrow = if is_tap {
+            "↓↑"
+        } else if event.value == 0 {
+            "↑"
+        } else {
+            "↓"
+        };
+        labels.push(format!(
+            "[{}{arrow}]",
+            input_event_name(device_group, *event)
+        ));
+        index += if is_tap { 2 } else { 1 };
+    }
+    if labels.is_empty() {
+        "None".to_owned()
+    } else {
+        labels.join(" ")
+    }
+}
+
+fn input_event_name(device_group: &str, event: InputEvent) -> String {
+    let spotlight = matches!(
+        device_group,
+        "Device_046d_c53e" | "Device_046d_b503" | "Device_046d_b506"
+    );
+    let avatto = device_group == "Device_0c45_8101";
+    match (event.event_type, event.code) {
+        (EV_KEY, 0x110) if spotlight || avatto => "Click".to_owned(),
+        (EV_KEY, 106) if spotlight => "Next".to_owned(),
+        (EV_KEY, 105) if spotlight => "Back".to_owned(),
+        (EV_KEY, 109) if avatto => "Down".to_owned(),
+        (EV_KEY, 104) if avatto => "Up".to_owned(),
+        (EV_KEY, 0x0e10) => "Next Hold".to_owned(),
+        (EV_KEY, 0x0e11) => "Back Hold".to_owned(),
+        (_, code) => format!("{code:x}"),
+    }
+}
+
+fn special_move_name(sequence: &[KeyEvent]) -> Option<&'static str> {
+    match sequence {
+        [events]
+            if events.len() == 3
+                && events.iter().all(|event| {
+                    *event
+                        == InputEvent {
+                            event_type: EV_KEY,
+                            code: 0x0ff0,
+                            value: 1,
+                        }
+                }) =>
+        {
+            Some("Next Hold Move")
+        }
+        [events]
+            if events.len() == 3
+                && events.iter().all(|event| {
+                    *event
+                        == InputEvent {
+                            event_type: EV_KEY,
+                            code: 0x0ff1,
+                            value: 1,
+                        }
+                }) =>
+        {
+            Some("Back Hold Move")
+        }
+        _ => None,
+    }
+}
+
+fn mapped_action_label(action: &MappedAction) -> String {
+    match action {
+        MappedAction::KeySequence(sequence) => native_key_label(sequence),
+        MappedAction::CyclePresets => "Cycle Presets".to_owned(),
+        MappedAction::ToggleSpotlight => "Toggle Spotlight".to_owned(),
+        MappedAction::ScrollHorizontal => "Scroll Horizontal".to_owned(),
+        MappedAction::ScrollVertical => "Scroll Vertical".to_owned(),
+        MappedAction::VolumeControl => "Volume Control".to_owned(),
+    }
+}
+
+fn native_key_label(sequence: &NativeKeySequence) -> String {
+    if sequence.native_sequence.is_empty() {
+        return "None".to_owned();
+    }
+    if *sequence == predefined_native_key(15, 0x0900_0001, 4) {
+        return "Alt+Tab".to_owned();
+    }
+    if *sequence == predefined_native_key(62, 0x0900_0033, 4) {
+        return "Alt+F4".to_owned();
+    }
+    if *sequence == modifier_only_native_key(125, 64) {
+        return "Meta".to_owned();
+    }
+    sequence
+        .qt_keys
+        .iter()
+        .map(|key| format!("0x{key:x}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn predefined_native_key(code: u16, qt_key: i32, native_modifier: u16) -> NativeKeySequence {
+    let modifier_code = 56;
+    NativeKeySequence {
+        qt_keys: vec![qt_key],
+        native_modifiers: vec![native_modifier],
+        native_sequence: vec![
+            vec![
+                InputEvent {
+                    event_type: EV_KEY,
+                    code: modifier_code,
+                    value: 1,
+                },
+                InputEvent {
+                    event_type: EV_KEY,
+                    code,
+                    value: 1,
+                },
+                sync_event(),
+            ],
+            vec![
+                InputEvent {
+                    event_type: EV_KEY,
+                    code: modifier_code,
+                    value: 0,
+                },
+                InputEvent {
+                    event_type: EV_KEY,
+                    code,
+                    value: 0,
+                },
+                sync_event(),
+            ],
+        ],
+    }
+}
+
+fn modifier_only_native_key(code: u16, native_modifier: u16) -> NativeKeySequence {
+    NativeKeySequence {
+        qt_keys: Vec::new(),
+        native_modifiers: vec![native_modifier],
+        native_sequence: vec![
+            vec![
+                InputEvent {
+                    event_type: EV_KEY,
+                    code,
+                    value: 1,
+                },
+                sync_event(),
+            ],
+            vec![
+                InputEvent {
+                    event_type: EV_KEY,
+                    code,
+                    value: 0,
+                },
+                sync_event(),
+            ],
+        ],
+    }
+}
+
+const fn sync_event() -> InputEvent {
+    InputEvent {
+        event_type: EV_SYN,
+        code: SYN_REPORT,
+        value: 0,
+    }
+}
+
+fn native_modifier_keys(modifiers: i32) -> (Vec<u16>, u16) {
+    let mut codes = Vec::new();
+    let mut native = 0;
+    if modifiers & 0x0400_0000 != 0 {
+        codes.push(29);
+        native |= 1;
+    }
+    if modifiers & 0x0800_0000 != 0 {
+        codes.push(56);
+        native |= 4;
+    }
+    if modifiers & 0x0200_0000 != 0 {
+        codes.push(42);
+        native |= 16;
+    }
+    if modifiers & 0x1000_0000 != 0 {
+        codes.push(125);
+        native |= 64;
+    }
+    (codes, native)
 }
 
 fn dispatch_mapper_output(
@@ -1237,7 +1663,199 @@ impl ffi::ProjecteurBackend {
         }
         self.as_mut()
             .set_device_input_sequence_interval(interval_ms);
+        let _ = self
+            .as_ref()
+            .rust()
+            .send_button_command(ButtonManagerCommand::Interval(Duration::from_millis(
+                u64::try_from(interval_ms).expect("clamped interval is positive"),
+            )));
         true
+    }
+
+    fn add_input_mapping(mut self: Pin<&mut Self>) -> i32 {
+        let row = self.as_ref().rust().input_mapping_items.len();
+        self.as_mut()
+            .rust_mut()
+            .input_mapping_items
+            .push(InputMapping {
+                input: Vec::new(),
+                action: MappedAction::KeySequence(NativeKeySequence::default()),
+            });
+        self.as_mut().refresh_input_mapping_rows();
+        i32::try_from(row).unwrap_or(-1)
+    }
+
+    fn remove_input_mapping(mut self: Pin<&mut Self>, row: i32) -> bool {
+        let Ok(row) = usize::try_from(row) else {
+            return false;
+        };
+        if row >= self.as_ref().rust().input_mapping_items.len() {
+            return false;
+        }
+        if *self.as_ref().input_mapping_recording_row() == i32::try_from(row).unwrap_or(-1) {
+            self.as_mut().cancel_input_mapping_recording();
+        }
+        self.as_mut().rust_mut().input_mapping_items.remove(row);
+        let saved = self.as_mut().persist_input_mappings();
+        self.as_mut().refresh_input_mapping_rows();
+        saved
+    }
+
+    fn set_input_mapping_action(mut self: Pin<&mut Self>, row: i32, action_type: i32) -> bool {
+        let Ok(row) = usize::try_from(row) else {
+            return false;
+        };
+        {
+            let this = self.as_mut();
+            let mut rust = this.rust_mut();
+            let Some(item) = rust.input_mapping_items.get_mut(row) else {
+                return false;
+            };
+            let move_input = special_move_name(&item.input).is_some();
+            item.action = match action_type {
+                1 if !move_input => MappedAction::KeySequence(NativeKeySequence::default()),
+                2 if !move_input => MappedAction::CyclePresets,
+                3 if !move_input => MappedAction::ToggleSpotlight,
+                11 if move_input => MappedAction::ScrollHorizontal,
+                12 if move_input => MappedAction::ScrollVertical,
+                13 if move_input => MappedAction::VolumeControl,
+                _ => return false,
+            };
+        }
+        let saved = self.as_mut().persist_input_mappings();
+        self.as_mut().refresh_input_mapping_rows();
+        saved
+    }
+
+    fn set_input_mapping_predefined_key(
+        mut self: Pin<&mut Self>,
+        row: i32,
+        name: &QString,
+    ) -> bool {
+        let Ok(row) = usize::try_from(row) else {
+            return false;
+        };
+        let name = String::from(name);
+        let sequence = match name.as_str() {
+            "Alt+Tab" => predefined_native_key(15, 0x0900_0001, 4),
+            "Alt+F4" => predefined_native_key(62, 0x0900_0033, 4),
+            "Meta" => modifier_only_native_key(125, 64),
+            "None" => NativeKeySequence::default(),
+            _ => return false,
+        };
+        {
+            let this = self.as_mut();
+            let mut rust = this.rust_mut();
+            let Some(item) = rust.input_mapping_items.get_mut(row) else {
+                return false;
+            };
+            if !matches!(item.action, MappedAction::KeySequence(_)) {
+                return false;
+            }
+            item.action = MappedAction::KeySequence(sequence);
+        }
+        let saved = self.as_mut().persist_input_mappings();
+        self.as_mut().refresh_input_mapping_rows();
+        saved
+    }
+
+    fn start_input_mapping_recording(mut self: Pin<&mut Self>, row: i32) -> bool {
+        let Ok(index) = usize::try_from(row) else {
+            return false;
+        };
+        if index >= self.as_ref().rust().input_mapping_items.len()
+            || !self.as_ref().rust().button_forwarding
+        {
+            return false;
+        }
+        if !self
+            .as_ref()
+            .rust()
+            .send_button_command(ButtonManagerCommand::Recording(true))
+        {
+            return false;
+        }
+        self.as_mut().rust_mut().recorded_input_sequence.clear();
+        self.as_mut()
+            .set_input_mapping_recording_preview(QString::from("Press device button(s)..."));
+        self.as_mut().set_input_mapping_recording_row(row);
+        true
+    }
+
+    fn cancel_input_mapping_recording(mut self: Pin<&mut Self>) {
+        let _ = self
+            .as_ref()
+            .rust()
+            .send_button_command(ButtonManagerCommand::Recording(false));
+        self.as_mut().rust_mut().recorded_input_sequence.clear();
+        self.as_mut().set_input_mapping_recording_row(-1);
+        self.as_mut()
+            .set_input_mapping_recording_preview(QString::default());
+    }
+
+    fn record_native_mapping_key(
+        mut self: Pin<&mut Self>,
+        row: i32,
+        qt_key: i32,
+        native_scan_code: i32,
+        modifiers: i32,
+    ) -> bool {
+        let Ok(row) = usize::try_from(row) else {
+            return false;
+        };
+        let Some(code) = native_scan_code
+            .checked_sub(8)
+            .and_then(|code| u16::try_from(code).ok())
+        else {
+            return false;
+        };
+        let (modifier_codes, native_modifiers) = native_modifier_keys(modifiers);
+        let mut pressed: KeyEvent = modifier_codes
+            .iter()
+            .map(|code| InputEvent {
+                event_type: EV_KEY,
+                code: *code,
+                value: 1,
+            })
+            .collect();
+        pressed.push(InputEvent {
+            event_type: EV_KEY,
+            code,
+            value: 1,
+        });
+        pressed.push(sync_event());
+        let mut released: KeyEvent = modifier_codes
+            .iter()
+            .map(|code| InputEvent {
+                event_type: EV_KEY,
+                code: *code,
+                value: 0,
+            })
+            .collect();
+        released.push(InputEvent {
+            event_type: EV_KEY,
+            code,
+            value: 0,
+        });
+        released.push(sync_event());
+        {
+            let this = self.as_mut();
+            let mut rust = this.rust_mut();
+            let Some(item) = rust.input_mapping_items.get_mut(row) else {
+                return false;
+            };
+            if !matches!(item.action, MappedAction::KeySequence(_)) {
+                return false;
+            }
+            item.action = MappedAction::KeySequence(NativeKeySequence {
+                qt_keys: vec![qt_key | modifiers],
+                native_sequence: vec![pressed, released],
+                native_modifiers: vec![native_modifiers],
+            });
+        }
+        let saved = self.as_mut().persist_input_mappings();
+        self.as_mut().refresh_input_mapping_rows();
+        saved
     }
 
     fn update_device_timer_haptic_strength(mut self: Pin<&mut Self>, strength: i32) -> bool {
@@ -1328,6 +1946,54 @@ impl ffi::ProjecteurBackend {
             .unwrap_or_default()
     }
 
+    fn refresh_input_mapping_rows(mut self: Pin<&mut Self>) {
+        let rows = input_mapping_rows_json(
+            &self.as_ref().rust().current_device_group,
+            &self.as_ref().rust().input_mapping_items,
+        );
+        self.as_mut().set_input_mapping_rows(QString::from(rows));
+    }
+
+    fn persist_input_mappings(mut self: Pin<&mut Self>) -> bool {
+        let (path, group, config) = {
+            let this = self.as_ref();
+            let rust = this.rust();
+            let mappings = canonical_input_mappings(&rust.input_mapping_items);
+            (
+                PathBuf::from(String::from(&rust.config_path)),
+                rust.current_device_group.clone(),
+                InputMapConfig { mappings },
+            )
+        };
+        if path.as_os_str().is_empty() || group.is_empty() {
+            return false;
+        }
+        let mut file_config = match ProjecteurConfig::read(&path) {
+            Ok(config) => config,
+            Err(ConfigError::Io { source, .. }) if source.kind() == ErrorKind::NotFound => {
+                ProjecteurConfig::default()
+            }
+            Err(error) => {
+                self.as_mut().set_status(QString::from(format!(
+                    "Could not read device settings: {error}"
+                )));
+                return false;
+            }
+        };
+        file_config.set_device_input_map(&group, &config);
+        if let Err(error) = file_config.write(&path) {
+            self.as_mut().set_status(QString::from(format!(
+                "Could not save input mappings: {error}"
+            )));
+            return false;
+        }
+        let _ = self
+            .as_ref()
+            .rust()
+            .send_button_command(ButtonManagerCommand::Config(config));
+        true
+    }
+
     fn handle_presenter_connected(mut self: Pin<&mut Self>, path: &std::path::Path) {
         let device = scan_devices().ok().and_then(|devices| {
             devices
@@ -1358,6 +2024,18 @@ impl ffi::ProjecteurBackend {
             self.as_mut().rust_mut().current_device_group = group;
             self.as_mut().set_device_input_sequence_interval(interval);
             self.as_mut().set_device_timer_haptic_strength(strength);
+            let input_map = ProjecteurConfig::read(PathBuf::from(String::from(
+                &self.as_ref().rust().config_path,
+            )))
+            .ok()
+            .and_then(|config| {
+                config
+                    .device_input_map(&self.as_ref().rust().current_device_group)
+                    .ok()
+            })
+            .unwrap_or_default();
+            self.as_mut().rust_mut().input_mapping_items = input_map.mappings;
+            self.as_mut().refresh_input_mapping_rows();
         } else {
             self.as_mut()
                 .set_presenter_device(QString::from(path.to_str().unwrap_or("presenter")));
@@ -1387,8 +2065,52 @@ impl ffi::ProjecteurBackend {
         self.as_mut().set_presenter_details(QString::default());
         self.as_mut().rust_mut().connected_device_name.clear();
         self.as_mut().rust_mut().current_device_group.clear();
+        self.as_mut().rust_mut().input_mapping_items.clear();
+        self.as_mut().set_input_mapping_rows(QString::from("[]"));
+        self.as_mut().set_input_mapping_recording_row(-1);
         self.as_mut().set_battery_level(-1);
         self.as_mut().set_battery_status(QString::default());
+    }
+
+    fn handle_input_recorded(mut self: Pin<&mut Self>, frame: KeyEvent) {
+        if *self.as_ref().input_mapping_recording_row() < 0 {
+            return;
+        }
+        self.as_mut().rust_mut().recorded_input_sequence.push(frame);
+        let preview = input_sequence_label(
+            &self.as_ref().rust().current_device_group,
+            &self.as_ref().rust().recorded_input_sequence,
+        );
+        self.as_mut()
+            .set_input_mapping_recording_preview(QString::from(preview));
+    }
+
+    fn finish_input_mapping_recording(mut self: Pin<&mut Self>) {
+        let row = *self.as_ref().input_mapping_recording_row();
+        let sequence = std::mem::take(&mut self.as_mut().rust_mut().recorded_input_sequence);
+        if let Ok(row) = usize::try_from(row)
+            && !sequence.is_empty()
+            && let Some(item) = self.as_mut().rust_mut().input_mapping_items.get_mut(row)
+        {
+            item.input = sequence;
+            let move_input = special_move_name(&item.input).is_some();
+            let is_move_action = matches!(
+                item.action,
+                MappedAction::ScrollHorizontal
+                    | MappedAction::ScrollVertical
+                    | MappedAction::VolumeControl
+            );
+            if move_input && !is_move_action {
+                item.action = MappedAction::ScrollVertical;
+            } else if !move_input && is_move_action {
+                item.action = MappedAction::KeySequence(NativeKeySequence::default());
+            }
+            let _ = self.as_mut().persist_input_mappings();
+        }
+        self.as_mut().set_input_mapping_recording_row(-1);
+        self.as_mut()
+            .set_input_mapping_recording_preview(QString::default());
+        self.as_mut().refresh_input_mapping_rows();
     }
 
     fn poll_presenter(mut self: Pin<&mut Self>) {
@@ -1449,6 +2171,12 @@ impl ffi::ProjecteurBackend {
                     | MappedAction::ScrollVertical
                     | MappedAction::VolumeControl => {}
                 },
+                Some(Ok(PresenterEvent::InputRecorded(frame))) => {
+                    self.as_mut().handle_input_recorded(frame);
+                }
+                Some(Ok(PresenterEvent::InputRecordingFinished)) => {
+                    self.as_mut().finish_input_mapping_recording();
+                }
                 Some(Err(TryRecvError::Empty)) | None => break,
                 Some(Err(TryRecvError::Disconnected)) => {
                     self.as_mut().set_presenter_connected(false);
@@ -1982,5 +2710,86 @@ mod tests {
 
         let error = CliOptions::parse([OsString::from("--cfg")]).unwrap_err();
         assert_eq!(error, "--cfg requires a file path");
+    }
+
+    fn mapping(code: u16, action: MappedAction) -> InputMapping {
+        InputMapping {
+            input: vec![vec![InputEvent {
+                event_type: EV_KEY,
+                code,
+                value: 1,
+            }]],
+            action,
+        }
+    }
+
+    #[test]
+    fn editor_configuration_skips_empty_and_duplicate_rows_and_sorts_like_cpp_map() {
+        let first = mapping(106, MappedAction::CyclePresets);
+        let duplicate = mapping(106, MappedAction::ToggleSpotlight);
+        let earlier = mapping(105, MappedAction::ToggleSpotlight);
+        let empty = InputMapping {
+            input: Vec::new(),
+            action: MappedAction::CyclePresets,
+        };
+
+        let result = canonical_input_mappings(&[first.clone(), duplicate, empty, earlier.clone()]);
+
+        assert_eq!(result, vec![earlier, first]);
+    }
+
+    #[test]
+    fn recording_normalizes_mouse_scan_and_names_spotlight_taps() {
+        let press = normalized_recording_frame(&[
+            InputEvent {
+                event_type: 4,
+                code: 4,
+                value: 0x90001,
+            },
+            InputEvent {
+                event_type: EV_KEY,
+                code: 0x110,
+                value: 1,
+            },
+            sync_event(),
+        ])
+        .unwrap();
+        let release = vec![InputEvent {
+            event_type: EV_KEY,
+            code: 0x110,
+            value: 0,
+        }];
+
+        assert_eq!(press.len(), 1);
+        assert_eq!(
+            input_sequence_label("Device_046d_c53e", &[press, release]),
+            "[Click↓↑]"
+        );
+    }
+
+    #[test]
+    fn predefined_shortcuts_match_cpp_native_event_order() {
+        let alt_tab = predefined_native_key(15, 0x0900_0001, 4);
+
+        assert_eq!(native_key_label(&alt_tab), "Alt+Tab");
+        assert_eq!(alt_tab.native_modifiers, vec![4]);
+        assert_eq!(
+            alt_tab.native_sequence[0],
+            vec![
+                InputEvent {
+                    event_type: EV_KEY,
+                    code: 56,
+                    value: 1,
+                },
+                InputEvent {
+                    event_type: EV_KEY,
+                    code: 15,
+                    value: 1,
+                },
+                sync_event(),
+            ]
+        );
+        assert_eq!(alt_tab.native_sequence[1][0].value, 0);
+        assert_eq!(alt_tab.native_sequence[1][1].value, 0);
     }
 }

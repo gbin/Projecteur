@@ -24,7 +24,7 @@ pub const REL_Y: u16 = 1;
 pub const LINUX_INPUT_EVENT_SIZE: usize = 2 * size_of::<isize>() + 8;
 
 /// Timestamp-independent payload from one Linux input event.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct InputEvent {
     pub event_type: u16,
     pub code: u16,

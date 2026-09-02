@@ -16,6 +16,12 @@ ApplicationWindow {
     flags: Qt.Dialog
     property bool dirty: false
     property bool closingAfterCommit: false
+    property int selectedInputMappingRow: -1
+    property int nativeMappingRecordingRow: -1
+    property var inputMappingRows: {
+        try { return JSON.parse(backend.inputMappingRows) }
+        catch (error) { return [] }
+    }
 
     function changed() {
         dirty = true
@@ -360,17 +366,30 @@ ApplicationWindow {
                         currentIndex: deviceTabs.currentIndex
 
                         ColumnLayout {
+                            Shortcut {
+                                sequence: "Shift+Delete"
+                                enabled: root.selectedInputMappingRow >= 0
+                                onActivated: {
+                                    backend.removeInputMapping(root.selectedInputMappingRow)
+                                    root.selectedInputMappingRow = -1
+                                }
+                            }
                             RowLayout {
                                 Layout.fillWidth: true
                                 Button {
                                     text: "+"
-                                    enabled: false
+                                    enabled: backend.buttonForwarding
+                                    onClicked: root.selectedInputMappingRow = backend.addInputMapping()
                                     ToolTip.visible: hovered
                                     ToolTip.text: qsTr("Add a new input mapping entry.")
                                 }
                                 Button {
                                     text: "−"
-                                    enabled: false
+                                    enabled: root.selectedInputMappingRow >= 0
+                                    onClicked: {
+                                        backend.removeInputMapping(root.selectedInputMappingRow)
+                                        root.selectedInputMappingRow = -1
+                                    }
                                     ToolTip.visible: hovered
                                     ToolTip.text: qsTr("Delete the selected input mapping entries (Shift+Del).")
                                 }
@@ -390,14 +409,153 @@ ApplicationWindow {
                                 Layout.fillHeight: true
                                 ColumnLayout {
                                     anchors.fill: parent
+                                    spacing: 4
                                     RowLayout {
                                         Layout.fillWidth: true
+                                        Item { Layout.preferredWidth: 28 }
                                         Label { text: qsTr("Input Sequence"); font.bold: true; Layout.fillWidth: true }
-                                        Label { text: qsTr("Type"); font.bold: true; Layout.preferredWidth: 130 }
-                                        Label { text: qsTr("Mapped Action"); font.bold: true; Layout.fillWidth: true }
+                                        Label { text: qsTr("Type"); font.bold: true; Layout.preferredWidth: 175 }
+                                        Label { text: qsTr("Mapped Action"); font.bold: true; Layout.preferredWidth: 190 }
                                     }
                                     Rectangle { Layout.fillWidth: true; height: 1; color: root.palette.mid }
-                                    Item { Layout.fillHeight: true }
+
+                                    ListView {
+                                        id: inputMappingList
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        clip: true
+                                        spacing: 3
+                                        model: root.inputMappingRows
+                                        delegate: Rectangle {
+                                            id: mappingRow
+                                            required property var modelData
+                                            required property int index
+                                            width: inputMappingList.width
+                                            height: 38
+                                            color: root.selectedInputMappingRow === index
+                                                   ? root.palette.highlight : "transparent"
+                                            border.color: modelData.duplicate ? "red" : "transparent"
+                                            border.width: modelData.duplicate ? 1 : 0
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                onClicked: root.selectedInputMappingRow = mappingRow.index
+                                            }
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                spacing: 6
+                                                Label {
+                                                    Layout.preferredWidth: 28
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    text: mappingRow.index + 1
+                                                    color: mappingRow.modelData.duplicate ? "red"
+                                                          : root.selectedInputMappingRow === mappingRow.index
+                                                            ? root.palette.highlightedText : root.palette.text
+                                                    ToolTip.visible: mappingRow.modelData.duplicate && hovered
+                                                    ToolTip.text: qsTr("Duplicate input sequence")
+                                                }
+                                                Button {
+                                                    Layout.fillWidth: true
+                                                    text: backend.inputMappingRecordingRow === mappingRow.index
+                                                          ? "● " + backend.inputMappingRecordingPreview
+                                                          : mappingRow.modelData.input
+                                                    onClicked: {
+                                                        root.selectedInputMappingRow = mappingRow.index
+                                                        if (backend.inputMappingRecordingRow === mappingRow.index)
+                                                            backend.cancelInputMappingRecording()
+                                                        else
+                                                            backend.startInputMappingRecording(mappingRow.index)
+                                                    }
+                                                    ToolTip.visible: hovered
+                                                    ToolTip.text: qsTr("Press Enter or click to record presenter button(s).")
+                                                }
+                                                ComboBox {
+                                                    id: actionType
+                                                    Layout.preferredWidth: 175
+                                                    property var actionTypes: mappingRow.modelData.moveInput
+                                                        ? [{ text: qsTr("Scroll Horizontal"), value: 11 },
+                                                           { text: qsTr("Scroll Vertical"), value: 12 },
+                                                           { text: qsTr("Volume Control"), value: 13 }]
+                                                        : [{ text: qsTr("Key Sequence"), value: 1 },
+                                                           { text: qsTr("Cycle Presets"), value: 2 },
+                                                           { text: qsTr("Toggle Spotlight"), value: 3 }]
+                                                    textRole: "text"
+                                                    valueRole: "value"
+                                                    model: actionTypes
+                                                    currentIndex: {
+                                                        for (let i = 0; i < actionTypes.length; ++i)
+                                                            if (actionTypes[i].value === mappingRow.modelData.actionType) return i
+                                                        return 0
+                                                    }
+                                                    onActivated: backend.setInputMappingAction(
+                                                        mappingRow.index, actionTypes[currentIndex].value)
+                                                }
+                                                Button {
+                                                    Layout.preferredWidth: 190
+                                                    enabled: mappingRow.modelData.actionType === 1
+                                                    text: mappingRow.modelData.action
+                                                    onClicked: keyActionMenu.open()
+                                                    Menu {
+                                                        id: keyActionMenu
+                                                        MenuItem {
+                                                            text: qsTr("Record key sequence…")
+                                                            onTriggered: {
+                                                                root.nativeMappingRecordingRow = mappingRow.index
+                                                                nativeKeyRecorder.forceActiveFocus()
+                                                            }
+                                                        }
+                                                        MenuSeparator {}
+                                                        Repeater {
+                                                            model: ["Alt+Tab", "Alt+F4", "Meta", "None"]
+                                                            MenuItem {
+                                                                required property string modelData
+                                                                text: modelData
+                                                                onTriggered: backend.setInputMappingPredefinedKey(
+                                                                    mappingRow.index, modelData)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: root.nativeMappingRecordingRow >= 0 ? 38 : 0
+                                        visible: root.nativeMappingRecordingRow >= 0
+                                        color: root.palette.base
+                                        border.color: root.palette.highlight
+                                        radius: 2
+                                        FocusScope {
+                                            id: nativeKeyRecorder
+                                            anchors.fill: parent
+                                            focus: root.nativeMappingRecordingRow >= 0
+                                            Keys.onPressed: function(event) {
+                                                if (event.isAutoRepeat) return
+                                                if (event.key === Qt.Key_Escape) {
+                                                    root.nativeMappingRecordingRow = -1
+                                                    event.accepted = true
+                                                    return
+                                                }
+                                                if (event.key === Qt.Key_Control || event.key === Qt.Key_Shift
+                                                        || event.key === Qt.Key_Alt || event.key === Qt.Key_Meta
+                                                        || event.key === Qt.Key_AltGr) {
+                                                    event.accepted = true
+                                                    return
+                                                }
+                                                if (backend.recordNativeMappingKey(root.nativeMappingRecordingRow,
+                                                        event.key, event.nativeScanCode, event.modifiers))
+                                                    root.nativeMappingRecordingRow = -1
+                                                event.accepted = true
+                                            }
+                                            Label {
+                                                anchors.centerIn: parent
+                                                text: qsTr("Press a keyboard shortcut (Esc to cancel)…")
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

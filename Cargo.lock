@@ -733,6 +733,7 @@ dependencies = [
  "cxx-qt-build",
  "cxx-qt-lib",
  "projecteur-core",
+ "serde_json",
  "wayland-backend",
  "wayland-client",
  "wayland-scanner",
