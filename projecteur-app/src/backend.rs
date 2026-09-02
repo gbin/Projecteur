@@ -64,6 +64,8 @@ pub mod ffi {
 
         fn setup_application_metadata();
 
+        fn setup_quick_style();
+
         fn show_about_dialog();
 
         fn send_notification(
@@ -81,7 +83,9 @@ pub mod ffi {
 
         fn setup_global_shortcuts();
 
-        fn show_global_shortcuts_editor();
+        fn global_shortcut_rows(defaults: bool) -> QString;
+
+        fn apply_global_shortcut_rows(encoded_rows: &QString) -> bool;
 
         fn format_key_combination(key: i32) -> QString;
     }
@@ -145,6 +149,7 @@ pub mod ffi {
         #[qproperty(QString, presentation_timer_state)]
         #[qproperty(i32, presentation_timer_remaining_seconds)]
         #[qproperty(QString, preset_names)]
+        #[qproperty(QString, global_shortcut_rows)]
         type ProjecteurBackend = super::ProjecteurBackendRust;
 
         #[qinvokable]
@@ -280,7 +285,12 @@ pub mod ffi {
         ) -> bool;
 
         #[qinvokable]
-        fn configure_global_shortcuts(self: &ProjecteurBackend);
+        fn update_global_shortcut(
+            self: Pin<&mut ProjecteurBackend>,
+            row: i32,
+            slot: i32,
+            sequence: &QString,
+        ) -> bool;
 
         #[qsignal]
         fn show_preferences_requested(self: Pin<&mut ProjecteurBackend>);
@@ -348,8 +358,10 @@ pub struct ProjecteurBackendRust {
     presentation_timer_state: QString,
     presentation_timer_remaining_seconds: i32,
     preset_names: QString,
+    global_shortcut_rows: QString,
     current_preset: QString,
     applied_settings: SpotlightSettings,
+    applied_global_shortcut_rows: QString,
     control_tray_visible: bool,
     control_handle: ControlHandle,
     control_commands: Receiver<ControlCommand>,
@@ -506,8 +518,10 @@ impl ProjecteurBackendRust {
             presentation_timer_state: QString::from("idle"),
             presentation_timer_remaining_seconds: settings.presentation_timer_duration_seconds,
             preset_names: QString::from(preset_names(config_path)),
+            global_shortcut_rows: ffi::global_shortcut_rows(false),
             current_preset: QString::default(),
             applied_settings: settings.clone(),
+            applied_global_shortcut_rows: ffi::global_shortcut_rows(false),
             control_tray_visible: options.tray_visible,
             control_handle,
             control_commands,
@@ -1786,11 +1800,6 @@ impl cxx_qt::Initialize for ffi::ProjecteurBackend {
 }
 
 impl ffi::ProjecteurBackend {
-    #[allow(clippy::unused_self)]
-    fn configure_global_shortcuts(&self) {
-        ffi::show_global_shortcuts_editor();
-    }
-
     fn confirm_qml_loaded(mut self: Pin<&mut Self>) {
         eprintln!("projecteur: backend and QML are connected");
         let commands = std::mem::take(&mut self.as_mut().rust_mut().startup_commands);
@@ -1819,7 +1828,14 @@ impl ffi::ProjecteurBackend {
         config.set_spotlight_settings(&settings);
         match config.write(&path) {
             Ok(()) => {
+                if !ffi::apply_global_shortcut_rows(&self.as_ref().rust().global_shortcut_rows) {
+                    self.as_mut()
+                        .set_status(QString::from("Could not save one or more global shortcuts"));
+                    return false;
+                }
                 self.as_mut().rust_mut().applied_settings = settings;
+                self.as_mut().rust_mut().applied_global_shortcut_rows =
+                    self.as_ref().rust().global_shortcut_rows.clone();
                 self.as_mut().set_status(QString::from(format!(
                     "Saved settings to {}",
                     path.display()
@@ -1919,16 +1935,64 @@ impl ffi::ProjecteurBackend {
     fn begin_preferences(mut self: Pin<&mut Self>) {
         let current = self.as_ref().current_spotlight_settings();
         self.as_mut().rust_mut().applied_settings = current;
+        let shortcuts = ffi::global_shortcut_rows(false);
+        self.as_mut().set_global_shortcut_rows(shortcuts.clone());
+        self.as_mut().rust_mut().applied_global_shortcut_rows = shortcuts;
     }
 
     fn restore_applied_settings(mut self: Pin<&mut Self>) {
         let settings = self.as_ref().rust().applied_settings.clone();
         self.as_mut().apply_spotlight_settings(&settings);
+        let shortcuts = self.as_ref().rust().applied_global_shortcut_rows.clone();
+        self.as_mut().set_global_shortcut_rows(shortcuts);
     }
 
     fn restore_default_settings(mut self: Pin<&mut Self>) {
         self.as_mut()
             .apply_spotlight_settings(&SpotlightSettings::default());
+        self.as_mut()
+            .set_global_shortcut_rows(ffi::global_shortcut_rows(true));
+    }
+
+    fn update_global_shortcut(
+        mut self: Pin<&mut Self>,
+        row: i32,
+        slot: i32,
+        sequence: &QString,
+    ) -> bool {
+        let (Ok(row), Ok(slot)) = (usize::try_from(row), usize::try_from(slot)) else {
+            return false;
+        };
+        if slot > 1 {
+            return false;
+        }
+        let encoded = String::from(&self.as_ref().rust().global_shortcut_rows);
+        let Ok(mut rows) = serde_json::from_str::<Vec<serde_json::Value>>(&encoded) else {
+            return false;
+        };
+        let Some(shortcuts) = rows
+            .get_mut(row)
+            .and_then(|entry| entry.get_mut("shortcuts"))
+            .and_then(serde_json::Value::as_array_mut)
+        else {
+            return false;
+        };
+        while shortcuts.len() <= slot {
+            shortcuts.push(serde_json::Value::String(String::new()));
+        }
+        shortcuts[slot] = serde_json::Value::String(String::from(sequence));
+        while shortcuts
+            .last()
+            .is_some_and(|value| value.as_str() == Some(""))
+        {
+            shortcuts.pop();
+        }
+        let Ok(encoded) = serde_json::to_string(&rows) else {
+            return false;
+        };
+        self.as_mut()
+            .set_global_shortcut_rows(QString::from(encoded));
+        true
     }
 
     fn mark_settings_changed(mut self: Pin<&mut Self>) {

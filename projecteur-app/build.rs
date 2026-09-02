@@ -67,6 +67,7 @@ fn main() {
         .qrc(shader_qrc)
         .qt_module("Widgets")
         .qt_module("DBus")
+        .qt_module("QuickControls2")
         .file("src/backend.rs");
     // GCC 16 diagnoses a harmless Qt template completeness probe in generated
     // bridge code. Keep Cargo output focused on warnings we can act on.
@@ -91,6 +92,7 @@ fn main() {
     // so GNU ld with --as-needed keeps them.
     println!("cargo:rustc-link-arg=-lQt6Widgets");
     println!("cargo:rustc-link-arg=-lQt6DBus");
+    println!("cargo:rustc-link-arg=-lQt6QuickControls2");
     println!("cargo:rustc-link-lib=KF6GlobalAccel");
     println!("cargo:rustc-link-lib=KF6XmlGui");
     println!("cargo:rustc-link-lib=KF6WidgetsAddons");
@@ -107,7 +109,11 @@ fn write_qml_loader(output_directory: &std::path::Path) {
 #include <QtGui/QIcon>
 #include <QtGui/QAction>
 #include <QtGui/QKeySequence>
+#include <QtCore/QJsonArray>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
 #include <QtQml/QQmlApplicationEngine>
+#include <QtQuickControls2/QQuickStyle>
 #include <QtWidgets/QApplication>
 #include <QtDBus/QDBusInterface>
 #include <QtDBus/QDBusReply>
@@ -117,7 +123,6 @@ fn write_qml_loader(output_directory: &std::path::Path) {
 #include <KAboutData>
 #include <KGlobalAccel>
 #include <KNotification>
-#include <KShortcutsDialog>
 
 #include <memory>
 
@@ -151,6 +156,11 @@ inline void setup_application_metadata()
         QStringLiteral("Jahn Fuchs"), QStringLiteral("Original Projecteur author"), {},
         QStringLiteral("https://github.com/jahnf"));
     KAboutData::setApplicationData(aboutData);
+}
+
+inline void setup_quick_style()
+{
+    QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
 }
 
 inline void show_about_dialog()
@@ -242,12 +252,56 @@ inline void setup_global_shortcuts()
     });
 }
 
-inline void show_global_shortcuts_editor()
+inline QString global_shortcut_rows(bool defaults)
 {
+    QJsonArray rows;
     if (auto* collection = global_action_collection()) {
-        KShortcutsDialog::showDialog(
-            collection, KShortcutsEditor::LetterShortcutsDisallowed);
+        for (auto* action : collection->actions()) {
+            const auto shortcuts = defaults
+                ? KGlobalAccel::self()->defaultShortcut(action)
+                : KGlobalAccel::self()->shortcut(action);
+            QJsonArray sequences;
+            for (const auto& shortcut : shortcuts) {
+                sequences.append(shortcut.toString(QKeySequence::PortableText));
+            }
+            rows.append(QJsonObject{
+                {QStringLiteral("id"), action->objectName()},
+                {QStringLiteral("name"), action->text()},
+                {QStringLiteral("shortcuts"), sequences},
+            });
+        }
     }
+    return QString::fromUtf8(QJsonDocument(rows).toJson(QJsonDocument::Compact));
+}
+
+inline bool apply_global_shortcut_rows(const QString& encoded_rows)
+{
+    auto* collection = global_action_collection();
+    const auto document = QJsonDocument::fromJson(encoded_rows.toUtf8());
+    if (!collection || !document.isArray()) {
+        return false;
+    }
+
+    bool success = true;
+    for (const auto& row_value : document.array()) {
+        const auto row = row_value.toObject();
+        auto* action = collection->action(row.value(QStringLiteral("id")).toString());
+        if (!action) {
+            success = false;
+            continue;
+        }
+        QList<QKeySequence> shortcuts;
+        for (const auto& sequence_value : row.value(QStringLiteral("shortcuts")).toArray()) {
+            const auto sequence = QKeySequence::fromString(
+                sequence_value.toString(), QKeySequence::PortableText);
+            if (!sequence.isEmpty()) {
+                shortcuts.append(sequence);
+            }
+        }
+        success = KGlobalAccel::self()->setShortcut(
+            action, shortcuts, KGlobalAccel::NoAutoloading) && success;
+    }
+    return success;
 }
 
 inline QString format_key_combination(qint32 key)

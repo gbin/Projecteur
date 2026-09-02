@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
+import org.kde.kquickcontrols as KQuickControls
 
 ApplicationWindow {
     id: root
@@ -20,6 +21,10 @@ ApplicationWindow {
     property int nativeMappingRecordingRow: -1
     property var inputMappingRows: {
         try { return JSON.parse(backend.inputMappingRows) }
+        catch (error) { return [] }
+    }
+    property var globalShortcutRows: {
+        try { return JSON.parse(backend.globalShortcutRows) }
         catch (error) { return [] }
     }
 
@@ -638,6 +643,7 @@ ApplicationWindow {
         }
 
         ScrollView {
+            contentWidth: availableWidth
             ColumnLayout {
                 width: parent.width
                 GroupBox {
@@ -645,25 +651,45 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     ColumnLayout {
                         anchors.fill: parent
-                        Repeater {
-                            model: [
-                                qsTr("Toggle Spotlight"),
-                                qsTr("Show Preferences"),
-                                qsTr("Start or Restart Presentation Timer"),
-                                qsTr("Reset Presentation Timer"),
-                                qsTr("Next Spotlight Preset"),
-                                qsTr("Previous Spotlight Preset")
-                            ]
-                            delegate: Label {
-                                required property string modelData
-                                text: modelData
-                                Layout.fillWidth: true
-                            }
+                        spacing: 6
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label { text: qsTr("Action"); font.bold: true; Layout.fillWidth: true }
+                            Label { text: qsTr("Primary"); font.bold: true; Layout.preferredWidth: 220 }
+                            Label { text: qsTr("Alternate"); font.bold: true; Layout.preferredWidth: 220 }
                         }
-                        Button {
-                            text: qsTr("Configure Global Shortcuts…")
-                            icon.name: "configure-shortcuts"
-                            onClicked: backend.configureGlobalShortcuts()
+                        Rectangle { Layout.fillWidth: true; height: 1; color: root.palette.mid }
+                        Repeater {
+                            model: root.globalShortcutRows
+                            delegate: RowLayout {
+                                required property var modelData
+                                required property int index
+                                Layout.fillWidth: true
+                                Label {
+                                    text: modelData.name.replace("&", "")
+                                    Layout.fillWidth: true
+                                }
+                                KQuickControls.KeySequenceItem {
+                                    Layout.preferredWidth: 220
+                                    showCancelButton: true
+                                    multiKeyShortcutsAllowed: false
+                                    keySequence: modelData.shortcuts[0] || ""
+                                    onKeySequenceModified: {
+                                        if (backend.updateGlobalShortcut(index, 0, keySequence))
+                                            root.changed()
+                                    }
+                                }
+                                KQuickControls.KeySequenceItem {
+                                    Layout.preferredWidth: 220
+                                    showCancelButton: true
+                                    multiKeyShortcutsAllowed: false
+                                    keySequence: modelData.shortcuts[1] || ""
+                                    onKeySequenceModified: {
+                                        if (backend.updateGlobalShortcut(index, 1, keySequence))
+                                            root.changed()
+                                    }
+                                }
+                            }
                         }
                     }
                 }

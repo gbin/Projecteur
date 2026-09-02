@@ -7,9 +7,9 @@ case "$target" in
   archlinux)
     pacman -Syu --noconfirm --needed \
       base-devel cmake extra-cmake-modules gettext git just pacman-contrib rust \
-      kconfig kconfigwidgets kcoreaddons kdbusaddons kglobalaccel ki18n \
+      kconfig kconfigwidgets kcoreaddons kdbusaddons kdeclarative kglobalaccel ki18n \
       knotifications kpipewire kwidgetsaddons kwindowsystem kxmlgui \
-      layer-shell-qt libplasma libglvnd qt6-base qt6-declarative \
+      layer-shell-qt libplasma libglvnd qqc2-desktop-style qt6-base qt6-declarative \
       qt6-shadertools qt6-wayland
     ;;
   fedora-44|fedora-rawhide)
@@ -17,10 +17,10 @@ case "$target" in
       gcc-c++ cargo rust cmake extra-cmake-modules gettext git pkgconf-pkg-config \
       systemd-devel rpm-build qt6-qtbase-devel qt6-qtdeclarative-devel \
       qt6-qtshadertools-devel qt6-qtwayland-devel kf6-kconfig-devel \
-      kf6-kconfigwidgets-devel kf6-kcoreaddons-devel kf6-kdbusaddons-devel \
+      kf6-kconfigwidgets-devel kf6-kcoreaddons-devel kf6-kdbusaddons-devel kf6-kdeclarative-devel \
       kf6-kglobalaccel-devel kf6-ki18n-devel kf6-knotifications-devel \
       kf6-kpackage-devel kf6-kirigami-devel kf6-kwidgetsaddons-devel \
-      kf6-kwindowsystem-devel kf6-kxmlgui-devel kpipewire-devel \
+      kf6-qqc2-desktop-style kf6-kwindowsystem-devel kf6-kxmlgui-devel kpipewire-devel \
       libplasma-devel layer-shell-qt-devel
     ;;
   tumbleweed)
@@ -30,9 +30,9 @@ case "$target" in
       pkgconf-pkg-config libudev-devel rpm-build qt6-base-devel \
       qt6-declarative-devel qt6-shadertools-devel qt6-wayland-devel \
       kf6-kconfig-devel kf6-kconfigwidgets-devel kf6-kcoreaddons-devel \
-      kf6-kdbusaddons-devel kf6-kglobalaccel-devel kf6-ki18n-devel \
+      kf6-kdbusaddons-devel kf6-kdeclarative-devel kf6-kglobalaccel-devel kf6-ki18n-devel \
       kf6-knotifications-devel kf6-kpackage-devel kf6-kirigami-devel \
-      kf6-kwidgetsaddons-devel kf6-kwindowsystem-devel kf6-kxmlgui-devel \
+      kf6-qqc2-desktop-style kf6-kwidgetsaddons-devel kf6-kwindowsystem-devel kf6-kxmlgui-devel \
       kpipewire6-devel libplasma6-devel layer-shell-qt6-devel
     ;;
   debian-testing|debian-sid|ubuntu-26.10)
@@ -42,11 +42,11 @@ case "$target" in
       build-essential cargo rustc cmake dpkg-dev extra-cmake-modules file gettext git \
       pkg-config udev libudev-dev qt6-base-dev qt6-declarative-dev \
       qt6-shadertools-dev qt6-wayland-dev libkf6config-dev \
-      libkf6configwidgets-dev libkf6coreaddons-dev libkf6dbusaddons-dev \
+      libkf6configwidgets-dev libkf6coreaddons-dev libkf6dbusaddons-dev libkf6declarative-dev \
       libkf6globalaccel-dev libkf6i18n-dev libkf6notifications-dev \
       libkf6package-dev libkirigami-dev libkf6widgetsaddons-dev \
       libkf6windowsystem-dev libkf6xmlgui-dev libkpipewire-dev \
-      libplasma-dev liblayershellqtinterface-dev
+      libplasma-dev liblayershellqtinterface-dev qml6-module-org-kde-desktop
     ;;
   *)
     echo "error: unsupported CI target: $target" >&2

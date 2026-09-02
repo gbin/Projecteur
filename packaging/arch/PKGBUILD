@@ -18,6 +18,7 @@ depends=(
   'kconfigwidgets>=6.7'
   'kcoreaddons>=6.7'
   'kdbusaddons>=6.7'
+  'kdeclarative>=6.7'
   'kglobalaccel>=6.7'
   'ki18n>=6.7'
   'kpipewire>=6.7'
@@ -30,6 +31,7 @@ depends=(
   'libglvnd'
   'qt6-base>=6.10'
   'qt6-declarative>=6.10'
+  'qqc2-desktop-style>=6.7'
   'qt6-wayland>=6.10'
 )
 makedepends=(
