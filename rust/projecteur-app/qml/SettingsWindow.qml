@@ -517,8 +517,10 @@ ApplicationWindow {
                                                         MenuItem {
                                                             text: qsTr("Record key sequence…")
                                                             onTriggered: {
-                                                                root.nativeMappingRecordingRow = mappingRow.index
-                                                                nativeKeyRecorder.forceActiveFocus()
+                                                                if (backend.beginNativeMappingRecording(mappingRow.index)) {
+                                                                    root.nativeMappingRecordingRow = mappingRow.index
+                                                                    nativeKeyRecorder.forceActiveFocus()
+                                                                }
                                                             }
                                                         }
                                                         MenuSeparator {}
@@ -544,6 +546,14 @@ ApplicationWindow {
                                         color: root.palette.base
                                         border.color: root.palette.highlight
                                         radius: 2
+                                        Timer {
+                                            id: nativeKeyRecordingTimer
+                                            interval: 1000
+                                            onTriggered: {
+                                                backend.finishNativeMappingRecording()
+                                                root.nativeMappingRecordingRow = -1
+                                            }
+                                        }
                                         FocusScope {
                                             id: nativeKeyRecorder
                                             anchors.fill: parent
@@ -551,6 +561,8 @@ ApplicationWindow {
                                             Keys.onPressed: function(event) {
                                                 if (event.isAutoRepeat) return
                                                 if (event.key === Qt.Key_Escape) {
+                                                    nativeKeyRecordingTimer.stop()
+                                                    backend.cancelNativeMappingRecording()
                                                     root.nativeMappingRecordingRow = -1
                                                     event.accepted = true
                                                     return
@@ -561,14 +573,22 @@ ApplicationWindow {
                                                     event.accepted = true
                                                     return
                                                 }
-                                                if (backend.recordNativeMappingKey(root.nativeMappingRecordingRow,
-                                                        event.key, event.nativeScanCode, event.modifiers))
+                                                let count = backend.recordNativeMappingKey(
+                                                    root.nativeMappingRecordingRow, event.key,
+                                                    event.nativeScanCode, event.modifiers)
+                                                if (count >= 4) {
+                                                    nativeKeyRecordingTimer.stop()
+                                                    backend.finishNativeMappingRecording()
                                                     root.nativeMappingRecordingRow = -1
+                                                } else if (count > 0) {
+                                                    nativeKeyRecordingTimer.restart()
+                                                }
                                                 event.accepted = true
                                             }
                                             Label {
                                                 anchors.centerIn: parent
-                                                text: qsTr("Press a keyboard shortcut (Esc to cancel)…")
+                                                text: backend.nativeMappingRecordingPreview
+                                                      + qsTr(" (Esc to cancel)")
                                             }
                                         }
                                     }

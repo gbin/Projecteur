@@ -82,6 +82,8 @@ pub mod ffi {
         fn setup_global_shortcuts();
 
         fn show_global_shortcuts_editor();
+
+        fn format_key_combination(key: i32) -> QString;
     }
 
     #[auto_cxx_name]
@@ -102,6 +104,7 @@ pub mod ffi {
         #[qproperty(QString, input_mapping_rows)]
         #[qproperty(i32, input_mapping_recording_row)]
         #[qproperty(QString, input_mapping_recording_preview)]
+        #[qproperty(QString, native_mapping_recording_preview)]
         #[qproperty(i32, device_timer_haptic_strength)]
         #[qproperty(bool, button_forwarding)]
         #[qproperty(i32, battery_level)]
@@ -259,7 +262,16 @@ pub mod ffi {
             qt_key: i32,
             native_scan_code: i32,
             modifiers: i32,
-        ) -> bool;
+        ) -> i32;
+
+        #[qinvokable]
+        fn begin_native_mapping_recording(self: Pin<&mut ProjecteurBackend>, row: i32) -> bool;
+
+        #[qinvokable]
+        fn finish_native_mapping_recording(self: Pin<&mut ProjecteurBackend>) -> bool;
+
+        #[qinvokable]
+        fn cancel_native_mapping_recording(self: Pin<&mut ProjecteurBackend>);
 
         #[qinvokable]
         fn update_device_timer_haptic_strength(
@@ -290,6 +302,7 @@ pub struct ProjecteurBackendRust {
     input_mapping_rows: QString,
     input_mapping_recording_row: i32,
     input_mapping_recording_preview: QString,
+    native_mapping_recording_preview: QString,
     device_timer_haptic_strength: i32,
     connected_device_name: String,
     current_device_group: String,
@@ -344,6 +357,7 @@ pub struct ProjecteurBackendRust {
     button_commands: Option<SyncSender<ButtonManagerCommand>>,
     input_mapping_items: Vec<InputMapping>,
     recorded_input_sequence: KeyEventSequence,
+    native_key_recording: Option<(usize, NativeKeySequence)>,
     screencast_manager: Option<ScreencastManager>,
     capture_streams: HashMap<ScreenRegion, StreamIdentifier>,
     capture_snapshots: HashMap<ScreenRegion, QString>,
@@ -451,6 +465,7 @@ impl ProjecteurBackendRust {
             input_mapping_rows: QString::from("[]"),
             input_mapping_recording_row: -1,
             input_mapping_recording_preview: QString::default(),
+            native_mapping_recording_preview: QString::default(),
             device_timer_haptic_strength: 50,
             connected_device_name: String::new(),
             current_device_group: String::new(),
@@ -505,6 +520,7 @@ impl ProjecteurBackendRust {
             button_commands,
             input_mapping_items: Vec::new(),
             recorded_input_sequence: Vec::new(),
+            native_key_recording: None,
             screencast_manager: None,
             capture_streams: HashMap::new(),
             capture_snapshots: HashMap::new(),
@@ -1156,7 +1172,7 @@ fn native_key_label(sequence: &NativeKeySequence) -> String {
     sequence
         .qt_keys
         .iter()
-        .map(|key| format!("0x{key:x}"))
+        .map(|key| String::from(&ffi::format_key_combination(*key)))
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -1249,6 +1265,7 @@ fn native_modifier_keys(modifiers: i32) -> (Vec<u16>, u16) {
         codes.push(125);
         native |= 64;
     }
+    codes.sort_unstable();
     (codes, native)
 }
 
@@ -2130,21 +2147,40 @@ impl ffi::ProjecteurBackend {
             .set_input_mapping_recording_preview(QString::default());
     }
 
+    fn begin_native_mapping_recording(mut self: Pin<&mut Self>, row: i32) -> bool {
+        let Ok(row) = usize::try_from(row) else {
+            return false;
+        };
+        let valid = self
+            .as_ref()
+            .rust()
+            .input_mapping_items
+            .get(row)
+            .is_some_and(|item| matches!(item.action, MappedAction::KeySequence(_)));
+        if !valid {
+            return false;
+        }
+        self.as_mut().rust_mut().native_key_recording = Some((row, NativeKeySequence::default()));
+        self.as_mut()
+            .set_native_mapping_recording_preview(QString::from("Press a keyboard shortcut..."));
+        true
+    }
+
     fn record_native_mapping_key(
         mut self: Pin<&mut Self>,
         row: i32,
         qt_key: i32,
         native_scan_code: i32,
         modifiers: i32,
-    ) -> bool {
+    ) -> i32 {
         let Ok(row) = usize::try_from(row) else {
-            return false;
+            return -1;
         };
         let Some(code) = native_scan_code
             .checked_sub(8)
             .and_then(|code| u16::try_from(code).ok())
         else {
-            return false;
+            return -1;
         };
         let (modifier_codes, native_modifiers) = native_modifier_keys(modifiers);
         let mut pressed: KeyEvent = modifier_codes
@@ -2175,24 +2211,56 @@ impl ffi::ProjecteurBackend {
             value: 0,
         });
         released.push(sync_event());
+        let (count, label) = {
+            let this = self.as_mut();
+            let mut rust = this.rust_mut();
+            let Some((recording_row, sequence)) = rust.native_key_recording.as_mut() else {
+                return -1;
+            };
+            if *recording_row != row || sequence.qt_keys.len() >= 4 {
+                return -1;
+            }
+            sequence.qt_keys.push(qt_key | modifiers);
+            sequence.native_sequence.extend([pressed, released]);
+            sequence.native_modifiers.push(native_modifiers);
+            (
+                i32::try_from(sequence.qt_keys.len()).unwrap_or(4),
+                native_key_label(sequence),
+            )
+        };
+        self.as_mut()
+            .set_native_mapping_recording_preview(QString::from(label));
+        count
+    }
+
+    fn finish_native_mapping_recording(mut self: Pin<&mut Self>) -> bool {
+        let Some((row, sequence)) = self.as_mut().rust_mut().native_key_recording.take() else {
+            return false;
+        };
+        if sequence.qt_keys.is_empty() {
+            self.as_mut()
+                .set_native_mapping_recording_preview(QString::default());
+            return false;
+        }
         {
             let this = self.as_mut();
             let mut rust = this.rust_mut();
             let Some(item) = rust.input_mapping_items.get_mut(row) else {
                 return false;
             };
-            if !matches!(item.action, MappedAction::KeySequence(_)) {
-                return false;
-            }
-            item.action = MappedAction::KeySequence(NativeKeySequence {
-                qt_keys: vec![qt_key | modifiers],
-                native_sequence: vec![pressed, released],
-                native_modifiers: vec![native_modifiers],
-            });
+            item.action = MappedAction::KeySequence(sequence);
         }
         let saved = self.as_mut().persist_input_mappings();
         self.as_mut().refresh_input_mapping_rows();
+        self.as_mut()
+            .set_native_mapping_recording_preview(QString::default());
         saved
+    }
+
+    fn cancel_native_mapping_recording(mut self: Pin<&mut Self>) {
+        self.as_mut().rust_mut().native_key_recording = None;
+        self.as_mut()
+            .set_native_mapping_recording_preview(QString::default());
     }
 
     fn update_device_timer_haptic_strength(mut self: Pin<&mut Self>, strength: i32) -> bool {

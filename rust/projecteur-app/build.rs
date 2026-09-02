@@ -109,6 +109,7 @@ fn write_qml_loader(output_directory: &std::path::Path) {
 #include <QtCore/QAnyStringView>
 #include <QtGui/QIcon>
 #include <QtGui/QAction>
+#include <QtGui/QKeySequence>
 #include <QtQml/QQmlApplicationEngine>
 #include <QtWidgets/QApplication>
 #include <QtDBus/QDBusInterface>
@@ -281,6 +282,11 @@ inline void show_global_shortcuts_editor()
         KShortcutsDialog::showDialog(
             collection, KShortcutsEditor::LetterShortcutsDisallowed);
     }
+}
+
+inline QString format_key_combination(qint32 key)
+{
+    return QKeySequence(key).toString(QKeySequence::NativeText);
 }
 } // namespace projecteur::generated
 "#,
