@@ -60,8 +60,6 @@ fn main() {
             "qml/OverlayPreview.qml",
             "qml/SettingsWindow.qml",
             "qml/ShapeMask.qml",
-            "qml/SettingRow.qml",
-            "qml/ColorButton.qml",
         ]))
         .include_dir(output_directory)
         .qrc(shader_qrc)

@@ -64,22 +64,48 @@ ApplicationWindow {
         backend.showWindow = false
     }
 
-    header: TabBar {
+    header: Kirigami.NavigationTabBar {
         id: tabs
-        TabButton { text: qsTr("Overlay") }
-        TabButton { text: qsTr("Devices") }
-        TabButton { text: qsTr("Shortcuts") }
+        actions: [
+            Kirigami.Action { text: qsTr("Overlay"); icon.name: "view-visible" },
+            Kirigami.Action { text: qsTr("Devices"); icon.name: "input-mouse" },
+            Kirigami.Action { text: qsTr("Shortcuts"); icon.name: "configure-shortcuts" }
+        ]
+    }
+
+    footer: DialogButtonBox {
+        Button {
+            text: qsTr("Defaults")
+            DialogButtonBox.buttonRole: DialogButtonBox.ResetRole
+            onClicked: { backend.restoreDefaultSettings(); root.changed() }
+        }
+        Button {
+            text: qsTr("OK")
+            DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+            onClicked: root.acceptSettings()
+        }
+        Button {
+            text: qsTr("Apply")
+            DialogButtonBox.buttonRole: DialogButtonBox.ApplyRole
+            enabled: root.dirty
+            onClicked: root.apply()
+        }
+        Button {
+            text: qsTr("Cancel")
+            DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+            onClicked: root.rejectSettings()
+        }
     }
 
     StackLayout {
-        anchors { fill: parent; margins: 12; bottomMargin: buttonRow.height + 24 }
+        anchors { fill: parent; margins: Kirigami.Units.largeSpacing }
         currentIndex: tabs.currentIndex
 
         ScrollView {
             contentWidth: availableWidth
             ColumnLayout {
                 width: parent.width
-                spacing: 10
+                spacing: Kirigami.Units.largeSpacing
 
                 Frame {
                     Layout.fillWidth: true
@@ -104,8 +130,8 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     enabled: !backend.overlayDisabled
                     columns: 2
-                    columnSpacing: 12
-                    rowSpacing: 10
+                    columnSpacing: Kirigami.Units.largeSpacing
+                    rowSpacing: Kirigami.Units.largeSpacing
 
                     Kirigami.FormLayout {
                         id: leftOverlayForm
@@ -245,11 +271,11 @@ ApplicationWindow {
                             checked: backend.showSpotShade
                             onClicked: { backend.showSpotShade = checked; root.changed() }
                         }
-                        ColorButton {
+                        KQuickControls.ColorButton {
                             enabled: backend.showSpotShade
                             Kirigami.FormData.label: qsTr("Color:")
-                            selectedColor: backend.shadeColor
-                            onColorAccepted: function(value) { backend.shadeColor = value; root.changed() }
+                            color: backend.shadeColor
+                            onAccepted: function(value) { backend.shadeColor = value; root.changed() }
                         }
                         SpinBox {
                             enabled: backend.showSpotShade
@@ -292,11 +318,11 @@ ApplicationWindow {
                             }
                             Label { text: qsTr("pixels") }
                         }
-                        ColorButton {
+                        KQuickControls.ColorButton {
                             enabled: backend.showCenterDot
                             Kirigami.FormData.label: qsTr("Color:")
-                            selectedColor: backend.dotColor
-                            onColorAccepted: function(value) { backend.dotColor = value; root.changed() }
+                            color: backend.dotColor
+                            onAccepted: function(value) { backend.dotColor = value; root.changed() }
                         }
                         SpinBox {
                             enabled: backend.showCenterDot
@@ -325,11 +351,11 @@ ApplicationWindow {
                             }
                             Label { text: qsTr("% of spotlight size") }
                         }
-                        ColorButton {
+                        KQuickControls.ColorButton {
                             enabled: backend.showBorder
                             Kirigami.FormData.label: qsTr("Color:")
-                            selectedColor: backend.borderColor
-                            onColorAccepted: function(value) { backend.borderColor = value; root.changed() }
+                            color: backend.borderColor
+                            onAccepted: function(value) { backend.borderColor = value; root.changed() }
                         }
                         SpinBox {
                             enabled: backend.showBorder
@@ -354,10 +380,12 @@ ApplicationWindow {
                             model: [qsTr("Custom")].concat(backend.presetNames.length ? backend.presetNames.split("\n") : [])
                             onActivated: if (currentIndex > 0 && backend.loadPreset(currentText)) root.dirty = true
                         }
-                        Button { text: "−"; enabled: presetCombo.currentIndex > 0
+                        ToolButton { text: qsTr("Delete preset"); display: AbstractButton.IconOnly
+                            icon.name: "list-remove"; enabled: presetCombo.currentIndex > 0
                             ToolTip.text: qsTr("Delete currently selected preset.")
                             onClicked: { if (backend.removePreset(presetCombo.currentText)) presetCombo.currentIndex = 0 } }
-                        Button { text: "+"
+                        ToolButton { text: qsTr("Add preset"); display: AbstractButton.IconOnly
+                            icon.name: "list-add"
                             ToolTip.text: qsTr("Create new preset from current spotlight settings.")
                             onClicked: presetNameDialog.open() }
                     }
@@ -373,41 +401,48 @@ ApplicationWindow {
         }
 
         ScrollView {
+            contentWidth: availableWidth
+            contentHeight: Math.max(availableHeight, deviceContent.implicitHeight)
             ColumnLayout {
+                id: deviceContent
                 width: parent.width
-                Item {
+                height: parent.height
+                Kirigami.PlaceholderMessage {
                     visible: !backend.presenterConnected
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    RowLayout {
-                        anchors.centerIn: parent
-                        Label { text: "⚠" }
-                        Label { text: qsTr("No devices connected.") }
-                    }
+                    icon.name: "input-mouse"
+                    text: qsTr("No devices connected")
                 }
 
                 ColumnLayout {
                     visible: backend.presenterConnected
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    spacing: 10
+                    spacing: Kirigami.Units.largeSpacing
 
-                    SettingRow {
-                        label: qsTr("Device")
+                    Kirigami.FormLayout {
+                        Layout.fillWidth: true
                         ComboBox {
                             Layout.fillWidth: true
+                            Kirigami.FormData.label: qsTr("Device:")
                             model: [backend.presenterDevice]
                             ToolTip.visible: hovered
                             ToolTip.text: qsTr("List of connected devices.")
                         }
                     }
 
-                    TabBar {
+                    Kirigami.NavigationTabBar {
                         id: deviceTabs
                         Layout.fillWidth: true
-                        TabButton { text: qsTr("Input Mapping") }
-                        TabButton { text: qsTr("Presentation timer feedback") }
-                        TabButton { text: qsTr("Details") }
+                        actions: [
+                            Kirigami.Action { text: qsTr("Input Mapping"); icon.name: "input-keyboard" },
+                            Kirigami.Action {
+                                text: qsTr("Presentation timer feedback")
+                                icon.name: "chronometer"
+                            },
+                            Kirigami.Action { text: qsTr("Details"); icon.name: "documentinfo" }
+                        ]
                     }
 
                     StackLayout {
@@ -426,15 +461,19 @@ ApplicationWindow {
                             }
                             RowLayout {
                                 Layout.fillWidth: true
-                                Button {
-                                    text: "+"
+                                ToolButton {
+                                    text: qsTr("Add input mapping")
+                                    display: AbstractButton.IconOnly
+                                    icon.name: "list-add"
                                     enabled: backend.buttonForwarding
                                     onClicked: root.selectedInputMappingRow = backend.addInputMapping()
                                     ToolTip.visible: hovered
                                     ToolTip.text: qsTr("Add a new input mapping entry.")
                                 }
-                                Button {
-                                    text: "−"
+                                ToolButton {
+                                    text: qsTr("Remove input mapping")
+                                    display: AbstractButton.IconOnly
+                                    icon.name: "list-remove"
                                     enabled: root.selectedInputMappingRow >= 0
                                     onClicked: {
                                         backend.removeInputMapping(root.selectedInputMappingRow)
@@ -459,7 +498,7 @@ ApplicationWindow {
                                 Layout.fillHeight: true
                                 ColumnLayout {
                                     anchors.fill: parent
-                                    spacing: 4
+                                    spacing: Kirigami.Units.smallSpacing
                                     RowLayout {
                                         Layout.fillWidth: true
                                         Item { Layout.preferredWidth: 28 }
@@ -467,14 +506,14 @@ ApplicationWindow {
                                         Label { text: qsTr("Type"); font.bold: true; Layout.preferredWidth: 175 }
                                         Label { text: qsTr("Mapped Action"); font.bold: true; Layout.preferredWidth: 190 }
                                     }
-                                    Rectangle { Layout.fillWidth: true; height: 1; color: root.palette.mid }
+                                    Kirigami.Separator { Layout.fillWidth: true }
 
                                     ListView {
                                         id: inputMappingList
                                         Layout.fillWidth: true
                                         Layout.fillHeight: true
                                         clip: true
-                                        spacing: 3
+                                        spacing: Kirigami.Units.smallSpacing
                                         model: root.inputMappingRows
                                         delegate: Rectangle {
                                             id: mappingRow
@@ -494,7 +533,7 @@ ApplicationWindow {
 
                                             RowLayout {
                                                 anchors.fill: parent
-                                                spacing: 6
+                                                spacing: Kirigami.Units.smallSpacing
                                                 Label {
                                                     Layout.preferredWidth: 28
                                                     horizontalAlignment: Text.AlignHCenter
@@ -595,7 +634,7 @@ ApplicationWindow {
                                         visible: root.nativeMappingRecordingRow >= 0
                                         color: root.palette.base
                                         border.color: root.palette.highlight
-                                        radius: 2
+                                        radius: Kirigami.Units.cornerRadius
                                         Timer {
                                             id: nativeKeyRecordingTimer
                                             interval: 1000
@@ -689,67 +728,42 @@ ApplicationWindow {
 
         ScrollView {
             contentWidth: availableWidth
-            ColumnLayout {
+            Kirigami.FormLayout {
                 width: parent.width
-                GroupBox {
-                    title: qsTr("Global Shortcuts")
-                    Layout.fillWidth: true
-                    ColumnLayout {
-                        anchors.fill: parent
-                        spacing: 6
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Label { text: qsTr("Action"); font.bold: true; Layout.fillWidth: true }
-                            Label { text: qsTr("Primary"); font.bold: true; Layout.preferredWidth: 220 }
-                            Label { text: qsTr("Alternate"); font.bold: true; Layout.preferredWidth: 220 }
+                Kirigami.Separator {
+                    Kirigami.FormData.label: qsTr("Global Shortcuts")
+                    Kirigami.FormData.isSection: true
+                }
+                Repeater {
+                    model: root.globalShortcutRows
+                    delegate: RowLayout {
+                        required property var modelData
+                        required property int index
+                        Kirigami.FormData.label: modelData.name.replace("&", "") + ":"
+                        Label { text: qsTr("Primary:") }
+                        KQuickControls.KeySequenceItem {
+                            showCancelButton: true
+                            multiKeyShortcutsAllowed: false
+                            keySequence: modelData.shortcuts[0] || ""
+                            onKeySequenceModified: {
+                                if (backend.updateGlobalShortcut(index, 0, keySequence))
+                                    root.changed()
+                            }
                         }
-                        Rectangle { Layout.fillWidth: true; height: 1; color: root.palette.mid }
-                        Repeater {
-                            model: root.globalShortcutRows
-                            delegate: RowLayout {
-                                required property var modelData
-                                required property int index
-                                Layout.fillWidth: true
-                                Label {
-                                    text: modelData.name.replace("&", "")
-                                    Layout.fillWidth: true
-                                }
-                                KQuickControls.KeySequenceItem {
-                                    Layout.preferredWidth: 220
-                                    showCancelButton: true
-                                    multiKeyShortcutsAllowed: false
-                                    keySequence: modelData.shortcuts[0] || ""
-                                    onKeySequenceModified: {
-                                        if (backend.updateGlobalShortcut(index, 0, keySequence))
-                                            root.changed()
-                                    }
-                                }
-                                KQuickControls.KeySequenceItem {
-                                    Layout.preferredWidth: 220
-                                    showCancelButton: true
-                                    multiKeyShortcutsAllowed: false
-                                    keySequence: modelData.shortcuts[1] || ""
-                                    onKeySequenceModified: {
-                                        if (backend.updateGlobalShortcut(index, 1, keySequence))
-                                            root.changed()
-                                    }
-                                }
+                        Label { text: qsTr("Alternate:") }
+                        KQuickControls.KeySequenceItem {
+                            showCancelButton: true
+                            multiKeyShortcutsAllowed: false
+                            keySequence: modelData.shortcuts[1] || ""
+                            onKeySequenceModified: {
+                                if (backend.updateGlobalShortcut(index, 1, keySequence))
+                                    root.changed()
                             }
                         }
                     }
                 }
             }
         }
-    }
-
-    RowLayout {
-        id: buttonRow
-        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 12 }
-        Button { text: qsTr("Defaults"); onClicked: { backend.restoreDefaultSettings(); root.changed() } }
-        Item { Layout.fillWidth: true }
-        Button { text: qsTr("OK"); onClicked: root.acceptSettings() }
-        Button { text: qsTr("Apply"); enabled: root.dirty; onClicked: root.apply() }
-        Button { text: qsTr("Cancel"); onClicked: root.rejectSettings() }
     }
 
     Dialog {
