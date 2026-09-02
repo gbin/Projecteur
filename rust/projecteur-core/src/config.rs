@@ -117,6 +117,14 @@ impl ProjecteurConfig {
         self.group(group)?.get(key).map(String::as_str)
     }
 
+    /// Set one raw `KConfig` value while preserving all unrelated groups.
+    pub fn set_value(&mut self, group: &str, key: &str, value: impl Into<String>) {
+        self.groups
+            .entry(group.to_owned())
+            .or_default()
+            .insert(key.to_owned(), value.into());
+    }
+
     /// Materialize overlay settings from the legacy `General` group.
     #[must_use]
     pub fn spotlight_settings(&self) -> SpotlightSettings {
@@ -315,6 +323,18 @@ inputMapConfigData=@ByteArray(AQID)
             reparsed.value("Device_046d_c53e", "inputMapConfigData"),
             Some("@ByteArray(AQID)")
         );
+    }
+
+    #[test]
+    fn updates_a_device_scoped_value_without_touching_other_entries() {
+        let mut config = ProjecteurConfig::parse(DOCUMENT).unwrap();
+        config.set_value("Device_046d_c53e", "presentationTimerHapticStrength", "75");
+
+        assert_eq!(
+            config.value("Device_046d_c53e", "presentationTimerHapticStrength"),
+            Some("75")
+        );
+        assert_eq!(config.value("General", "spotSize"), Some("48"));
     }
 
     #[test]

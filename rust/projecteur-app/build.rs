@@ -69,18 +69,32 @@ fn main() {
     .include_dir(output_directory)
     .qrc(shader_qrc)
     .qt_module("Widgets")
+    .qt_module("DBus")
     .file("src/backend.rs");
     // GCC 16 diagnoses a harmless Qt template completeness probe in generated
     // bridge code. Keep Cargo output focused on warnings we can act on.
     let builder = unsafe {
         builder.cc_builder(|compiler| {
             compiler.flag_if_supported("-Wno-sfinae-incomplete");
+            compiler.include("/usr/include/KF6");
+            compiler.include("/usr/include/KF6/KGlobalAccel");
+            compiler.include("/usr/include/KF6/KXmlGui");
+            compiler.include("/usr/include/KF6/KConfigWidgets");
+            compiler.include("/usr/include/KF6/KConfigGui");
+            compiler.include("/usr/include/KF6/KConfigCore");
+            compiler.include("/usr/include/KF6/KConfig");
+            compiler.include("/usr/include/KF6/KWidgetsAddons");
         })
     };
     builder.build();
     // The generated bridge is a static archive and refers to QApplication.
-    // Repeat Qt Widgets after that archive so GNU ld with --as-needed keeps it.
+    // Repeat Qt libraries referenced by the generated helper after that archive
+    // so GNU ld with --as-needed keeps them.
     println!("cargo:rustc-link-arg=-lQt6Widgets");
+    println!("cargo:rustc-link-arg=-lQt6DBus");
+    println!("cargo:rustc-link-lib=KF6GlobalAccel");
+    println!("cargo:rustc-link-lib=KF6XmlGui");
+    println!("cargo:rustc-link-lib=KF6WidgetsAddons");
 }
 
 fn write_qml_loader(output_directory: &std::path::Path) {
@@ -89,12 +103,24 @@ fn write_qml_loader(output_directory: &std::path::Path) {
         r#"#pragma once
 #include <QtCore/QAnyStringView>
 #include <QtGui/QIcon>
+#include <QtGui/QAction>
 #include <QtQml/QQmlApplicationEngine>
 #include <QtWidgets/QApplication>
+#include <QtDBus/QDBusInterface>
+
+#include <KActionCollection>
+#include <KGlobalAccel>
+#include <KShortcutsDialog>
 
 #include <memory>
 
 namespace projecteur::generated {
+inline KActionCollection*& global_action_collection()
+{
+    static KActionCollection* collection = nullptr;
+    return collection;
+}
+
 inline std::unique_ptr<QGuiApplication> create_widget_application()
 {
     static int argc = 1;
@@ -112,6 +138,67 @@ inline void load_qml_module(QQmlApplicationEngine& engine,
                             QAnyStringView type_name)
 {
     engine.loadFromModule(uri, type_name);
+}
+
+inline void setup_global_shortcuts()
+{
+    if (global_action_collection()) {
+        return;
+    }
+    auto* collection = new KActionCollection(qApp, QStringLiteral("Projecteur"));
+    global_action_collection() = collection;
+    collection->setComponentName(QStringLiteral("Projecteur"));
+    collection->setComponentDisplayName(QStringLiteral("Projecteur"));
+
+    const auto call = [](const QString& method, const QVariantList& arguments = {}) {
+        QDBusInterface control(
+            QStringLiteral("org.projecteur.Projecteur"),
+            QStringLiteral("/org/projecteur/Projecteur/Control"),
+            QStringLiteral("org.projecteur.Projecteur"));
+        control.asyncCallWithArgumentList(method, arguments);
+    };
+    const auto addAction =
+        [collection](const QString& id, const QString& text, const QString& iconName,
+                     auto callback) {
+            auto* action = new QAction(QIcon::fromTheme(iconName), text, collection);
+            collection->addAction(id, action);
+            QObject::connect(action, &QAction::triggered, collection, std::move(callback));
+            KGlobalAccel::setGlobalShortcut(action, QList<QKeySequence>{});
+        };
+
+    addAction(QStringLiteral("toggle_spotlight"), QStringLiteral("Toggle Spotlight"),
+              QStringLiteral("view-visible"), [call]() {
+        call(QStringLiteral("ApplyCommands"), {QStringList{QStringLiteral("spot=toggle")}});
+    });
+    addAction(QStringLiteral("show_preferences"), QStringLiteral("Show Preferences"),
+              QStringLiteral("configure"), [call]() {
+        call(QStringLiteral("ShowPreferences"));
+    });
+    addAction(QStringLiteral("start_restart_timer"),
+              QStringLiteral("Start or Restart Presentation Timer"),
+              QStringLiteral("chronometer"), [call]() {
+        call(QStringLiteral("RestartTimer"));
+    });
+    addAction(QStringLiteral("reset_timer"), QStringLiteral("Reset Presentation Timer"),
+              QStringLiteral("edit-undo"), [call]() {
+        call(QStringLiteral("ResetTimer"));
+    });
+    addAction(QStringLiteral("next_preset"), QStringLiteral("Next Spotlight Preset"),
+              QStringLiteral("go-next"), [call]() {
+        call(QStringLiteral("ApplyCommands"), {QStringList{QStringLiteral("preset.next")}});
+    });
+    addAction(QStringLiteral("previous_preset"), QStringLiteral("Previous Spotlight Preset"),
+              QStringLiteral("go-previous"), [call]() {
+        call(QStringLiteral("ApplyCommands"), {QStringList{QStringLiteral("preset.previous")}});
+    });
+}
+
+inline void show_global_shortcuts_editor()
+{
+    if (auto* collection = global_action_collection()) {
+        KShortcutsDialog::showDialog(
+            collection, KShortcutsEditor::LetterShortcutsDisallowed);
+    }
 }
 } // namespace projecteur::generated
 "#,

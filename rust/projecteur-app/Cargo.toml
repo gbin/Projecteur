@@ -19,7 +19,7 @@ projecteur-core = { path = "../projecteur-core" }
 wayland-client = "0.31.15"
 wayland-backend = "0.3.17"
 wayland-scanner = "0.31.11"
-zbus = "5.19.0"
+zbus = { version = "5.19.0", features = ["blocking"] }
 
 [build-dependencies]
 cxx-qt-build = "0.10.0"

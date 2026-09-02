@@ -1,4 +1,5 @@
 mod backend;
+mod control;
 mod screencast;
 
 use std::{ffi::OsString, fmt::Write as _, fs::OpenOptions, path::PathBuf};
@@ -21,6 +22,11 @@ fn main() {
     if let Some(command) = parse_vibration_command(&arguments) {
         std::process::exit(run_vibration(&command));
     }
+    match control::forward_to_running(&arguments) {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(error) => eprintln!("projecteur-rs: {error}"),
+    }
     cxx_qt::init_crate!(projecteur_app);
     cxx_qt::init_qml_module!("org.projecteur.rust");
 
@@ -40,6 +46,7 @@ fn main() {
     application
         .pin_mut()
         .set_organization_name(&QString::from("Projecteur"));
+    backend::ffi::setup_global_shortcuts();
 
     let mut engine = QQmlApplicationEngine::new();
     let _creation_failure = engine.pin_mut().on_object_creation_failed(|_, url| {

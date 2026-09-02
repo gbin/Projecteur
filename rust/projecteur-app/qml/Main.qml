@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
-import Qt.labs.platform as Platform
 import org.projecteur.rust
 
 Item {
@@ -46,6 +45,20 @@ Item {
         backend: backend
     }
 
+    Dialog {
+        id: aboutDialog
+        title: qsTr("About Projecteur")
+        modal: false
+        standardButtons: Dialog.Ok
+        anchors.centerIn: parent
+        contentItem: Label {
+            padding: 18
+            text: qsTr("Projecteur\nA virtual laser pointer for presentations")
+            horizontalAlignment: Text.AlignHCenter
+        }
+        onClosed: backend.showAbout = false
+    }
+
     Component.onCompleted: {
         if (backend.showWindow)
             showPreferences()
@@ -68,31 +81,13 @@ Item {
         function onMotionSerialChanged() {
             root.movePresenterPointer(backend.pointerDeltaX, backend.pointerDeltaY)
         }
-    }
-
-    Platform.SystemTrayIcon {
-        id: trayIcon
-        visible: backend.trayVisible
-        tooltip: qsTr("Projecteur")
-        icon.source: "qrc:/projecteur/projecteur-tray.svg"
-        menu: Platform.Menu {
-            Platform.MenuItem {
-                text: qsTr("Preferences...")
-                onTriggered: root.showPreferences()
-            }
-            Platform.MenuItem {
-                text: backend.overlayDisabled ? qsTr("Enable overlay") : qsTr("Disable overlay")
-                onTriggered: backend.overlayDisabled = !backend.overlayDisabled
-            }
-            Platform.MenuSeparator {}
-            Platform.MenuItem {
-                text: qsTr("Quit")
-                onTriggered: Qt.quit()
-            }
+        function onShowAboutChanged() {
+            if (backend.showAbout)
+                aboutDialog.open()
         }
-        onActivated: function(reason) {
-            if (reason === Platform.SystemTrayIcon.Trigger || reason === Platform.SystemTrayIcon.DoubleClick)
-                root.showPreferences()
+        function onQuitRequestedChanged() {
+            if (backend.quitRequested)
+                Qt.quit()
         }
     }
 

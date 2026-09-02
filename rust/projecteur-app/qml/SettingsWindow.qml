@@ -315,19 +315,125 @@ ApplicationWindow {
         ScrollView {
             ColumnLayout {
                 width: parent.width
-                GroupBox {
-                    title: qsTr("Presenter")
+                Item {
+                    visible: !backend.presenterConnected
                     Layout.fillWidth: true
-                    GridLayout {
-                        anchors.fill: parent; columns: 2
-                        Label { text: qsTr("Status") }
-                        Label { text: backend.presenterConnected ? qsTr("Connected") : qsTr("Not connected") }
-                        Label { text: qsTr("Device") }
-                        Label { text: backend.presenterDevice || qsTr("No supported device detected"); Layout.fillWidth: true }
-                        Label { text: qsTr("Battery") }
-                        Label { text: backend.batteryLevel >= 0 ? qsTr("%1% (%2)").arg(backend.batteryLevel).arg(backend.batteryStatus) : qsTr("Unavailable") }
-                        Label { text: qsTr("Button forwarding") }
-                        Label { text: backend.buttonForwarding ? qsTr("Active") : qsTr("Inactive") }
+                    Layout.fillHeight: true
+                    RowLayout {
+                        anchors.centerIn: parent
+                        Label { text: "⚠" }
+                        Label { text: qsTr("No devices connected.") }
+                    }
+                }
+
+                ColumnLayout {
+                    visible: backend.presenterConnected
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 10
+
+                    SettingRow {
+                        label: qsTr("Device")
+                        ComboBox {
+                            Layout.fillWidth: true
+                            model: [backend.presenterDevice]
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("List of connected devices.")
+                        }
+                    }
+
+                    TabBar {
+                        id: deviceTabs
+                        Layout.fillWidth: true
+                        TabButton { text: qsTr("Input Mapping") }
+                        TabButton { text: qsTr("Presentation timer feedback") }
+                        TabButton { text: qsTr("Details") }
+                    }
+
+                    StackLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        currentIndex: deviceTabs.currentIndex
+
+                        ColumnLayout {
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Button {
+                                    text: "+"
+                                    enabled: false
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("Add a new input mapping entry.")
+                                }
+                                Button {
+                                    text: "−"
+                                    enabled: false
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("Delete the selected input mapping entries (Shift+Del).")
+                                }
+                                Item { Layout.fillWidth: true }
+                                Label { text: qsTr("Input Sequence Interval") }
+                                SpinBox {
+                                    from: 100
+                                    to: 950
+                                    stepSize: 50
+                                    value: backend.deviceInputSequenceInterval
+                                    onValueModified: backend.updateDeviceInputSequenceInterval(value)
+                                }
+                                Label { text: qsTr("ms") }
+                            }
+                            Frame {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Label { text: qsTr("Input Sequence"); font.bold: true; Layout.fillWidth: true }
+                                        Label { text: qsTr("Type"); font.bold: true; Layout.preferredWidth: 130 }
+                                        Label { text: qsTr("Mapped Action"); font.bold: true; Layout.fillWidth: true }
+                                    }
+                                    Rectangle { Layout.fillWidth: true; height: 1; color: root.palette.mid }
+                                    Item { Layout.fillHeight: true }
+                                }
+                            }
+                        }
+
+                        ColumnLayout {
+                            GroupBox {
+                                title: qsTr("Presentation timer feedback")
+                                Layout.fillWidth: true
+                                GridLayout {
+                                    anchors.fill: parent
+                                    columns: 2
+                                    Label { text: qsTr("Completion vibration strength") }
+                                    SpinBox {
+                                        Layout.fillWidth: true
+                                        from: 0
+                                        to: 100
+                                        stepSize: 5
+                                        value: backend.deviceTimerHapticStrength
+                                        textFromValue: function(value) { return value + "%" }
+                                        valueFromText: function(text) { return parseInt(text) }
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: qsTr("Set to 0% to disable completion vibration.")
+                                        onValueModified: backend.updateDeviceTimerHapticStrength(value)
+                                    }
+                                    Label {
+                                        Layout.columnSpan: 2
+                                        text: qsTr("Vibrates this presenter when the presentation timer finishes.")
+                                    }
+                                }
+                            }
+                            Item { Layout.fillHeight: true }
+                        }
+
+                        TextArea {
+                            readOnly: true
+                            text: backend.presenterDetails
+                            wrapMode: TextEdit.Wrap
+                            selectByMouse: true
+                            font.family: Application.font.family
+                        }
                     }
                 }
             }
@@ -341,8 +447,26 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     ColumnLayout {
                         anchors.fill: parent
-                        Label { text: qsTr("Toggle overlay"); font.bold: true }
-                        Label { text: qsTr("Presenter button mappings continue to use the configured KDE global shortcuts."); wrapMode: Text.Wrap; Layout.fillWidth: true }
+                        Repeater {
+                            model: [
+                                qsTr("Toggle Spotlight"),
+                                qsTr("Show Preferences"),
+                                qsTr("Start or Restart Presentation Timer"),
+                                qsTr("Reset Presentation Timer"),
+                                qsTr("Next Spotlight Preset"),
+                                qsTr("Previous Spotlight Preset")
+                            ]
+                            delegate: Label {
+                                required property string modelData
+                                text: modelData
+                                Layout.fillWidth: true
+                            }
+                        }
+                        Button {
+                            text: qsTr("Configure Global Shortcuts…")
+                            icon.name: "configure-shortcuts"
+                            onClicked: backend.configureGlobalShortcuts()
+                        }
                     }
                 }
             }
