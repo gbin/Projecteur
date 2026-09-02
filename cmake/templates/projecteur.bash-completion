@@ -14,11 +14,12 @@ _projecteur()
     prev_prev="="
   fi
 
-  local options="-h --help --help-all --version -v --cfg --device-scan -m --minimize-only"
-  options="${options} --show-dialog --disable-uinput -D -c"
+  local options="-h --help --help-all --version -v -f --fullversion --cfg --device-scan"
+  options="${options} --show-dialog --disable-uinput --hide-systray-icon --disable-overlay"
+  options="${options} -D --additional-device -c --command"
 
   case "$prev" in
-    "-c")
+    "-c"|"--command")
       # Auto completion for commands and properties
       local commands="quit spot= spot.size.adjust= settings= preset= vibrate="
       commands="${commands} spot.size= spot.rotation= spot.shape= spot.shape.square.radius="
@@ -104,7 +105,7 @@ _projecteur()
         COMPREPLY=( $(compgen -W "smooth text pixel" -- $cur) )
       fi
       ;;
-    "-D")
+    "-D"|"--additional-device")
       # TODO: Auto completion for devices (vendorId:productId)
       COMPREPLY=( $(compgen -W "0123:4567" -- $cur) )
       ;;

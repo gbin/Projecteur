@@ -1,15 +1,15 @@
 [workspace]
 members = [
-    "rust/projecteur-app",
-    "rust/projecteur-core",
+    "projecteur-app",
+    "projecteur-core",
 ]
 resolver = "2"
 
 [workspace.package]
 edition = "2024"
-license = "GPL-3.0-or-later"
+license = "MIT"
 rust-version = "1.85"
-version = "0.11.0"
+version = "1.0.0"
 
 [workspace.lints.clippy]
 all = "warn"

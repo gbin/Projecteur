@@ -28,14 +28,16 @@ if [[ "$target" == "archlinux" ]]; then
   package_targets=OFF
 fi
 
+cargo test --locked --workspace --all-targets
+
 cmake -S . -B "$build_dir" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/usr \
   -DCMAKE_INSTALL_UDEVRULESDIR=/usr/lib/udev/rules.d \
   -DPACKAGE_TARGETS="$package_targets"
 cmake --build "$build_dir" --parallel 2
-"$build_dir/projecteur" --version
-"$build_dir/projecteur" --help >/dev/null
+target/release/projecteur --version
+target/release/projecteur --help >/dev/null
 
 if (( ! package_target )); then
   exit 0

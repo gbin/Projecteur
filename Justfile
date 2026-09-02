@@ -9,7 +9,7 @@ package_dir := build_dir / "packages"
 default:
     @just --list
 
-# Compile Projecteur.
+# Compile the Rust application and native Plasma applet.
 build: _require-arch deps
     cmake -S "{{ project_root }}" -B "{{ build_dir }}" \
         -DCMAKE_BUILD_TYPE=Release \
@@ -34,8 +34,7 @@ package: _require-arch deps
     mkdir -p "$stage" "$packages"
     install -m 0644 "$root/packaging/arch/PKGBUILD" "$stage/PKGBUILD"
 
-    cmake -S "$root" -B "$stage/version-build" -DPACKAGE_TARGETS=OFF
-    cp "$stage/version-build/version-string.archlinux" "$stage/projecteur-pkgver"
+    cp "$root/VERSION" "$stage/projecteur-pkgver"
 
     git -C "$root" ls-files --cached --others --exclude-standard -z \
         | while IFS= read -r -d '' path; do
@@ -204,6 +203,7 @@ deps: _require-arch
         qt6-declarative
         qt6-shadertools
         qt6-wayland
+        rust
     )
 
     mapfile -t missing < <(pacman -T "${dependencies[@]}" || true)

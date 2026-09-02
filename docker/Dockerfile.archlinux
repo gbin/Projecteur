@@ -10,6 +10,7 @@ RUN pacman --noconfirm -Sy && pacman --noconfirm -S \
   sudo \
   tar \
   pkg-config \
+  rust \
   gcc \
   make \
   cmake \

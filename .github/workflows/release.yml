@@ -94,7 +94,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          actual="$("build/ci-${{ matrix.id }}/projecteur" --version | sed -n '1p')"
+          actual="$(target/release/projecteur --version | sed -n '1p')"
           test "$actual" = "Projecteur $(<VERSION)"
 
       - name: Stage release package

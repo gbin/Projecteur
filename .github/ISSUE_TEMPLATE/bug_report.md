@@ -20,7 +20,7 @@ A clear and concise description of what you expected to happen.
  - Linux Distribution and Version: [e.g. Ubuntu 18.04]
  - Desktop/Window Manager and Version [e.g. GNOME 3.28, KDE 5.4...]
  - Did you built _Projecteur_ yourself?: `[y/n]` \
-   _(If yes: Please run cmake for existing build directories, to ensure the generated version info is up to date)_
+   _(If yes, please rebuild from the current checkout before collecting diagnostics.)_
  - What is the output of `projecteur -f` ?: ...
  - What is the output of `projecteur -d` ?: ...
 

@@ -1,9 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file>main.qml</file>
-        <file>spotshapes/Circle.qml</file>
-        <file>spotshapes/Square.qml</file>
-        <file>spotshapes/Star.qml</file>
-        <file>spotshapes/Ngon.qml</file>
-    </qresource>
-</RCC>

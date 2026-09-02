@@ -19,14 +19,16 @@ list(APPEND _PkgDeps_Projecteur_archlinux
 )
 
 list(APPEND _PkgDepsMake_Projecteur_archlinux
-  "fakeroot" "awk" "cmake>=3.20" "extra-cmake-modules>=6.7" "gettext" "make" "lsb-release"
+  "fakeroot" "awk" "rust>=1.85" "cmake>=3.20" "extra-cmake-modules>=6.7" "gettext" "make" "lsb-release"
   "tar" "pkg-config" "qt6-shadertools>=6.10"
 )
 
-set(_PkgDeps_Projecteur_debian "udev")
-set(_PkgDeps_Projecteur_ubuntu "udev")
-set(_PkgDeps_Projecteur_fedora "systemd-udev")
-set(_PkgDeps_Projecteur_opensuse "udev")
+set(_PkgDeps_Projecteur_debian
+  "udev" "qml6-module-org-kde-layershell" "qml6-module-org-kde-pipewire")
+set(_PkgDeps_Projecteur_ubuntu
+  "udev" "qml6-module-org-kde-layershell" "qml6-module-org-kde-pipewire")
+set(_PkgDeps_Projecteur_fedora "systemd-udev" "kpipewire" "layer-shell-qt")
+set(_PkgDeps_Projecteur_opensuse "udev" "kpipewire6" "layer-shell-qt6")
 
 list(APPEND PkgDependencies_MAP_Projecteur
   "archlinux::_PkgDeps_Projecteur_archlinux"

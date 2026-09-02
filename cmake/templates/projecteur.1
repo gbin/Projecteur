@@ -26,7 +26,7 @@ Show complete command line usage with all properties.
 \fB\-v\fR, \fB\-\-version\fR
 Print application version.
 .TP
-\fB\-f\fR
+\fB\-f\fR, \fB\-\-fullversion\fR
 Print detailed application version information.
 .TP
 \fB\-\-cfg\fR \fIFILE\fR
@@ -36,14 +36,14 @@ Set custom config file.
 Print device\-scan results.
 .TP
 \fB\-D\fR \fIDEVICE\fR
-Additional accepted device; DEVICE = vendorId:productId
+Additional accepted USB device; DEVICE = vendorId:productId[:name]
 e.g., \fB\-D\fR 04b3:310c; e.g. \fB\-D\fR 0x0c45:0x8101;
 This option can be used multiple times and works in connection with the
 \fB\-\-device\-scan\fP option.
 .TP
 \fB\-c\fR \fICOMMAND\fR|\fIPROPERTY\fR
-Send command/property to a running instance. See \fBCommands\fP and
-\fBProperties\fP for details. This option can be use multiple times.
+Apply a command/property, forwarding it when an instance is already running. See \fBCommands\fP and
+\fBProperties\fP for details. This option can be used multiple times.
 .TP
 \fB\-\-disable-uinput\fR
 Disable uinput support.
@@ -51,9 +51,11 @@ Disable uinput support.
 \fB\-\-show-dialog\fR
 Show preferences dialog on application start.
 .TP
-\fB\-m\fR, \fB\-\-minimize-only\fR
-Only allow minimizing the dialog. Useful for desktop environments that do not
-have a system tray.
+\fB\-\-hide-systray-icon\fR
+Hide the fallback system tray icon.
+.TP
+\fB\-\-disable-overlay\fR
+Disable the spotlight overlay.
 .PP
 .SH Commands
 .TP
@@ -65,6 +67,9 @@ Show/hide preferences dialog.
 .TP
 preset=NAME
 Set a preset.
+.TP
+preset.next, preset.previous
+Select the next or previous preset.
 .TP
 quit
 Quit the running instance.

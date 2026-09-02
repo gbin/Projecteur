@@ -726,7 +726,7 @@ dependencies = [
 
 [[package]]
 name = "projecteur-app"
-version = "0.11.0"
+version = "1.0.0"
 dependencies = [
  "cxx",
  "cxx-qt",
@@ -742,7 +742,7 @@ dependencies = [
 
 [[package]]
 name = "projecteur-core"
-version = "0.11.0"
+version = "1.0.0"
 dependencies = [
  "libc",
  "linux-raw-sys",

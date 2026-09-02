@@ -3,7 +3,7 @@ if(NOT CMAKE_LIBRARY_OUTPUT_DIRECTORY)
 endif()
 
 qt_add_dbus_interface(PROJECTEUR_DBUS_INTERFACE_SOURCES
-  "${CMAKE_SOURCE_DIR}/src/org.projecteur.Projecteur.xml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/org.projecteur.Projecteur.xml"
   projecteurcontrolinterface
 )
 

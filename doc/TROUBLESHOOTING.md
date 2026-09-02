@@ -67,7 +67,7 @@ Live zoom requires all of the following:
 - KPipeWire;
 - an installed Projecteur desktop entry that matches the running executable.
 
-Install Projecteur instead of launching only `build/projecteur`. KWin authorizes
+Install Projecteur instead of launching only `target/release/projecteur`. KWin authorizes
 the capture interface using the installed
 `org.projecteur.Projecteur.desktop` metadata and can reject an executable from an
 arbitrary build path.

@@ -21,7 +21,8 @@ Qt 5, X11, and non-Plasma support are maintained only for critical fixes on the
 
 ## Requirements
 
-- A C++17 compiler
+- Rust 1.85 or newer and Cargo
+- A C++17 compiler for CXX-Qt glue and the Plasma applet
 - CMake 3.20 or newer
 - Extra CMake Modules 6.7 or newer
 - Qt 6.10 or newer with Core, DBus, Gui, Quick, ShaderTools, WaylandClient, and
@@ -49,7 +50,7 @@ cmake -S . -B build \
 cmake --build build --parallel
 ```
 
-The binary in `build/projecteur` can exercise most of the application, but live
+The binary in `target/release/projecteur` can exercise most of the application, but live
 zoom requires a proper installation. KWin authorizes the restricted capture
 interfaces by matching the executable to Projecteur's installed desktop
 metadata.
@@ -89,9 +90,11 @@ installed.
 At minimum, rebuild and run the same smoke checks as CI:
 
 ```sh
+cargo test --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
 cmake --build build --parallel
-./build/projecteur --version
-./build/projecteur --help
+./target/release/projecteur --version
+./target/release/projecteur --help
 git diff --check
 ```
 
@@ -103,12 +106,11 @@ and presenter model you tested.
 
 | Path | Purpose |
 | --- | --- |
-| `src/` | Application, device handling, settings, and QWidget UI |
-| `qml/` | Wayland overlay and zoom shaders |
+| `projecteur-app/` | Desktop application, QML UI, and CXX-Qt integration |
+| `projecteur-core/` | Qt-independent devices, settings, and input handling |
 | `plasma/` | Native Plasma system tray applet |
 | `protocols/` | Wayland protocol definitions used by the zoom pipeline |
 | `cmake/` | Build, packaging, desktop, AppStream, and manual templates |
-| `po/` | gettext translation catalogs |
 | `doc/` | User documentation, screenshots, and changelog |
 | `packaging/arch/` | Local Arch package recipe |
 
@@ -127,20 +129,11 @@ For example:
 ```
 
 CMake uses this list to generate both device definitions and udev rules. If the
-device needs special event decoding or HID++ behavior, changes in `src/` may also
+device needs special event decoding or HID++ behavior, changes in `projecteur-core/` may also
 be required.
 
 For quick experiments, Projecteur accepts
 `--additional-device VENDOR:PRODUCT` at runtime.
-
-## Translations
-
-Projecteur uses KDE's KI18n/gettext system. Run `Messages.sh` through the standard
-KDE translation tooling to update `projecteur.pot`. Catalogs placed at
-`po/<locale>/projecteur.po` are compiled and installed automatically.
-
-Keep user-visible strings translatable and avoid assembling sentences from
-fragments.
 
 ## Pull requests
 

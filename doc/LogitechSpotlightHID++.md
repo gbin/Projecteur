@@ -79,7 +79,7 @@ codes are:
 A more extensive list of known feature codes are documented by the
 [Solaar project](https://github.com/pwr-Solaar/Solaar/blob/master/docs/features.md).
 Some of the feature codes relevant for the Logitech Spotlight are defined in
-[hidpp.h](../src/hidpp.h).
+[hidpp.rs](../projecteur-core/src/hidpp.rs).
 
 ```c++
 enum class FeatureCode : uint16_t {
@@ -146,7 +146,7 @@ The FeatureSet table for a device may change with a firmware update. The
 application should cache FeatureSet table along with Firmware version and only
 read FeatureSet table again if the firmware version has changed. This logic for
 getting FeatureSet table from device is implemented in
-`initFromDevice` method in `FeatureSet` class in [hidpp.h](../src/hidpp.h).
+the HID++ initialization in [hidpp.rs](../projecteur-core/src/hidpp.rs).
 
 ## Resetting Logitech Spotlight device
 
@@ -164,7 +164,7 @@ Spotlight device can be reset with following HID++ message from the application:
 
   2. Load the FeatureSet table for the device (from pre-existing cache or from
      the device if firmware version has changed by calling `initFromDevice`
-     method in `FeatureSet` class in [hidpp.h](../src/hidpp.h)).
+     handling in [hidpp.rs](../projecteur-core/src/hidpp.rs)).
 
   3. Reset the Spotlight device with the Feature index for Reset Feature Code
      from the FeatureSet table. If the Feature Index for Reset Feature Code is
@@ -192,7 +192,7 @@ following HID++ commands:
 ```
 
 These initialization steps are implemented in `initReceiver` and `initPresenter`
-methods of `SubHidppConnection` class in [device-hidpp.h](../src/device-hidpp.h).
+the device communication code in [hidpp.rs](../projecteur-core/src/hidpp.rs).
 After reprogramming the Next and Back buttons, the spotlight device will send
 mouse movement data when either of these button are long-pressed and device is
 moved. The processing of these events are discussed in the
@@ -279,7 +279,7 @@ Spotlight device. For most messages, these responses from device are just the
 acknowledgements of the HID++ commands sent by the application. However, some
 responses from the Spotlight device contain useful information. These responses
 are processed in the  `onHidppDataAvailable` method in the `SubHidppConnection`
-class in [device-hidpp.h](../src/device-hidpp.h). Description of HID++ messages
+implementation in [hidpp.rs](../projecteur-core/src/hidpp.rs). Description of HID++ messages
 from device to reprogrammed keys (`Next Hold` and `Back Hold`) are provided in
 following sub-section:
 
@@ -302,7 +302,7 @@ Volume Control Actions in Projecteur.
 
 The relevant functions for processing `Next Hold` and `Back Hold` are provided
 in `registerForNotifications` method in the `Spotlight` class
-([spotlight.h](../src/spotlight.h)).
+([hid_report.rs](../projecteur-core/src/hid_report.rs)).
 
 ## Further information
 

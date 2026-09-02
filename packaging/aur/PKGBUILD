@@ -42,6 +42,7 @@ makedepends=(
   'gettext'
   'git'
   'qt6-shadertools>=6.10'
+  'rust>=1.85'
 )
 provides=('projecteur')
 conflicts=('projecteur')
@@ -59,7 +60,7 @@ prepare() {
 pkgver() {
   cd "$srcdir/projecteur"
   printf '%s.r%s.%s' \
-    "$(<"$srcdir/build/version-string.archlinux")" \
+    "$(<VERSION)" \
     "$(git rev-list --count HEAD)" \
     "$(git rev-parse --short=7 HEAD)"
 }
