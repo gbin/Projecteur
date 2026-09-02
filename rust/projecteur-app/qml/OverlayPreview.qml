@@ -53,38 +53,41 @@ Window {
     onScreenChanged: ensureDesktopStream()
     Component.onCompleted: ensureDesktopStream()
 
-    KPipeWire.PipeWireSourceItem {
-        id: desktopStream
-        visible: root.visible
-        enabled: false
+    Item {
+        id: desktopCaptureSource
         width: root.width
         height: root.height
-        allowDmaBuf: true
-        objectSerial: {
-            const generation = backend.captureGeneration
-            return backend.captureObjectSerial(
-                root.captureX, root.captureY, root.captureWidth, root.captureHeight)
-        }
-        nodeId: {
-            const generation = backend.captureGeneration
-            return objectSerial === 0
-                    ? backend.captureNodeId(
-                        root.captureX, root.captureY, root.captureWidth, root.captureHeight)
-                    : 0
-        }
-    }
 
-    Image {
-        id: desktopSnapshot
-        visible: false
-        width: root.width
-        height: root.height
-        cache: false
-        source: {
-            const generation = backend.captureGeneration
-            const path = backend.captureSnapshotSource(
-                root.captureX, root.captureY, root.captureWidth, root.captureHeight)
-            return path.length > 0 ? "file://" + path : ""
+        KPipeWire.PipeWireSourceItem {
+            id: desktopStream
+            anchors.fill: parent
+            enabled: false
+            allowDmaBuf: true
+            objectSerial: {
+                const generation = backend.captureGeneration
+                return backend.captureObjectSerial(
+                    root.captureX, root.captureY, root.captureWidth, root.captureHeight)
+            }
+            nodeId: {
+                const generation = backend.captureGeneration
+                return objectSerial === 0
+                        ? backend.captureNodeId(
+                            root.captureX, root.captureY, root.captureWidth, root.captureHeight)
+                        : 0
+            }
+        }
+
+        Image {
+            id: desktopSnapshot
+            anchors.fill: parent
+            visible: !desktopStream.ready
+            cache: false
+            source: {
+                const generation = backend.captureGeneration
+                const path = backend.captureSnapshotSource(
+                    root.captureX, root.captureY, root.captureWidth, root.captureHeight)
+                return path.length > 0 ? "file://" + path : ""
+            }
         }
     }
 
@@ -149,7 +152,8 @@ Window {
             id: zoomTexture
             anchors.fill: aperture
             visible: false
-            sourceItem: desktopStream.ready ? desktopStream : desktopSnapshot
+            sourceItem: desktopCaptureSource
+            hideSource: true
             sourceRect: Qt.rect(
                 root.activeX - aperture.width / (2 * backend.zoomFactor),
                 root.activeY - aperture.height / (2 * backend.zoomFactor),
