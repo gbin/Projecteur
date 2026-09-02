@@ -10,6 +10,7 @@ pkgdesc='Virtual laser pointer for inertial pointer devices on KDE Plasma Waylan
 arch=('x86_64')
 url='https://github.com/gbin/Projecteur'
 license=('MIT')
+options=('!lto')
 depends=(
   'gcc-libs'
   'glibc'
@@ -36,7 +37,7 @@ makedepends=(
   'extra-cmake-modules>=6.7'
   'gettext'
   'qt6-shadertools>=6.10'
-  'rust>=1.85'
+  'rust'
 )
 source=(
   'projecteur-local.tar.gz'
@@ -52,6 +53,9 @@ pkgver() {
 }
 
 build() {
+  # makepkg exports RUSTFLAGS, which takes precedence over .cargo/config.toml.
+  # Preserve Projecteur's CXX-Qt linker selection in package builds.
+  export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-fuse-ld=bfd"
   cmake -S projecteur-local -B build \
     -DCMAKE_BUILD_TYPE=None \
     -DCMAKE_INSTALL_PREFIX=/usr \
