@@ -33,7 +33,7 @@ fn main() {
     let mut application = backend::ffi::create_widget_application();
     application
         .pin_mut()
-        .set_application_name(&QString::from("projecteur-rs"));
+        .set_application_name(&QString::from("Projecteur"));
     application
         .pin_mut()
         .set_application_display_name(&QString::from("Projecteur"));
