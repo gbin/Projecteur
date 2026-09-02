@@ -971,10 +971,7 @@ fn run_button_manager(
                     let frame = &mut frames[source_index];
                     frame.push(event);
                     if event.is_sync_report() {
-                        if frame
-                            .first()
-                            .is_some_and(|event| event.is_relative_motion())
-                        {
+                        if frame_has_relative_motion(frame) {
                             if motion_from_evdev {
                                 let (x, y) = relative_motion(frame);
                                 if (x != 0 || y != 0)
@@ -3100,6 +3097,10 @@ fn relative_motion(frame: &[InputEvent]) -> (i32, i32) {
     (axis(REL_X), axis(REL_Y))
 }
 
+fn frame_has_relative_motion(frame: &[InputEvent]) -> bool {
+    frame.iter().any(|event| event.is_relative_motion())
+}
+
 #[cfg(test)]
 mod tests {
     use projecteur_core::{Bus, DeviceId, device_scan::DeviceNode};
@@ -3234,6 +3235,25 @@ mod tests {
         ];
 
         assert_eq!(relative_motion(&frame), (5, -4));
+    }
+
+    #[test]
+    fn recognizes_motion_when_metadata_precedes_relative_axes() {
+        let frame = [
+            InputEvent {
+                event_type: projecteur_core::input_event::EV_MSC,
+                code: 4,
+                value: 0,
+            },
+            InputEvent {
+                event_type: EV_REL,
+                code: REL_X,
+                value: 5,
+            },
+            sync_event(),
+        ];
+
+        assert!(frame_has_relative_motion(&frame));
     }
 
     #[test]

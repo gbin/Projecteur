@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
+import org.kde.kirigami as Kirigami
 import org.kde.kquickcontrols as KQuickControls
 
 ApplicationWindow {
@@ -80,227 +81,270 @@ ApplicationWindow {
                 width: parent.width
                 spacing: 10
 
-                CheckBox {
-                    text: qsTr("Enable")
-                    checked: !backend.overlayDisabled
-                    onClicked: { backend.overlayDisabled = !checked; root.changed() }
+                Frame {
+                    Layout.fillWidth: true
+                    ColumnLayout {
+                        anchors.fill: parent
+                        Switch {
+                            text: qsTr("Overlay enabled")
+                            checked: !backend.overlayDisabled
+                            font.bold: true
+                            onClicked: { backend.overlayDisabled = !checked; root.changed() }
+                        }
+                        Switch {
+                            text: qsTr("Show on all screens")
+                            checked: backend.multiScreenOverlay
+                            enabled: !backend.overlayDisabled
+                            onClicked: { backend.multiScreenOverlay = checked; root.changed() }
+                        }
+                    }
                 }
 
                 GridLayout {
                     Layout.fillWidth: true
+                    enabled: !backend.overlayDisabled
                     columns: 2
                     columnSpacing: 12
                     rowSpacing: 10
 
-                    ColumnLayout {
+                    Kirigami.FormLayout {
+                        id: leftOverlayForm
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignTop
+                        twinFormLayouts: [rightOverlayForm]
 
-                        GroupBox {
-                            title: qsTr("Shape")
+                        Kirigami.Separator {
+                            Kirigami.FormData.label: qsTr("Spotlight shape")
+                            Kirigami.FormData.isSection: true
+                        }
+                        RowLayout {
+                            enabled: backend.zoomEnabled || backend.showSpotShade || backend.showBorder
+                            Kirigami.FormData.label: qsTr("Size:")
+                            SpinBox {
+                                from: 5; to: 100; value: backend.spotSize
+                                onValueModified: { backend.spotSize = value; root.changed() }
+                            }
+                            Label { text: qsTr("% of screen height") }
+                        }
+                        ComboBox {
+                            enabled: backend.zoomEnabled || backend.showSpotShade || backend.showBorder
                             Layout.fillWidth: true
-                            ColumnLayout {
-                                anchors.fill: parent
-                                SettingRow {
-                                    label: qsTr("Size")
-                                    SpinBox {
-                                        from: 5; to: 100; value: backend.spotSize
-                                        onValueModified: { backend.spotSize = value; root.changed() }
-                                    }
-                                    Label { text: qsTr("% of screen height") }
-                                }
-                                SettingRow {
-                                    label: qsTr("Type")
-                                    ComboBox {
-                                        Layout.fillWidth: true
-                                        model: [qsTr("Circle"), qsTr("Square"), qsTr("Star"), qsTr("N-gon")]
-                                        currentIndex: backend.spotShape.indexOf("Square") >= 0 ? 1
-                                                      : backend.spotShape.indexOf("Star") >= 0 ? 2
-                                                      : backend.spotShape.indexOf("Ngon") >= 0 ? 3 : 0
-                                        onActivated: {
-                                            backend.spotShape = ["spotshapes/Circle.qml", "spotshapes/Square.qml",
-                                                                 "spotshapes/Star.qml", "spotshapes/Ngon.qml"][currentIndex]
-                                            root.changed()
-                                        }
-                                    }
-                                }
-                                SettingRow {
-                                    visible: backend.spotShape.indexOf("Circle") < 0
-                                    label: qsTr("Rotation")
-                                    SpinBox {
-                                        from: 0; to: 3600; stepSize: 10; value: Math.round(backend.spotRotation * 10)
-                                        textFromValue: function(value) { return (value / 10).toFixed(1) + "°" }
-                                        valueFromText: function(text) { return Math.round(parseFloat(text) * 10) }
-                                        onValueModified: { backend.spotRotation = value / 10; root.changed() }
-                                    }
-                                }
-                                SettingRow {
-                                    visible: backend.spotShape.indexOf("Square") >= 0
-                                    label: qsTr("Corner Radius")
-                                    SpinBox { from: 0; to: 100; value: backend.squareRadius
-                                        onValueModified: { backend.squareRadius = value; root.changed() } }
-                                }
-                                SettingRow {
-                                    visible: backend.spotShape.indexOf("Star") >= 0
-                                    label: qsTr("Points")
-                                    SpinBox { from: 3; to: 100; value: backend.starPoints
-                                        onValueModified: { backend.starPoints = value; root.changed() } }
-                                }
-                                SettingRow {
-                                    visible: backend.spotShape.indexOf("Star") >= 0
-                                    label: qsTr("Inner Radius")
-                                    SpinBox { from: 5; to: 100; value: backend.starInnerRadius
-                                        onValueModified: { backend.starInnerRadius = value; root.changed() } }
-                                }
-                                SettingRow {
-                                    visible: backend.spotShape.indexOf("Ngon") >= 0
-                                    label: qsTr("Sides")
-                                    SpinBox { from: 3; to: 100; value: backend.ngonSides
-                                        onValueModified: { backend.ngonSides = value; root.changed() } }
-                                }
+                            Kirigami.FormData.label: qsTr("Type:")
+                            model: [qsTr("Circle"), qsTr("Square"), qsTr("Star"), qsTr("N-gon")]
+                            currentIndex: backend.spotShape.indexOf("Square") >= 0 ? 1
+                                          : backend.spotShape.indexOf("Star") >= 0 ? 2
+                                          : backend.spotShape.indexOf("Ngon") >= 0 ? 3 : 0
+                            onActivated: {
+                                backend.spotShape = ["spotshapes/Circle.qml", "spotshapes/Square.qml",
+                                                     "spotshapes/Star.qml", "spotshapes/Ngon.qml"][currentIndex]
+                                root.changed()
                             }
                         }
-
-                        GroupBox {
-                            Layout.fillWidth: true
-                            label: CheckBox {
-                                text: qsTr("Zoom")
-                                checked: backend.zoomEnabled
-                                onClicked: { backend.zoomEnabled = checked; root.changed() }
-                            }
-                            ColumnLayout {
-                                anchors.fill: parent
-                                enabled: backend.zoomEnabled
-                                SettingRow {
-                                    label: qsTr("Level")
-                                    SpinBox {
-                                        from: 150; to: 2000; stepSize: 10; value: Math.round(backend.zoomFactor * 100)
-                                        textFromValue: function(value) { return (value / 100).toFixed(2) + "×" }
-                                        valueFromText: function(text) { return Math.round(parseFloat(text) * 100) }
-                                        onValueModified: { backend.zoomFactor = value / 100; root.changed() }
-                                    }
-                                }
-                                SettingRow {
-                                    label: qsTr("Content Type")
-                                    ComboBox {
-                                        Layout.fillWidth: true
-                                        model: [qsTr("Smooth (images)"), qsTr("Text and UI"), qsTr("Pixel-perfect")]
-                                        currentIndex: backend.zoomMode === "text" ? 1 : backend.zoomMode === "pixel" ? 2 : 0
-                                        onActivated: { backend.zoomMode = ["smooth", "text", "pixel"][currentIndex]; root.changed() }
-                                    }
-                                }
-                            }
+                        SpinBox {
+                            visible: backend.spotShape.indexOf("Circle") < 0
+                            enabled: backend.zoomEnabled || backend.showSpotShade || backend.showBorder
+                            Kirigami.FormData.label: qsTr("Rotation:")
+                            from: 0; to: 3600; stepSize: 10; value: Math.round(backend.spotRotation * 10)
+                            textFromValue: function(value) { return (value / 10).toFixed(1) + "°" }
+                            valueFromText: function(text) { return Math.round(parseFloat(text) * 10) }
+                            onValueModified: { backend.spotRotation = value / 10; root.changed() }
+                        }
+                        SpinBox {
+                            visible: backend.spotShape.indexOf("Square") >= 0
+                            enabled: backend.zoomEnabled || backend.showSpotShade || backend.showBorder
+                            Kirigami.FormData.label: qsTr("Corner radius:")
+                            from: 0; to: 100; value: backend.squareRadius
+                            onValueModified: { backend.squareRadius = value; root.changed() }
+                        }
+                        SpinBox {
+                            visible: backend.spotShape.indexOf("Star") >= 0
+                            enabled: backend.zoomEnabled || backend.showSpotShade || backend.showBorder
+                            Kirigami.FormData.label: qsTr("Points:")
+                            from: 3; to: 100; value: backend.starPoints
+                            onValueModified: { backend.starPoints = value; root.changed() }
+                        }
+                        SpinBox {
+                            visible: backend.spotShape.indexOf("Star") >= 0
+                            enabled: backend.zoomEnabled || backend.showSpotShade || backend.showBorder
+                            Kirigami.FormData.label: qsTr("Inner radius:")
+                            from: 5; to: 100; value: backend.starInnerRadius
+                            onValueModified: { backend.starInnerRadius = value; root.changed() }
+                        }
+                        SpinBox {
+                            visible: backend.spotShape.indexOf("Ngon") >= 0
+                            enabled: backend.zoomEnabled || backend.showSpotShade || backend.showBorder
+                            Kirigami.FormData.label: qsTr("Sides:")
+                            from: 3; to: 100; value: backend.ngonSides
+                            onValueModified: { backend.ngonSides = value; root.changed() }
                         }
 
-                        GroupBox {
-                            title: qsTr("Cursor")
-                            Layout.fillWidth: true
-                            SettingRow {
-                                anchors.fill: parent
-                                label: qsTr("Cursor")
-                                ComboBox {
-                                    Layout.fillWidth: true
-                                    textRole: "text"; valueRole: "value"
-                                    model: [
-                                        { text: qsTr("No Cursor"), value: 10 },
-                                        { text: qsTr("Arrow Cursor"), value: 0 },
-                                        { text: qsTr("Busy Cursor"), value: 16 },
-                                        { text: qsTr("Cross Cursor"), value: 2 },
-                                        { text: qsTr("Pointing Hand Cursor"), value: 13 },
-                                        { text: qsTr("Open Hand Cursor"), value: 17 },
-                                        { text: qsTr("Up Arrow Cursor"), value: 1 },
-                                        { text: qsTr("What's This Cursor"), value: 15 }
-                                    ]
-                                    Component.onCompleted: {
-                                        for (let i = 0; i < model.length; ++i)
-                                            if (model[i].value === backend.cursor) currentIndex = i
-                                    }
-                                    onActivated: { backend.cursor = currentValue; root.changed() }
-                                }
-                            }
+                        Kirigami.Separator {
+                            Kirigami.FormData.label: qsTr("Zoom")
+                            Kirigami.FormData.isSection: true
                         }
-
                         CheckBox {
-                            text: qsTr("Multi-screen overlay")
-                            checked: backend.multiScreenOverlay
-                            onClicked: { backend.multiScreenOverlay = checked; root.changed() }
+                            text: qsTr("Enable zoom")
+                            checked: backend.zoomEnabled
+                            onClicked: { backend.zoomEnabled = checked; root.changed() }
+                        }
+                        SpinBox {
+                            enabled: backend.zoomEnabled
+                            Kirigami.FormData.label: qsTr("Level:")
+                            from: 150; to: 2000; stepSize: 10; value: Math.round(backend.zoomFactor * 100)
+                            textFromValue: function(value) { return (value / 100).toFixed(2) + "×" }
+                            valueFromText: function(text) { return Math.round(parseFloat(text) * 100) }
+                            onValueModified: { backend.zoomFactor = value / 100; root.changed() }
+                        }
+                        ComboBox {
+                            enabled: backend.zoomEnabled
+                            Layout.fillWidth: true
+                            Kirigami.FormData.label: qsTr("Content type:")
+                            model: [qsTr("Smooth (images)"), qsTr("Text and UI"), qsTr("Pixel-perfect")]
+                            currentIndex: backend.zoomMode === "text" ? 1 : backend.zoomMode === "pixel" ? 2 : 0
+                            onActivated: { backend.zoomMode = ["smooth", "text", "pixel"][currentIndex]; root.changed() }
+                        }
+
+                        Kirigami.Separator {
+                            Kirigami.FormData.label: qsTr("Cursor")
+                            Kirigami.FormData.isSection: true
+                        }
+                        ComboBox {
+                            Layout.fillWidth: true
+                            Kirigami.FormData.label: qsTr("Cursor:")
+                            textRole: "text"; valueRole: "value"
+                            model: [
+                                { text: qsTr("No Cursor"), value: 10 },
+                                { text: qsTr("Arrow Cursor"), value: 0 },
+                                { text: qsTr("Busy Cursor"), value: 16 },
+                                { text: qsTr("Cross Cursor"), value: 2 },
+                                { text: qsTr("Pointing Hand Cursor"), value: 13 },
+                                { text: qsTr("Open Hand Cursor"), value: 17 },
+                                { text: qsTr("Up Arrow Cursor"), value: 1 },
+                                { text: qsTr("What's This Cursor"), value: 15 }
+                            ]
+                            Component.onCompleted: {
+                                for (let i = 0; i < model.length; ++i)
+                                    if (model[i].value === backend.cursor) currentIndex = i
+                            }
+                            onActivated: { backend.cursor = currentValue; root.changed() }
                         }
                     }
 
-                    ColumnLayout {
+                    Kirigami.FormLayout {
+                        id: rightOverlayForm
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignTop
+                        twinFormLayouts: [leftOverlayForm]
 
-                        GroupBox {
-                            Layout.fillWidth: true
-                            label: CheckBox { text: qsTr("Shade"); checked: backend.showSpotShade
-                                onClicked: { backend.showSpotShade = checked; root.changed() } }
-                            ColumnLayout {
-                                anchors.fill: parent; enabled: backend.showSpotShade
-                                SettingRow { label: qsTr("Color")
-                                    ColorButton { selectedColor: backend.shadeColor
-                                        onColorAccepted: function(value) { backend.shadeColor = value; root.changed() } } }
-                                SettingRow { label: qsTr("Opacity")
-                                    SpinBox { from: 0; to: 100; stepSize: 10; value: Math.round(backend.shadeOpacity * 100)
-                                        textFromValue: function(value) { return (value / 100).toFixed(2) }
-                                        valueFromText: function(text) { return Math.round(parseFloat(text) * 100) }
-                                        onValueModified: { backend.shadeOpacity = value / 100; root.changed() } } }
-                            }
+                        Kirigami.Separator {
+                            Kirigami.FormData.label: qsTr("Shade")
+                            Kirigami.FormData.isSection: true
+                        }
+                        CheckBox {
+                            text: qsTr("Enable shade")
+                            checked: backend.showSpotShade
+                            onClicked: { backend.showSpotShade = checked; root.changed() }
+                        }
+                        ColorButton {
+                            enabled: backend.showSpotShade
+                            Kirigami.FormData.label: qsTr("Color:")
+                            selectedColor: backend.shadeColor
+                            onColorAccepted: function(value) { backend.shadeColor = value; root.changed() }
+                        }
+                        SpinBox {
+                            enabled: backend.showSpotShade
+                            Kirigami.FormData.label: qsTr("Opacity:")
+                            from: 0; to: 100; stepSize: 10; value: Math.round(backend.shadeOpacity * 100)
+                            textFromValue: function(value) { return (value / 100).toFixed(2) }
+                            valueFromText: function(text) { return Math.round(parseFloat(text) * 100) }
+                            onValueModified: { backend.shadeOpacity = value / 100; root.changed() }
                         }
 
-                        GroupBox {
+                        Kirigami.Separator {
+                            Kirigami.FormData.label: qsTr("Laser dot")
+                            Kirigami.FormData.isSection: true
+                        }
+                        CheckBox {
+                            text: qsTr("Enable laser dot")
+                            checked: backend.showCenterDot
+                            onClicked: { backend.showCenterDot = checked; root.changed() }
+                        }
+                        ComboBox {
+                            enabled: backend.showCenterDot
                             Layout.fillWidth: true
-                            label: CheckBox { text: qsTr("Laser dot"); checked: backend.showCenterDot
-                                onClicked: { backend.showCenterDot = checked; root.changed() } }
-                            ColumnLayout {
-                                anchors.fill: parent; enabled: backend.showCenterDot
-                                SettingRow { label: qsTr("Appearance")
-                                    ComboBox { Layout.fillWidth: true
-                                        model: [qsTr("Solid"), qsTr("Diffuse scintillating")]
-                                        currentIndex: backend.dotMode === "diffuse" ? 1 : 0
-                                        onActivated: { backend.dotMode = currentIndex ? "diffuse" : "solid"; root.changed() } } }
-                                CheckBox { text: qsTr("Fading trail"); checked: backend.dotTrailEnabled
-                                    onClicked: { backend.dotTrailEnabled = checked; root.changed() } }
-                                SettingRow { label: qsTr("Size")
-                                    SpinBox { from: 3; to: 100; value: backend.dotSize
-                                        onValueModified: { backend.dotSize = value; root.changed() } }
-                                    Label { text: qsTr("pixels") } }
-                                SettingRow { label: qsTr("Color")
-                                    ColorButton { selectedColor: backend.dotColor
-                                        onColorAccepted: function(value) { backend.dotColor = value; root.changed() } } }
-                                SettingRow { label: qsTr("Opacity")
-                                    SpinBox { from: 0; to: 100; stepSize: 10; value: Math.round(backend.dotOpacity * 100)
-                                        textFromValue: function(value) { return (value / 100).toFixed(2) }
-                                        valueFromText: function(text) { return Math.round(parseFloat(text) * 100) }
-                                        onValueModified: { backend.dotOpacity = value / 100; root.changed() } } }
+                            Kirigami.FormData.label: qsTr("Appearance:")
+                            model: [qsTr("Solid"), qsTr("Diffuse scintillating")]
+                            currentIndex: backend.dotMode === "diffuse" ? 1 : 0
+                            onActivated: { backend.dotMode = currentIndex ? "diffuse" : "solid"; root.changed() }
+                        }
+                        CheckBox {
+                            enabled: backend.showCenterDot
+                            text: qsTr("Fading trail")
+                            checked: backend.dotTrailEnabled
+                            onClicked: { backend.dotTrailEnabled = checked; root.changed() }
+                        }
+                        RowLayout {
+                            enabled: backend.showCenterDot
+                            Kirigami.FormData.label: qsTr("Size:")
+                            SpinBox {
+                                from: 3; to: 100; value: backend.dotSize
+                                onValueModified: { backend.dotSize = value; root.changed() }
                             }
+                            Label { text: qsTr("pixels") }
+                        }
+                        ColorButton {
+                            enabled: backend.showCenterDot
+                            Kirigami.FormData.label: qsTr("Color:")
+                            selectedColor: backend.dotColor
+                            onColorAccepted: function(value) { backend.dotColor = value; root.changed() }
+                        }
+                        SpinBox {
+                            enabled: backend.showCenterDot
+                            Kirigami.FormData.label: qsTr("Opacity:")
+                            from: 0; to: 100; stepSize: 10; value: Math.round(backend.dotOpacity * 100)
+                            textFromValue: function(value) { return (value / 100).toFixed(2) }
+                            valueFromText: function(text) { return Math.round(parseFloat(text) * 100) }
+                            onValueModified: { backend.dotOpacity = value / 100; root.changed() }
                         }
 
-                        GroupBox {
-                            Layout.fillWidth: true
-                            label: CheckBox { text: qsTr("Border"); checked: backend.showBorder
-                                onClicked: { backend.showBorder = checked; root.changed() } }
-                            ColumnLayout {
-                                anchors.fill: parent; enabled: backend.showBorder
-                                SettingRow { label: qsTr("Size")
-                                    SpinBox { from: 0; to: 100; value: backend.borderSize
-                                        onValueModified: { backend.borderSize = value; root.changed() } }
-                                    Label { text: qsTr("% of spotlight size") } }
-                                SettingRow { label: qsTr("Color")
-                                    ColorButton { selectedColor: backend.borderColor
-                                        onColorAccepted: function(value) { backend.borderColor = value; root.changed() } } }
-                                SettingRow { label: qsTr("Opacity")
-                                    SpinBox { from: 0; to: 100; stepSize: 10; value: Math.round(backend.borderOpacity * 100)
-                                        textFromValue: function(value) { return (value / 100).toFixed(2) }
-                                        valueFromText: function(text) { return Math.round(parseFloat(text) * 100) }
-                                        onValueModified: { backend.borderOpacity = value / 100; root.changed() } } }
+                        Kirigami.Separator {
+                            Kirigami.FormData.label: qsTr("Border")
+                            Kirigami.FormData.isSection: true
+                        }
+                        CheckBox {
+                            text: qsTr("Enable border")
+                            checked: backend.showBorder
+                            onClicked: { backend.showBorder = checked; root.changed() }
+                        }
+                        RowLayout {
+                            enabled: backend.showBorder
+                            Kirigami.FormData.label: qsTr("Size:")
+                            SpinBox {
+                                from: 0; to: 100; value: backend.borderSize
+                                onValueModified: { backend.borderSize = value; root.changed() }
                             }
+                            Label { text: qsTr("% of spotlight size") }
+                        }
+                        ColorButton {
+                            enabled: backend.showBorder
+                            Kirigami.FormData.label: qsTr("Color:")
+                            selectedColor: backend.borderColor
+                            onColorAccepted: function(value) { backend.borderColor = value; root.changed() }
+                        }
+                        SpinBox {
+                            enabled: backend.showBorder
+                            Kirigami.FormData.label: qsTr("Opacity:")
+                            from: 0; to: 100; stepSize: 10; value: Math.round(backend.borderOpacity * 100)
+                            textFromValue: function(value) { return (value / 100).toFixed(2) }
+                            valueFromText: function(text) { return Math.round(parseFloat(text) * 100) }
+                            onValueModified: { backend.borderOpacity = value / 100; root.changed() }
                         }
                     }
                 }
 
                 Frame {
                     Layout.fillWidth: true
+                    enabled: !backend.overlayDisabled
                     RowLayout {
                         anchors.fill: parent
                         Label { text: qsTr("Presets") }
@@ -322,6 +366,7 @@ ApplicationWindow {
                 Button {
                     text: qsTr("&Show test...")
                     Layout.alignment: Qt.AlignLeft
+                    enabled: !backend.overlayDisabled
                     onClicked: backend.showOverlayTest()
                 }
             }

@@ -21,6 +21,7 @@ depends=(
   'kdeclarative>=6.7'
   'kglobalaccel>=6.7'
   'ki18n>=6.7'
+  'kirigami>=6.7'
   'kpipewire>=6.7'
   'knotifications>=6.7'
   'kwidgetsaddons>=6.7'
