@@ -30,18 +30,20 @@ Window {
     LayerShell.Window.activateOnShow: false
 
     readonly property real deviceScale: screen ? screen.devicePixelRatio : 1
+    readonly property bool pointerDriven: backend.previewMode || !backend.presenterConnected
     readonly property bool contentEnabled: backend.multiScreenOverlay
-                                            || (backend.presenterConnected
-                                                ? screenEnabled : pointer.containsMouse)
+                                            || (pointerDriven ? pointer.containsMouse : screenEnabled)
     readonly property real spotDiameter: Math.max(50, Math.min(height, height * backend.spotSize / 100))
     readonly property int captureX: screen ? Math.round(screen.virtualX) : 0
     readonly property int captureY: screen ? Math.round(screen.virtualY) : 0
     readonly property int captureWidth: screen ? Math.round(screen.width) : 0
     readonly property int captureHeight: screen ? Math.round(screen.height) : 0
-    readonly property real activeX: backend.presenterConnected ? presenterGlobalX - screen.virtualX
-                                    : (pointer.containsMouse ? pointer.mouseX : width / 2)
-    readonly property real activeY: backend.presenterConnected ? presenterGlobalY - screen.virtualY
-                                    : (pointer.containsMouse ? pointer.mouseY : height / 2)
+    readonly property real activeX: pointerDriven
+                                    ? (pointer.containsMouse ? pointer.mouseX : width / 2)
+                                    : presenterGlobalX - screen.virtualX
+    readonly property real activeY: pointerDriven
+                                    ? (pointer.containsMouse ? pointer.mouseY : height / 2)
+                                    : presenterGlobalY - screen.virtualY
 
     function snap(value) { return Math.round(value * deviceScale) / deviceScale }
 
@@ -108,7 +110,10 @@ Window {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: backend.cursor
-        onClicked: backend.overlayActive = false
+        onClicked: {
+            backend.overlayActive = false
+            backend.previewMode = false
+        }
     }
 
     Item {
@@ -341,7 +346,7 @@ Window {
     }
 
     Rectangle {
-        visible: backend.previewTimeoutEnabled
+        visible: backend.previewMode
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top; anchors.topMargin: 24
         width: safetyText.implicitWidth + 32; height: safetyText.implicitHeight + 20
@@ -350,12 +355,10 @@ Window {
             id: safetyText
             anchors.centerIn: parent
             color: "white"
-            text: qsTr("Move the pointer to test the overlay — click to close (12-second timeout)")
+            text: qsTr("Click anywhere to stop")
         }
     }
 
     Timer { id: liveIdleTimer; interval: 600
-        onTriggered: if (!backend.previewTimeoutEnabled) backend.overlayActive = false }
-    Timer { interval: 12000; running: root.visible && backend.previewTimeoutEnabled
-        onTriggered: backend.overlayActive = false }
+        onTriggered: if (!backend.previewMode) backend.overlayActive = false }
 }

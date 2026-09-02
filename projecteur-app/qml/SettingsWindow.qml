@@ -109,19 +109,37 @@ ApplicationWindow {
 
                 Frame {
                     Layout.fillWidth: true
-                    ColumnLayout {
+                    RowLayout {
                         anchors.fill: parent
-                        Switch {
-                            text: qsTr("Overlay enabled")
-                            checked: !backend.overlayDisabled
-                            font.bold: true
-                            onClicked: { backend.overlayDisabled = !checked; root.changed() }
+                        ColumnLayout {
+                            Switch {
+                                text: qsTr("Overlay enabled")
+                                checked: !backend.overlayDisabled
+                                font.bold: true
+                                onClicked: { backend.overlayDisabled = !checked; root.changed() }
+                            }
+                            Switch {
+                                text: qsTr("Show on all screens")
+                                checked: backend.multiScreenOverlay
+                                enabled: !backend.overlayDisabled
+                                onClicked: { backend.multiScreenOverlay = checked; root.changed() }
+                            }
                         }
-                        Switch {
-                            text: qsTr("Show on all screens")
-                            checked: backend.multiScreenOverlay
+                        Item { Layout.fillWidth: true }
+                        Button {
+                            Layout.alignment: Qt.AlignTop
                             enabled: !backend.overlayDisabled
-                            onClicked: { backend.multiScreenOverlay = checked; root.changed() }
+                            text: backend.overlayActive ? qsTr("Hide Spotlight") : qsTr("Test Spotlight")
+                            icon.name: backend.overlayActive
+                                       ? "visibility-hidden-symbolic" : "visibility-symbolic"
+                            onClicked: {
+                                if (backend.overlayActive) {
+                                    backend.overlayActive = false
+                                    backend.previewMode = false
+                                } else {
+                                    backend.showOverlayTest()
+                                }
+                            }
                         }
                     }
                 }
@@ -389,13 +407,6 @@ ApplicationWindow {
                             ToolTip.text: qsTr("Create new preset from current spotlight settings.")
                             onClicked: presetNameDialog.open() }
                     }
-                }
-
-                Button {
-                    text: qsTr("&Show test...")
-                    Layout.alignment: Qt.AlignLeft
-                    enabled: !backend.overlayDisabled
-                    onClicked: backend.showOverlayTest()
                 }
             }
         }

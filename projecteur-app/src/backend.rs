@@ -100,7 +100,7 @@ pub mod ffi {
         #[qproperty(bool, tray_visible)]
         #[qproperty(bool, overlay_disabled)]
         #[qproperty(bool, overlay_active)]
-        #[qproperty(bool, preview_timeout_enabled)]
+        #[qproperty(bool, preview_mode)]
         #[qproperty(bool, presenter_connected)]
         #[qproperty(QString, presenter_device)]
         #[qproperty(QString, presenter_details)]
@@ -307,7 +307,7 @@ pub struct ProjecteurBackendRust {
     tray_visible: bool,
     overlay_disabled: bool,
     overlay_active: bool,
-    preview_timeout_enabled: bool,
+    preview_mode: bool,
     presenter_connected: bool,
     presenter_device: QString,
     presenter_details: QString,
@@ -467,7 +467,7 @@ impl ProjecteurBackendRust {
             tray_visible: options.tray_visible,
             overlay_disabled: options.overlay_disabled,
             overlay_active: options.overlay_preview,
-            preview_timeout_enabled: options.overlay_preview,
+            preview_mode: options.overlay_preview,
             presenter_connected: false,
             presenter_device: QString::default(),
             presenter_details: QString::default(),
@@ -1997,7 +1997,7 @@ impl ffi::ProjecteurBackend {
     }
 
     fn show_overlay_test(mut self: Pin<&mut Self>) {
-        self.as_mut().set_preview_timeout_enabled(true);
+        self.as_mut().set_preview_mode(true);
         self.as_mut().set_overlay_active(true);
     }
 
@@ -2667,7 +2667,7 @@ impl ffi::ProjecteurBackend {
                     if !self.as_ref().overlay_disabled() {
                         self.as_mut().set_overlay_active(true);
                     }
-                    self.as_mut().set_preview_timeout_enabled(false);
+                    self.as_mut().set_preview_mode(false);
                 }
                 Some(Ok(PresenterEvent::Motion { x, y })) => {
                     self.as_mut().set_pointer_delta_x(x);
@@ -2677,7 +2677,7 @@ impl ffi::ProjecteurBackend {
                     if !self.as_ref().overlay_disabled() {
                         self.as_mut().set_overlay_active(true);
                     }
-                    self.as_mut().set_preview_timeout_enabled(false);
+                    self.as_mut().set_preview_mode(false);
                 }
                 Some(Ok(PresenterEvent::Report(PresenterReport::Keyboard(keyboard)))) => {
                     let navigation_pressed = keyboard
@@ -2791,7 +2791,7 @@ impl ffi::ProjecteurBackend {
                 Ok(ControlCommand::SetSpotlightActive(active)) => {
                     if !self.as_ref().overlay_disabled() {
                         self.as_mut().set_overlay_active(active);
-                        self.as_mut().set_preview_timeout_enabled(false);
+                        self.as_mut().set_preview_mode(false);
                     }
                 }
                 Ok(ControlCommand::LoadPreset(name, result)) => {
