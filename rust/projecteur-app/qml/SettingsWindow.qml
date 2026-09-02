@@ -17,7 +17,11 @@ ApplicationWindow {
     property bool dirty: false
     property bool closingAfterCommit: false
 
-    function changed() { dirty = true; presetCombo.currentIndex = 0 }
+    function changed() {
+        dirty = true
+        presetCombo.currentIndex = 0
+        backend.markSettingsChanged()
+    }
     function apply() {
         if (backend.saveSettings()) dirty = false
     }

@@ -187,6 +187,9 @@ pub mod ffi {
         fn restore_default_settings(self: Pin<&mut ProjecteurBackend>);
 
         #[qinvokable]
+        fn mark_settings_changed(self: Pin<&mut ProjecteurBackend>);
+
+        #[qinvokable]
         fn show_overlay_test(self: Pin<&mut ProjecteurBackend>);
 
         #[qinvokable]
@@ -969,6 +972,7 @@ impl ffi::ProjecteurBackend {
     }
 
     fn apply_spotlight_settings(mut self: Pin<&mut Self>, settings: &SpotlightSettings) {
+        self.as_mut().rust_mut().current_preset = QString::default();
         self.as_mut().set_show_spot_shade(settings.show_spot_shade);
         self.as_mut().set_spot_size(settings.spot_size);
         self.as_mut().set_show_center_dot(settings.show_center_dot);
@@ -1029,6 +1033,10 @@ impl ffi::ProjecteurBackend {
     fn restore_default_settings(mut self: Pin<&mut Self>) {
         self.as_mut()
             .apply_spotlight_settings(&SpotlightSettings::default());
+    }
+
+    fn mark_settings_changed(mut self: Pin<&mut Self>) {
+        self.as_mut().rust_mut().current_preset = QString::default();
     }
 
     fn show_overlay_test(mut self: Pin<&mut Self>) {
@@ -1100,6 +1108,7 @@ impl ffi::ProjecteurBackend {
         }
         self.as_mut()
             .set_preset_names(QString::from(preset_names(Some(&path))));
+        self.as_mut().rust_mut().current_preset = QString::from(name);
         true
     }
 
@@ -1118,6 +1127,9 @@ impl ffi::ProjecteurBackend {
         }
         self.as_mut()
             .set_preset_names(QString::from(preset_names(Some(&path))));
+        if String::from(&self.as_ref().rust().current_preset) == name {
+            self.as_mut().rust_mut().current_preset = QString::default();
+        }
         true
     }
 
