@@ -281,6 +281,9 @@ pub mod ffi {
 
         #[qinvokable]
         fn configure_global_shortcuts(self: &ProjecteurBackend);
+
+        #[qsignal]
+        fn show_preferences_requested(self: Pin<&mut ProjecteurBackend>);
     }
 
     impl cxx_qt::Initialize for ProjecteurBackend {}
@@ -2676,7 +2679,10 @@ impl ffi::ProjecteurBackend {
                     self.as_mut().set_presentation_timer_duration(seconds);
                     let _ = self.as_mut().save_settings();
                 }
-                Ok(ControlCommand::ShowPreferences) => self.as_mut().set_show_window(true),
+                Ok(ControlCommand::ShowPreferences) => {
+                    self.as_mut().set_show_window(true);
+                    self.as_mut().show_preferences_requested();
+                }
                 Ok(ControlCommand::ShowAbout) => ffi::show_about_dialog(),
                 Ok(ControlCommand::ApplyCommands(commands)) => {
                     self.as_mut().apply_control_commands(&commands);

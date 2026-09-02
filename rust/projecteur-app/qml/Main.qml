@@ -68,6 +68,9 @@ Item {
 
     Connections {
         target: backend
+        function onShowPreferencesRequested() {
+            root.showPreferences()
+        }
         function onMotionSerialChanged() {
             root.movePresenterPointer(backend.pointerDeltaX, backend.pointerDeltaY)
         }
