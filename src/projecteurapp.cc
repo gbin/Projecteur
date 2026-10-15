@@ -23,6 +23,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPixmap>
 #include <QPointer>
 #include <QQmlApplicationEngine>
@@ -452,7 +453,7 @@ void ProjecteurApplication::updateTrayIcon()
   // Draw a battery gauge along the bottom edge of the icon.
   const QColor fillColor = charging ? QColor(59, 130, 246) : level <= 15 ? QColor(239, 68, 68)
                                     : level <= 40 ? QColor(245, 158, 11) : QColor(34, 197, 94);
-  const QRect bar(2, pixmap.height() - 18, pixmap.width() - 4, 16);
+  const QRect bar(2, pixmap.height() - 24, pixmap.width() - 4, 22);
   {
     QPainter p(&pixmap);
     p.setRenderHint(QPainter::Antialiasing);
@@ -463,6 +464,22 @@ void ProjecteurApplication::updateTrayIcon()
     p.setBrush(fillColor);
     const QRect inner = bar.adjusted(3, 3, -3, -3);
     p.drawRect(QRect(inner.left(), inner.top(), inner.width() * level / 100, inner.height()));
+
+    // Percentage text on top of the gauge, with a dark outline to stay readable on any fill.
+    QFont font = p.font();
+    font.setBold(true);
+    font.setPixelSize(16);
+    QPainterPath textPath;
+    const QString text = QString::number(level) + "%";
+    const QFontMetrics fm(font);
+    textPath.addText(bar.center().x() - fm.horizontalAdvance(text) / 2.0,
+                     bar.center().y() + (fm.ascent() - fm.descent()) / 2.0, font, text);
+    p.setPen(QPen(QColor(0, 0, 0, 220), 3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.setBrush(Qt::NoBrush);
+    p.drawPath(textPath);
+    p.setPen(Qt::NoPen);
+    p.setBrush(Qt::white);
+    p.drawPath(textPath);
   }
 
   m_trayIcon->setIcon(QIcon(pixmap));
