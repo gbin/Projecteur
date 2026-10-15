@@ -5,6 +5,7 @@
 
 #include "aboutdlg.h"
 #include "device-command-helper.h"
+#include "device-hidpp.h"
 #include "imageitem.h"
 #include "linuxdesktop.h"
 #include "logging.h"
@@ -21,6 +22,8 @@
 #include <QLocalSocket>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPixmap>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -157,6 +160,9 @@ ProjecteurApplication::ProjecteurApplication(int &argc, char **argv, const Optio
 
   // Setup the spotlight connections.
   setupSpotlight();
+
+  // Show the battery level of the connected presenter in the tray icon.
+  setupBatteryMonitor();
 
   // Open local server for local IPC commands, e.g. from other command line instances
   QLocalServer::removeServer(localServerName());
@@ -365,6 +371,103 @@ void ProjecteurApplication::setupTrayIcon(Options const& options)
   });
 
   m_trayIcon->setVisible(!options.hideSysTrayIcon);
+}
+
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::setupBatteryMonitor()
+{
+  m_batteryTimer = new QTimer(this);
+  m_batteryTimer->setTimerType(Qt::VeryCoarseTimer);
+  m_batteryTimer->setInterval(5 * 60 * 1000); // 5 minutes
+  connect(m_batteryTimer, &QTimer::timeout, this, [this]() {
+    if (m_batteryDevice) { m_batteryDevice->triggerBattyerInfoUpdate(); }
+  });
+
+  // Follow a HID++ device as soon as it reports that it supports battery information.
+  const auto follow = [this](SubHidppConnection* hdc)
+  {
+    if (!hdc->hasFlags(DeviceFlag::ReportBattery) || m_batteryDevice == hdc) { return; }
+    m_batteryDevice = hdc;
+    m_batteryTimer->start();
+    hdc->triggerBattyerInfoUpdate();
+    updateTrayIcon();
+  };
+
+  const auto attach = [this, follow](const DeviceId& id, const QString& path)
+  {
+    const auto dc = m_spotlight->deviceConnection(id);
+    if (!dc) { return; }
+    const auto hdc = qobject_cast<SubHidppConnection*>(dc->subDevice(path).get());
+    if (!hdc) { return; }
+
+    connect(hdc, &SubHidppConnection::batteryInfoChanged, this, [this, hdc]() {
+      if (m_batteryDevice == hdc) { updateTrayIcon(); }
+    });
+    connect(hdc, &SubDeviceConnection::flagsChanged, this, [follow, hdc]() { follow(hdc); });
+    follow(hdc);
+  };
+
+  connect(m_spotlight, &Spotlight::subDeviceConnected, this,
+  [attach](const DeviceId& id, const QString& /*name*/, const QString& path) { attach(id, path); });
+
+  connect(m_spotlight, &Spotlight::subDeviceDisconnected, this,
+  [this](const DeviceId& /*id*/, const QString& /*name*/, const QString& path) {
+    if (m_batteryDevice && m_batteryDevice->path() == path) {
+      m_batteryDevice.clear();
+      m_batteryTimer->stop();
+      updateTrayIcon();
+    }
+  });
+
+  // Devices that were already connected before the connections above were made.
+  for (const auto& info : m_spotlight->connectedDevices()) {
+    if (const auto dc = m_spotlight->deviceConnection(info.id)) {
+      for (const auto& item : dc->subDevices()) { attach(info.id, item.first); }
+    }
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
+void ProjecteurApplication::updateTrayIcon()
+{
+  const QString appName = QCoreApplication::applicationName();
+  QPixmap pixmap(":/icons/projecteur-tray-64.png");
+
+  using HIDPP::BatteryStatus;
+  const auto bi = m_batteryDevice ? m_batteryDevice->batteryInfo() : HIDPP::BatteryInfo{};
+  const bool hasBattery = m_batteryDevice && bi.status != BatteryStatus::Uninitialized
+                          && bi.status != BatteryStatus::InvalidBattery;
+
+  if (!hasBattery) {
+    m_trayIcon->setIcon(QIcon(pixmap));
+    m_trayIcon->setToolTip(appName);
+    return;
+  }
+
+  const int level = std::min<int>(bi.currentLevel, 100);
+  const bool charging = bi.status == BatteryStatus::Charging
+                        || bi.status == BatteryStatus::SlowCharging
+                        || bi.status == BatteryStatus::AlmostFull;
+
+  // Draw a battery gauge along the bottom edge of the icon.
+  const QColor fillColor = charging ? QColor(59, 130, 246) : level <= 15 ? QColor(239, 68, 68)
+                                    : level <= 40 ? QColor(245, 158, 11) : QColor(34, 197, 94);
+  const QRect bar(2, pixmap.height() - 18, pixmap.width() - 4, 16);
+  {
+    QPainter p(&pixmap);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QPen(Qt::white, 2));
+    p.setBrush(QColor(0, 0, 0, 200));
+    p.drawRoundedRect(bar, 3, 3);
+    p.setPen(Qt::NoPen);
+    p.setBrush(fillColor);
+    const QRect inner = bar.adjusted(3, 3, -3, -3);
+    p.drawRect(QRect(inner.left(), inner.top(), inner.width() * level / 100, inner.height()));
+  }
+
+  m_trayIcon->setIcon(QIcon(pixmap));
+  m_trayIcon->setToolTip(tr("%1 - Battery: %2%%3").arg(appName).arg(level)
+                         .arg(charging ? tr(" (charging)") : QString()));
 }
 
 // -------------------------------------------------------------------------------------------------

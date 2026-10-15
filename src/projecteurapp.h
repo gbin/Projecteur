@@ -20,6 +20,8 @@ class QMenu;
 class QQmlApplicationEngine;
 class QQmlComponent;
 class QSystemTrayIcon;
+class QTimer;
+class SubHidppConnection;
 class Settings;
 class Spotlight;
 
@@ -73,11 +75,15 @@ private:
   void setCurrentCursorPos(const QPoint& pos);
 
   void setupTrayIcon(Options const& options);
+  void setupBatteryMonitor();
+  void updateTrayIcon();
   void setupSpotlight();
 
 private:
   std::unique_ptr<QSystemTrayIcon> m_trayIcon;
   std::unique_ptr<QMenu> m_trayMenu;
+  QPointer<SubHidppConnection> m_batteryDevice;
+  QTimer* m_batteryTimer = nullptr;
   std::unique_ptr<PreferencesDialog> m_dialog;
   QPointer<AboutDialog> m_aboutDialog;
   QLocalServer* const m_localServer = nullptr;
